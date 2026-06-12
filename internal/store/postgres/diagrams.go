@@ -1,0 +1,200 @@
+package postgres
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/uigraph/app/internal/diagram"
+)
+
+// ── Diagrams ──────────────────────────────────────────────────────────────────
+
+func (d *DB) CreateDiagram(ctx context.Context, dg diagram.Diagram) error {
+	const q = `
+		INSERT INTO diagrams
+			(id, org_id, folder_id, team_id, name, content_key, content_hash,
+			 preview_image_file_id, source, created_by, updated_by, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`
+	now := time.Now().UTC()
+	if dg.CreatedAt.IsZero() {
+		dg.CreatedAt = now
+	}
+	if dg.UpdatedAt.IsZero() {
+		dg.UpdatedAt = now
+	}
+	_, err := d.db.ExecContext(ctx, q,
+		dg.ID, dg.OrgID, dg.FolderID, dg.TeamID, dg.Name, dg.ContentKey, dg.ContentHash,
+		dg.PreviewImageFileID, dg.Source, dg.CreatedBy, dg.UpdatedBy, dg.CreatedAt, dg.UpdatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("postgres: CreateDiagram: %w", err)
+	}
+	return nil
+}
+
+func (d *DB) GetDiagram(ctx context.Context, id string) (*diagram.Diagram, error) {
+	const q = `
+		SELECT id, org_id, folder_id, team_id, name, content_key, content_hash,
+		       preview_image_file_id, source, created_by, updated_by,
+		       created_at, updated_at, deleted_at, deleted_by
+		FROM diagrams WHERE id = $1`
+	dg, err := scanDiagram(d.db.QueryRowContext(ctx, q, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("postgres: GetDiagram: %w", err)
+	}
+	return &dg, nil
+}
+
+func (d *DB) ListDiagrams(ctx context.Context, orgID string, folderID, teamID *string) ([]diagram.Diagram, error) {
+	q := `
+		SELECT id, org_id, folder_id, team_id, name, content_key, content_hash,
+		       preview_image_file_id, source, created_by, updated_by,
+		       created_at, updated_at, deleted_at, deleted_by
+		FROM diagrams WHERE org_id = $1 AND deleted_at IS NULL`
+	args := []any{orgID}
+	if folderID != nil {
+		args = append(args, *folderID)
+		q += fmt.Sprintf(" AND folder_id = $%d", len(args))
+	}
+	if teamID != nil {
+		args = append(args, *teamID)
+		q += fmt.Sprintf(" AND team_id = $%d", len(args))
+	}
+	q += " ORDER BY created_at DESC"
+
+	rows, err := d.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: ListDiagrams: %w", err)
+	}
+	defer rows.Close()
+
+	var out []diagram.Diagram
+	for rows.Next() {
+		dg, err := scanDiagram(rows)
+		if err != nil {
+			return nil, fmt.Errorf("postgres: ListDiagrams scan: %w", err)
+		}
+		out = append(out, dg)
+	}
+	return out, rows.Err()
+}
+
+func (d *DB) UpdateDiagram(ctx context.Context, dg diagram.Diagram) error {
+	const q = `
+		UPDATE diagrams
+		SET name=$1, folder_id=$2, team_id=$3, content_key=$4, content_hash=$5,
+		    preview_image_file_id=$6, source=$7, updated_by=$8, updated_at=$9
+		WHERE id=$10 AND deleted_at IS NULL`
+	_, err := d.db.ExecContext(ctx, q,
+		dg.Name, dg.FolderID, dg.TeamID, dg.ContentKey, dg.ContentHash,
+		dg.PreviewImageFileID, dg.Source, dg.UpdatedBy, time.Now().UTC(), dg.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("postgres: UpdateDiagram: %w", err)
+	}
+	return nil
+}
+
+func (d *DB) SoftDeleteDiagram(ctx context.Context, id, deletedBy string) error {
+	const q = `UPDATE diagrams SET deleted_at=$1, deleted_by=$2 WHERE id=$3 AND deleted_at IS NULL`
+	_, err := d.db.ExecContext(ctx, q, time.Now().UTC(), deletedBy, id)
+	if err != nil {
+		return fmt.Errorf("postgres: SoftDeleteDiagram: %w", err)
+	}
+	return nil
+}
+
+// ── Diagram versions ──────────────────────────────────────────────────────────
+
+func (d *DB) CreateDiagramVersion(ctx context.Context, v diagram.Version) error {
+	const q = `
+		INSERT INTO diagram_versions
+			(id, diagram_id, version_number, label, content_key, content_hash,
+			 is_auto_version, source, created_by, created_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`
+	if v.CreatedAt.IsZero() {
+		v.CreatedAt = time.Now().UTC()
+	}
+	_, err := d.db.ExecContext(ctx, q,
+		v.ID, v.DiagramID, v.VersionNumber, v.Label, v.ContentKey, v.ContentHash,
+		v.IsAutoVersion, v.Source, v.CreatedBy, v.CreatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("postgres: CreateDiagramVersion: %w", err)
+	}
+	return nil
+}
+
+func (d *DB) GetDiagramVersion(ctx context.Context, id string) (*diagram.Version, error) {
+	const q = `
+		SELECT id, diagram_id, version_number, label, content_key, content_hash,
+		       is_auto_version, source, created_by, created_at
+		FROM diagram_versions WHERE id = $1`
+	v, err := scanVersion(d.db.QueryRowContext(ctx, q, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("postgres: GetDiagramVersion: %w", err)
+	}
+	return &v, nil
+}
+
+func (d *DB) ListDiagramVersions(ctx context.Context, diagramID string) ([]diagram.Version, error) {
+	const q = `
+		SELECT id, diagram_id, version_number, label, content_key, content_hash,
+		       is_auto_version, source, created_by, created_at
+		FROM diagram_versions WHERE diagram_id = $1 ORDER BY version_number DESC`
+
+	rows, err := d.db.QueryContext(ctx, q, diagramID)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: ListDiagramVersions: %w", err)
+	}
+	defer rows.Close()
+
+	var out []diagram.Version
+	for rows.Next() {
+		v, err := scanVersion(rows)
+		if err != nil {
+			return nil, fmt.Errorf("postgres: ListDiagramVersions scan: %w", err)
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
+func (d *DB) LatestVersionNumber(ctx context.Context, diagramID string) (int, error) {
+	const q = `SELECT COALESCE(MAX(version_number), 0) FROM diagram_versions WHERE diagram_id = $1`
+	var n int
+	if err := d.db.QueryRowContext(ctx, q, diagramID).Scan(&n); err != nil {
+		return 0, fmt.Errorf("postgres: LatestVersionNumber: %w", err)
+	}
+	return n, nil
+}
+
+// ── scanners ──────────────────────────────────────────────────────────────────
+
+func scanDiagram(row interface{ Scan(...any) error }) (diagram.Diagram, error) {
+	var dg diagram.Diagram
+	return dg, row.Scan(
+		&dg.ID, &dg.OrgID, &dg.FolderID, &dg.TeamID, &dg.Name,
+		&dg.ContentKey, &dg.ContentHash, &dg.PreviewImageFileID,
+		&dg.Source, &dg.CreatedBy, &dg.UpdatedBy,
+		&dg.CreatedAt, &dg.UpdatedAt, &dg.DeletedAt, &dg.DeletedBy,
+	)
+}
+
+func scanVersion(row interface{ Scan(...any) error }) (diagram.Version, error) {
+	var v diagram.Version
+	return v, row.Scan(
+		&v.ID, &v.DiagramID, &v.VersionNumber, &v.Label,
+		&v.ContentKey, &v.ContentHash, &v.IsAutoVersion,
+		&v.Source, &v.CreatedBy, &v.CreatedAt,
+	)
+}
