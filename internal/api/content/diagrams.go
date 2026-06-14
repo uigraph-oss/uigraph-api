@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -153,7 +154,11 @@ func (h *DiagramHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 // UpdateThumbnail handles POST /api/v1/orgs/{orgID}/diagrams/{diagramID}/thumbnail
-// Generates a presigned upload URL for a preview image and persists its file id.
+// The browser posts the preview image bytes directly (multipart field "file");
+// they are stored and the resulting file id is persisted. Uploading through the
+// API — rather than handing the browser a presigned storage URL — keeps the
+// upload on the app's own origin, so it works in any environment without
+// exposing storage or matching a signed host.
 func (h *DiagramHandler) UpdateThumbnail(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("diagramID")
 	orgID := r.PathValue("orgID")
@@ -173,11 +178,22 @@ func (h *DiagramHandler) UpdateThumbnail(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "missing file")
+		return
+	}
+	defer file.Close()
+
+	contentType := header.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
 	fileID := uuid.NewString()
 	key := storage.DiagramPreviewKey(orgID, id, fileID)
-	uploadURL, err := h.storage.PresignPutURL(r.Context(), key)
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "failed to presign upload")
+	if err := h.storage.Upload(r.Context(), key, contentType, file, header.Size); err != nil {
+		writeErr(w, http.StatusInternalServerError, "failed to store thumbnail")
 		return
 	}
 
@@ -188,23 +204,35 @@ func (h *DiagramHandler) UpdateThumbnail(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"fileId":        fileID,
-		"fileUploadURL": uploadURL,
-	})
+	writeJSON(w, http.StatusOK, map[string]any{"fileId": fileID})
 }
 
-// resolvePreviewURL populates dg.PreviewImageURL with a presigned GET URL when
-// a preview image file id is set.
-func (h *DiagramHandler) resolvePreviewURL(ctx context.Context, orgID string, dg *diagram.Diagram) {
+// GetThumbnail handles GET /api/v1/orgs/{orgID}/diagrams/{diagramID}/thumbnail
+// and streams the diagram's preview image from storage.
+func (h *DiagramHandler) GetThumbnail(w http.ResponseWriter, r *http.Request) {
+	orgID := r.PathValue("orgID")
+	id := r.PathValue("diagramID")
+	dg, err := h.store.GetDiagram(r.Context(), id)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if dg == nil || dg.DeletedAt != nil || dg.PreviewImageFileID == nil || *dg.PreviewImageFileID == "" {
+		writeErr(w, http.StatusNotFound, "not found")
+		return
+	}
+	streamObject(w, r, h.storage, storage.DiagramPreviewKey(orgID, id, *dg.PreviewImageFileID))
+}
+
+// resolvePreviewURL populates dg.PreviewImageURL with a same-origin API path the
+// browser fetches the preview through (proxied to storage by GetThumbnail),
+// rather than a presigned storage URL. The file id is appended so the URL is
+// cache-bustable when the thumbnail changes.
+func (h *DiagramHandler) resolvePreviewURL(_ context.Context, orgID string, dg *diagram.Diagram) {
 	if dg == nil || dg.PreviewImageFileID == nil || *dg.PreviewImageFileID == "" {
 		return
 	}
-	key := storage.DiagramPreviewKey(orgID, dg.ID, *dg.PreviewImageFileID)
-	u, err := h.storage.PresignURL(ctx, key)
-	if err != nil {
-		return
-	}
+	u := "/api/v1/orgs/" + orgID + "/diagrams/" + dg.ID + "/thumbnail?v=" + *dg.PreviewImageFileID
 	dg.PreviewImageURL = &u
 }
 
@@ -489,16 +517,17 @@ func (h *DiagramHandler) ListImages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for i := range images {
-		key := storage.DiagramImageKey(orgID, id, images[i].FileID)
-		if u, err := h.storage.PresignURL(r.Context(), key); err == nil {
-			images[i].FileURL = &u
-		}
+		u := "/api/v1/orgs/" + orgID + "/diagrams/" + id + "/images/" + images[i].FileID
+		images[i].FileURL = &u
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"images": images})
 }
 
 // CreateImage handles POST /api/v1/orgs/{orgID}/diagrams/{diagramID}/images
-// Generates a presigned upload URL and persists the image metadata.
+// The browser posts the image bytes directly (multipart field "file"); they are
+// stored and the metadata is persisted. The returned fileURL is a stable
+// same-origin API path — safe to embed in diagram content, unlike a presigned
+// URL which would expire.
 func (h *DiagramHandler) CreateImage(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	id := r.PathValue("diagramID")
@@ -518,17 +547,37 @@ func (h *DiagramHandler) CreateImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var body struct {
-		FileName *string `json:"fileName"`
-		Order    int     `json:"order"`
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "missing file")
+		return
 	}
-	_ = json.NewDecoder(r.Body).Decode(&body)
+	defer file.Close()
+
+	contentType := header.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	order := 0
+	if v := r.FormValue("order"); v != "" {
+		if n, convErr := strconv.Atoi(v); convErr == nil {
+			order = n
+		}
+	}
+
+	var fileName *string
+	if v := r.FormValue("fileName"); v != "" {
+		fileName = &v
+	} else if header.Filename != "" {
+		name := header.Filename
+		fileName = &name
+	}
 
 	fileID := uuid.NewString()
 	key := storage.DiagramImageKey(orgID, id, fileID)
-	uploadURL, err := h.storage.PresignPutURL(r.Context(), key)
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "failed to presign upload")
+	if err := h.storage.Upload(r.Context(), key, contentType, file, header.Size); err != nil {
+		writeErr(w, http.StatusInternalServerError, "failed to store image")
 		return
 	}
 
@@ -537,8 +586,8 @@ func (h *DiagramHandler) CreateImage(w http.ResponseWriter, r *http.Request) {
 		DiagramID: id,
 		OrgID:     orgID,
 		FileID:    fileID,
-		FileName:  body.FileName,
-		Order:     body.Order,
+		FileName:  fileName,
+		Order:     order,
 		CreatedBy: p.UserID,
 		CreatedAt: time.Now().UTC(),
 	}
@@ -547,11 +596,21 @@ func (h *DiagramHandler) CreateImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fileURL := "/api/v1/orgs/" + orgID + "/diagrams/" + id + "/images/" + fileID
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"diagramImageId": img.ID,
 		"fileId":         fileID,
-		"fileUploadURL":  uploadURL,
+		"fileURL":        fileURL,
 	})
+}
+
+// GetImage handles GET /api/v1/orgs/{orgID}/diagrams/{diagramID}/images/{fileID}
+// and streams an image attached to a diagram from storage.
+func (h *DiagramHandler) GetImage(w http.ResponseWriter, r *http.Request) {
+	orgID := r.PathValue("orgID")
+	id := r.PathValue("diagramID")
+	fileID := r.PathValue("fileID")
+	streamObject(w, r, h.storage, storage.DiagramImageKey(orgID, id, fileID))
 }
 
 // ── Sync (CLI / CI-CD) ────────────────────────────────────────────────────────

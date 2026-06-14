@@ -39,7 +39,7 @@ func (h *FrameHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for i := range frames {
-		h.resolveScreenshotURL(r.Context(), &frames[i])
+		h.resolveScreenshotURL(&frames[i])
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"frames": frames})
 }
@@ -118,7 +118,7 @@ func (h *FrameHandler) Get(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "not found")
 		return
 	}
-	h.resolveScreenshotURL(r.Context(), f)
+	h.resolveScreenshotURL(f)
 	writeJSON(w, http.StatusOK, f)
 }
 
@@ -534,17 +534,39 @@ func (h *FrameHandler) UpsertCanvas(w http.ResponseWriter, r *http.Request) {
 
 // ── internal helpers ──────────────────────────────────────────────────────────
 
-// resolveScreenshotURL populates f.ScreenshotURL with a presigned GET URL when
-// the frame has a stored screenshot.
-func (h *FrameHandler) resolveScreenshotURL(ctx context.Context, f *uimap.Frame) {
-	if f == nil || h.storage == nil || f.ScreenshotKey == nil || *f.ScreenshotKey == "" {
+// resolveScreenshotURL populates f.ScreenshotURL with a same-origin API path the
+// browser fetches the screenshot through (proxied to storage by GetScreenshot),
+// rather than a presigned storage URL. This keeps every blob request on the
+// app's own origin — nothing internal leaks to the browser and there is no host
+// to make reachable. The content hash is appended so the URL is cache-bustable.
+func (h *FrameHandler) resolveScreenshotURL(f *uimap.Frame) {
+	if f == nil || f.ScreenshotKey == nil || *f.ScreenshotKey == "" {
 		return
 	}
-	u, err := h.storage.PresignURL(ctx, *f.ScreenshotKey)
-	if err != nil {
-		return
+	u := "/api/v1/orgs/" + f.OrgID + "/frames/" + f.ID + "/screenshot"
+	if f.ScreenshotContentHash != nil && *f.ScreenshotContentHash != "" {
+		u += "?v=" + *f.ScreenshotContentHash
 	}
 	f.ScreenshotURL = &u
+}
+
+// GetScreenshot handles GET /api/v1/orgs/{orgID}/frames/{frameID}/screenshot
+// and streams the frame's screenshot image from storage.
+func (h *FrameHandler) GetScreenshot(w http.ResponseWriter, r *http.Request) {
+	if h.storage == nil {
+		writeErr(w, http.StatusNotFound, "not found")
+		return
+	}
+	f, err := h.store.GetFrame(r.Context(), r.PathValue("frameID"))
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if f == nil || f.DeletedAt != nil || f.ScreenshotKey == nil || *f.ScreenshotKey == "" {
+		writeErr(w, http.StatusNotFound, "not found")
+		return
+	}
+	streamObject(w, r, h.storage, *f.ScreenshotKey)
 }
 
 // uploadScreenshot stores a frame screenshot. The content may be a data URL

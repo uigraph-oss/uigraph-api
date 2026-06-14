@@ -37,7 +37,7 @@ type Frame struct {
 	TemplateType          string     `json:"templateType"`
 	ScreenshotKey         *string    `json:"screenshotKey,omitempty"`
 	ScreenshotContentHash *string    `json:"screenshotContentHash,omitempty"`
-	ScreenshotURL         *string    `json:"screenshotUrl,omitempty"` // computed: presigned GET URL, not persisted
+	ScreenshotURL         *string    `json:"screenshotUrl,omitempty"` // computed: same-origin API path, not persisted
 	Status                string     `json:"status"`
 	Order                 float64    `json:"order"`
 	Source                *string    `json:"source,omitempty"`
