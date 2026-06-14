@@ -130,7 +130,7 @@ func (d *DB) CreateFrame(ctx context.Context, f uimap.Frame) error {
 	const q = `
 		INSERT INTO frames
 			(id, map_id, org_id, parent_frame_id, name, description, template_type,
-			 screenshot_key, screenshot_content_hash, status, ord, source,
+			 screenshot_asset_id, screenshot_content_hash, status, ord, source,
 			 created_by, created_at, updated_at)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`
 	now := time.Now().UTC()
@@ -146,7 +146,7 @@ func (d *DB) CreateFrame(ctx context.Context, f uimap.Frame) error {
 	_, err := d.db.ExecContext(ctx, q,
 		f.ID, f.MapID, f.OrgID, f.ParentFrameID,
 		f.Name, f.Description, f.TemplateType,
-		f.ScreenshotKey, f.ScreenshotContentHash,
+		f.ScreenshotAssetID, f.ScreenshotContentHash,
 		f.Status, f.Order, f.Source,
 		f.CreatedBy, f.CreatedAt, f.UpdatedAt,
 	)
@@ -159,7 +159,7 @@ func (d *DB) CreateFrame(ctx context.Context, f uimap.Frame) error {
 func (d *DB) GetFrame(ctx context.Context, id string) (*uimap.Frame, error) {
 	const q = `
 		SELECT id, map_id, org_id, parent_frame_id, name, description, template_type,
-		       screenshot_key, screenshot_content_hash, status, ord, source,
+		       screenshot_asset_id, screenshot_content_hash, status, ord, source,
 		       created_by, updated_by, created_at, updated_at, deleted_at, deleted_by
 		FROM frames WHERE id = $1`
 	f, err := scanFrame(d.db.QueryRowContext(ctx, q, id))
@@ -175,7 +175,7 @@ func (d *DB) GetFrame(ctx context.Context, id string) (*uimap.Frame, error) {
 func (d *DB) ListFrames(ctx context.Context, mapID string) ([]uimap.Frame, error) {
 	const q = `
 		SELECT id, map_id, org_id, parent_frame_id, name, description, template_type,
-		       screenshot_key, screenshot_content_hash, status, ord, source,
+		       screenshot_asset_id, screenshot_content_hash, status, ord, source,
 		       created_by, updated_by, created_at, updated_at, deleted_at, deleted_by
 		FROM frames
 		WHERE map_id = $1 AND deleted_at IS NULL
@@ -202,13 +202,13 @@ func (d *DB) UpdateFrame(ctx context.Context, f uimap.Frame) error {
 	const q = `
 		UPDATE frames
 		SET name=$1, description=$2, template_type=$3,
-		    screenshot_key=$4, screenshot_content_hash=$5,
+		    screenshot_asset_id=$4, screenshot_content_hash=$5,
 		    status=$6, ord=$7, source=$8,
 		    updated_by=$9, updated_at=$10
 		WHERE id=$11 AND deleted_at IS NULL`
 	_, err := d.db.ExecContext(ctx, q,
 		f.Name, f.Description, f.TemplateType,
-		f.ScreenshotKey, f.ScreenshotContentHash,
+		f.ScreenshotAssetID, f.ScreenshotContentHash,
 		f.Status, f.Order, f.Source,
 		f.UpdatedBy, time.Now().UTC(), f.ID,
 	)
@@ -234,7 +234,7 @@ func scanFrame(row interface{ Scan(...any) error }) (uimap.Frame, error) {
 	return f, row.Scan(
 		&f.ID, &f.MapID, &f.OrgID, &f.ParentFrameID,
 		&f.Name, &f.Description, &f.TemplateType,
-		&f.ScreenshotKey, &f.ScreenshotContentHash,
+		&f.ScreenshotAssetID, &f.ScreenshotContentHash,
 		&f.Status, &f.Order, &f.Source,
 		&f.CreatedBy, &f.UpdatedBy,
 		&f.CreatedAt, &f.UpdatedAt, &f.DeletedAt, &f.DeletedBy,

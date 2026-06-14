@@ -17,18 +17,18 @@ import (
 // Diagram is the metadata record stored in Postgres.
 // The actual ReactFlow JSON content lives in object storage.
 type Diagram struct {
-	ID                 string     `json:"id"`
-	OrgID              string     `json:"orgId"`
-	FolderID           *string    `json:"folderId,omitempty"`
-	TeamID             *string    `json:"teamId,omitempty"`
-	Name               string     `json:"name"`
-	ContentKey         string     `json:"contentKey"`
-	ContentHash        string     `json:"contentHash"`
-	PreviewImageFileID *string    `json:"previewImageFileId,omitempty"`
-	// PreviewImageURL is a computed, non-persisted presigned GET URL for the
-	// preview image (populated on read when PreviewImageFileID is set).
-	PreviewImageURL *string    `json:"previewImageUrl,omitempty"`
-	Source          *string    `json:"source,omitempty"`
+	ID          string  `json:"id"`
+	OrgID       string  `json:"orgId"`
+	FolderID    *string `json:"folderId,omitempty"`
+	TeamID      *string `json:"teamId,omitempty"`
+	Name        string  `json:"name"`
+	ContentKey  string  `json:"contentKey"`
+	ContentHash string  `json:"contentHash"`
+	// PreviewAssetID is the asset id of the diagram's thumbnail (deterministic,
+	// "diagram_<id>"). The frontend builds the public URL ${ASSETS_URL}/{id}.
+	PreviewAssetID     *string    `json:"previewAssetId,omitempty"`
+	PreviewContentHash *string    `json:"previewContentHash,omitempty"`
+	Source             *string    `json:"source,omitempty"`
 	CreatedBy          string     `json:"createdBy"`
 	UpdatedBy          *string    `json:"updatedBy,omitempty"`
 	CreatedAt          time.Time  `json:"createdAt"`
@@ -39,16 +39,16 @@ type Diagram struct {
 
 // Version is an immutable snapshot of a diagram's content at a point in time.
 type Version struct {
-	ID            string     `json:"id"`
-	DiagramID     string     `json:"diagramId"`
-	VersionNumber int        `json:"versionNumber"`
-	Label         *string    `json:"label,omitempty"`
-	ContentKey    string     `json:"contentKey"`
-	ContentHash   string     `json:"contentHash"`
-	IsAutoVersion bool       `json:"isAutoVersion"`
-	Source        *string    `json:"source,omitempty"`
-	CreatedBy     string     `json:"createdBy"`
-	CreatedAt     time.Time  `json:"createdAt"`
+	ID            string    `json:"id"`
+	DiagramID     string    `json:"diagramId"`
+	VersionNumber int       `json:"versionNumber"`
+	Label         *string   `json:"label,omitempty"`
+	ContentKey    string    `json:"contentKey"`
+	ContentHash   string    `json:"contentHash"`
+	IsAutoVersion bool      `json:"isAutoVersion"`
+	Source        *string   `json:"source,omitempty"`
+	CreatedBy     string    `json:"createdBy"`
+	CreatedAt     time.Time `json:"createdAt"`
 }
 
 // Image is a user-uploaded image attached to a diagram. The binary lives in
@@ -57,13 +57,11 @@ type Image struct {
 	ID        string    `json:"diagramImageId"`
 	DiagramID string    `json:"diagramId"`
 	OrgID     string    `json:"orgId"`
-	FileID    string    `json:"fileId"`
+	AssetID   string    `json:"assetId"`
 	FileName  *string   `json:"fileName,omitempty"`
 	Order     int       `json:"order"`
 	CreatedBy string    `json:"createdBy"`
 	CreatedAt time.Time `json:"createdAt"`
-	// FileURL is a computed, non-persisted presigned GET URL for the image.
-	FileURL *string `json:"fileURL,omitempty"`
 }
 
 // Store is the persistence interface for diagrams.

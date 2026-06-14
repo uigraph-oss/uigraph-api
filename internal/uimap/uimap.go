@@ -35,9 +35,8 @@ type Frame struct {
 	Name                  string     `json:"name"`
 	Description           string     `json:"description"`
 	TemplateType          string     `json:"templateType"`
-	ScreenshotKey         *string    `json:"screenshotKey,omitempty"`
+	ScreenshotAssetID     *string    `json:"screenshotAssetId,omitempty"`
 	ScreenshotContentHash *string    `json:"screenshotContentHash,omitempty"`
-	ScreenshotURL         *string    `json:"screenshotUrl,omitempty"` // computed: same-origin API path, not persisted
 	Status                string     `json:"status"`
 	Order                 float64    `json:"order"`
 	Source                *string    `json:"source,omitempty"`

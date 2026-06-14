@@ -5,6 +5,8 @@ package storage
 import (
 	"context"
 	"io"
+
+	"github.com/google/uuid"
 )
 
 // Client is the object storage interface used by handlers.
@@ -45,22 +47,34 @@ func APIGroupVersionSpecKey(orgID, serviceID, apiGroupID, versionID string) stri
 	return orgID + "/services/" + serviceID + "/api-groups/" + apiGroupID + "/versions/" + versionID + "/spec"
 }
 
-// FrameScreenshotKey returns the object key for a frame's screenshot.
-func FrameScreenshotKey(orgID, mapID, frameID string) string {
-	return orgID + "/maps/" + mapID + "/frames/" + frameID + "/screenshot"
-}
-
 // FileKey returns the object key for a user-uploaded file.
 func FileKey(orgID, fileID, filename string) string {
 	return orgID + "/files/" + fileID + "/" + filename
 }
 
-// DiagramPreviewKey returns the object key for a diagram's preview image.
-func DiagramPreviewKey(orgID, diagramID, fileID string) string {
-	return orgID + "/diagrams/" + diagramID + "/previews/" + fileID
+// AssetKey returns the object key for a public, browser-readable asset. Every
+// browser-facing blob (frame screenshot, diagram thumbnail, diagram image) is
+// stored under the assets/ prefix and addressed by its asset id. The frontend
+// builds the read URL as ${ASSETS_URL}/{assetId}, so the browser reads the
+// object directly from storage and the app is never in the read path.
+func AssetKey(assetID string) string {
+	return "assets/" + assetID
 }
 
-// DiagramImageKey returns the object key for an image attached to a diagram.
-func DiagramImageKey(orgID, diagramID, fileID string) string {
-	return orgID + "/diagrams/" + diagramID + "/images/" + fileID
+// NewFileAssetID mints a random asset id for many-per-entity / generic blobs
+// (e.g. diagram images, future user uploads). Mirrors prod's file_<uuid>.
+func NewFileAssetID() string {
+	return "file_" + uuid.NewString()
+}
+
+// DiagramThumbnailAssetID returns the deterministic asset id for a diagram's
+// thumbnail, derived from the diagram id so regenerating overwrites in place.
+func DiagramThumbnailAssetID(diagramID string) string {
+	return "diagram_" + diagramID
+}
+
+// FrameScreenshotAssetID returns the deterministic asset id for a frame's
+// screenshot, derived from the frame id so re-uploading overwrites in place.
+func FrameScreenshotAssetID(frameID string) string {
+	return "frame_" + frameID
 }

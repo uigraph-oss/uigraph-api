@@ -53,9 +53,6 @@ func (h *DiagramHandler) List(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "internal error")
 		return
 	}
-	for i := range diagrams {
-		h.resolvePreviewURL(r.Context(), orgID, &diagrams[i])
-	}
 	writeJSON(w, http.StatusOK, map[string]any{"diagrams": diagrams})
 }
 
@@ -149,19 +146,16 @@ func (h *DiagramHandler) Get(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "not found")
 		return
 	}
-	h.resolvePreviewURL(r.Context(), r.PathValue("orgID"), dg)
 	writeJSON(w, http.StatusOK, dg)
 }
 
 // UpdateThumbnail handles POST /api/v1/orgs/{orgID}/diagrams/{diagramID}/thumbnail
-// The browser posts the preview image bytes directly (multipart field "file");
-// they are stored and the resulting file id is persisted. Uploading through the
-// API — rather than handing the browser a presigned storage URL — keeps the
-// upload on the app's own origin, so it works in any environment without
-// exposing storage or matching a signed host.
+// The browser posts the preview image bytes directly (multipart field "file").
+// The thumbnail is stored under the deterministic public asset id
+// "diagram_<diagramId>" so regenerating overwrites it in place; the browser then
+// reads it directly from storage at ${ASSETS_URL}/diagram_<id>.
 func (h *DiagramHandler) UpdateThumbnail(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("diagramID")
-	orgID := r.PathValue("orgID")
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {
 		writeErr(w, http.StatusUnauthorized, "unauthenticated")
@@ -190,50 +184,31 @@ func (h *DiagramHandler) UpdateThumbnail(w http.ResponseWriter, r *http.Request)
 		contentType = "application/octet-stream"
 	}
 
-	fileID := uuid.NewString()
-	key := storage.DiagramPreviewKey(orgID, id, fileID)
-	if err := h.storage.Upload(r.Context(), key, contentType, file, header.Size); err != nil {
-		writeErr(w, http.StatusInternalServerError, "failed to store thumbnail")
+	raw, err := io.ReadAll(file)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "failed to read thumbnail")
 		return
 	}
 
-	dg.PreviewImageFileID = &fileID
+	assetID := storage.DiagramThumbnailAssetID(id)
+	if err := h.storage.Upload(r.Context(), storage.AssetKey(assetID), contentType, bytes.NewReader(raw), int64(len(raw))); err != nil {
+		writeErr(w, http.StatusInternalServerError, "failed to store thumbnail")
+		return
+	}
+	hash := sha256Hex(string(raw))
+
+	dg.PreviewAssetID = &assetID
+	dg.PreviewContentHash = &hash
 	dg.UpdatedBy = &p.UserID
 	if err := h.store.UpdateDiagram(r.Context(), *dg); err != nil {
 		writeErr(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"fileId": fileID})
-}
-
-// GetThumbnail handles GET /api/v1/orgs/{orgID}/diagrams/{diagramID}/thumbnail
-// and streams the diagram's preview image from storage.
-func (h *DiagramHandler) GetThumbnail(w http.ResponseWriter, r *http.Request) {
-	orgID := r.PathValue("orgID")
-	id := r.PathValue("diagramID")
-	dg, err := h.store.GetDiagram(r.Context(), id)
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "internal error")
-		return
-	}
-	if dg == nil || dg.DeletedAt != nil || dg.PreviewImageFileID == nil || *dg.PreviewImageFileID == "" {
-		writeErr(w, http.StatusNotFound, "not found")
-		return
-	}
-	streamObject(w, r, h.storage, storage.DiagramPreviewKey(orgID, id, *dg.PreviewImageFileID))
-}
-
-// resolvePreviewURL populates dg.PreviewImageURL with a same-origin API path the
-// browser fetches the preview through (proxied to storage by GetThumbnail),
-// rather than a presigned storage URL. The file id is appended so the URL is
-// cache-bustable when the thumbnail changes.
-func (h *DiagramHandler) resolvePreviewURL(_ context.Context, orgID string, dg *diagram.Diagram) {
-	if dg == nil || dg.PreviewImageFileID == nil || *dg.PreviewImageFileID == "" {
-		return
-	}
-	u := "/api/v1/orgs/" + orgID + "/diagrams/" + dg.ID + "/thumbnail?v=" + *dg.PreviewImageFileID
-	dg.PreviewImageURL = &u
+	writeJSON(w, http.StatusOK, map[string]any{
+		"assetId":            assetID,
+		"previewContentHash": hash,
+	})
 }
 
 // GetContent handles GET /api/v1/orgs/{orgID}/diagrams/{diagramID}/content
@@ -509,25 +484,19 @@ func (h *DiagramHandler) RestoreVersion(w http.ResponseWriter, r *http.Request) 
 
 // ListImages handles GET /api/v1/orgs/{orgID}/diagrams/{diagramID}/images
 func (h *DiagramHandler) ListImages(w http.ResponseWriter, r *http.Request) {
-	orgID := r.PathValue("orgID")
-	id := r.PathValue("diagramID")
-	images, err := h.store.ListDiagramImages(r.Context(), id)
+	images, err := h.store.ListDiagramImages(r.Context(), r.PathValue("diagramID"))
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "internal error")
 		return
-	}
-	for i := range images {
-		u := "/api/v1/orgs/" + orgID + "/diagrams/" + id + "/images/" + images[i].FileID
-		images[i].FileURL = &u
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"images": images})
 }
 
 // CreateImage handles POST /api/v1/orgs/{orgID}/diagrams/{diagramID}/images
-// The browser posts the image bytes directly (multipart field "file"); they are
-// stored and the metadata is persisted. The returned fileURL is a stable
-// same-origin API path — safe to embed in diagram content, unlike a presigned
-// URL which would expire.
+// The browser posts the image bytes directly (multipart field "file"). The image
+// is stored under a random public asset id (file_<uuid>); the returned assetId
+// resolves to a stable public URL (${ASSETS_URL}/file_<uuid>) the browser reads
+// directly and can safely embed in diagram content.
 func (h *DiagramHandler) CreateImage(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	id := r.PathValue("diagramID")
@@ -574,9 +543,8 @@ func (h *DiagramHandler) CreateImage(w http.ResponseWriter, r *http.Request) {
 		fileName = &name
 	}
 
-	fileID := uuid.NewString()
-	key := storage.DiagramImageKey(orgID, id, fileID)
-	if err := h.storage.Upload(r.Context(), key, contentType, file, header.Size); err != nil {
+	assetID := storage.NewFileAssetID()
+	if err := h.storage.Upload(r.Context(), storage.AssetKey(assetID), contentType, file, header.Size); err != nil {
 		writeErr(w, http.StatusInternalServerError, "failed to store image")
 		return
 	}
@@ -585,7 +553,7 @@ func (h *DiagramHandler) CreateImage(w http.ResponseWriter, r *http.Request) {
 		ID:        uuid.NewString(),
 		DiagramID: id,
 		OrgID:     orgID,
-		FileID:    fileID,
+		AssetID:   assetID,
 		FileName:  fileName,
 		Order:     order,
 		CreatedBy: p.UserID,
@@ -596,21 +564,10 @@ func (h *DiagramHandler) CreateImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fileURL := "/api/v1/orgs/" + orgID + "/diagrams/" + id + "/images/" + fileID
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"diagramImageId": img.ID,
-		"fileId":         fileID,
-		"fileURL":        fileURL,
+		"assetId":        assetID,
 	})
-}
-
-// GetImage handles GET /api/v1/orgs/{orgID}/diagrams/{diagramID}/images/{fileID}
-// and streams an image attached to a diagram from storage.
-func (h *DiagramHandler) GetImage(w http.ResponseWriter, r *http.Request) {
-	orgID := r.PathValue("orgID")
-	id := r.PathValue("diagramID")
-	fileID := r.PathValue("fileID")
-	streamObject(w, r, h.storage, storage.DiagramImageKey(orgID, id, fileID))
 }
 
 // ── Sync (CLI / CI-CD) ────────────────────────────────────────────────────────

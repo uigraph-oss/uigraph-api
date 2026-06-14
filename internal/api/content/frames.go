@@ -38,9 +38,6 @@ func (h *FrameHandler) List(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "internal error")
 		return
 	}
-	for i := range frames {
-		h.resolveScreenshotURL(&frames[i])
-	}
 	writeJSON(w, http.StatusOK, map[string]any{"frames": frames})
 }
 
@@ -90,13 +87,13 @@ func (h *FrameHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if body.Screenshot != "" && h.storage != nil {
-		key := storage.FrameScreenshotKey(orgID, mapID, id)
-		if err := h.uploadScreenshot(r.Context(), key, body.Screenshot); err != nil {
+		assetID := storage.FrameScreenshotAssetID(id)
+		if err := h.uploadScreenshot(r.Context(), storage.AssetKey(assetID), body.Screenshot); err != nil {
 			writeErr(w, http.StatusInternalServerError, "failed to store screenshot")
 			return
 		}
 		hash := screenshotHash(body.Screenshot)
-		frame.ScreenshotKey = &key
+		frame.ScreenshotAssetID = &assetID
 		frame.ScreenshotContentHash = &hash
 	}
 
@@ -118,14 +115,11 @@ func (h *FrameHandler) Get(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "not found")
 		return
 	}
-	h.resolveScreenshotURL(f)
 	writeJSON(w, http.StatusOK, f)
 }
 
 // Update handles PUT /api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}
 func (h *FrameHandler) Update(w http.ResponseWriter, r *http.Request) {
-	orgID := r.PathValue("orgID")
-	mapID := r.PathValue("mapID")
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {
 		writeErr(w, http.StatusUnauthorized, "unauthenticated")
@@ -175,12 +169,12 @@ func (h *FrameHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if body.Screenshot != nil && h.storage != nil {
 		newHash := screenshotHash(*body.Screenshot)
 		if f.ScreenshotContentHash == nil || newHash != *f.ScreenshotContentHash {
-			key := storage.FrameScreenshotKey(orgID, mapID, f.ID)
-			if err := h.uploadScreenshot(r.Context(), key, *body.Screenshot); err != nil {
+			assetID := storage.FrameScreenshotAssetID(f.ID)
+			if err := h.uploadScreenshot(r.Context(), storage.AssetKey(assetID), *body.Screenshot); err != nil {
 				writeErr(w, http.StatusInternalServerError, "failed to store screenshot")
 				return
 			}
-			f.ScreenshotKey = &key
+			f.ScreenshotAssetID = &assetID
 			f.ScreenshotContentHash = &newHash
 		}
 	}
@@ -259,12 +253,12 @@ func (h *FrameHandler) Sync(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if body.Screenshot != "" && h.storage != nil {
-			key := storage.FrameScreenshotKey(orgID, mapID, f.ID)
-			if err := h.uploadScreenshot(r.Context(), key, body.Screenshot); err != nil {
+			assetID := storage.FrameScreenshotAssetID(f.ID)
+			if err := h.uploadScreenshot(r.Context(), storage.AssetKey(assetID), body.Screenshot); err != nil {
 				writeErr(w, http.StatusInternalServerError, "failed to store screenshot")
 				return
 			}
-			f.ScreenshotKey = &key
+			f.ScreenshotAssetID = &assetID
 			f.ScreenshotContentHash = &newHash
 		}
 		f.Name = body.Name
@@ -301,12 +295,12 @@ func (h *FrameHandler) Sync(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if body.Screenshot != "" && h.storage != nil {
-		key := storage.FrameScreenshotKey(orgID, mapID, id)
-		if err := h.uploadScreenshot(r.Context(), key, body.Screenshot); err != nil {
+		assetID := storage.FrameScreenshotAssetID(id)
+		if err := h.uploadScreenshot(r.Context(), storage.AssetKey(assetID), body.Screenshot); err != nil {
 			writeErr(w, http.StatusInternalServerError, "failed to store screenshot")
 			return
 		}
-		frame.ScreenshotKey = &key
+		frame.ScreenshotAssetID = &assetID
 		frame.ScreenshotContentHash = &newHash
 	}
 
@@ -533,41 +527,6 @@ func (h *FrameHandler) UpsertCanvas(w http.ResponseWriter, r *http.Request) {
 }
 
 // ── internal helpers ──────────────────────────────────────────────────────────
-
-// resolveScreenshotURL populates f.ScreenshotURL with a same-origin API path the
-// browser fetches the screenshot through (proxied to storage by GetScreenshot),
-// rather than a presigned storage URL. This keeps every blob request on the
-// app's own origin — nothing internal leaks to the browser and there is no host
-// to make reachable. The content hash is appended so the URL is cache-bustable.
-func (h *FrameHandler) resolveScreenshotURL(f *uimap.Frame) {
-	if f == nil || f.ScreenshotKey == nil || *f.ScreenshotKey == "" {
-		return
-	}
-	u := "/api/v1/orgs/" + f.OrgID + "/frames/" + f.ID + "/screenshot"
-	if f.ScreenshotContentHash != nil && *f.ScreenshotContentHash != "" {
-		u += "?v=" + *f.ScreenshotContentHash
-	}
-	f.ScreenshotURL = &u
-}
-
-// GetScreenshot handles GET /api/v1/orgs/{orgID}/frames/{frameID}/screenshot
-// and streams the frame's screenshot image from storage.
-func (h *FrameHandler) GetScreenshot(w http.ResponseWriter, r *http.Request) {
-	if h.storage == nil {
-		writeErr(w, http.StatusNotFound, "not found")
-		return
-	}
-	f, err := h.store.GetFrame(r.Context(), r.PathValue("frameID"))
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "internal error")
-		return
-	}
-	if f == nil || f.DeletedAt != nil || f.ScreenshotKey == nil || *f.ScreenshotKey == "" {
-		writeErr(w, http.StatusNotFound, "not found")
-		return
-	}
-	streamObject(w, r, h.storage, *f.ScreenshotKey)
-}
 
 // uploadScreenshot stores a frame screenshot. The content may be a data URL
 // (e.g. "data:image/png;base64,...") sent by the browser, in which case it is

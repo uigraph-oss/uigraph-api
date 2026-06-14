@@ -16,8 +16,8 @@ func (d *DB) CreateDiagram(ctx context.Context, dg diagram.Diagram) error {
 	const q = `
 		INSERT INTO diagrams
 			(id, org_id, folder_id, team_id, name, content_key, content_hash,
-			 preview_image_file_id, source, created_by, updated_by, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`
+			 preview_asset_id, preview_content_hash, source, created_by, updated_by, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`
 	now := time.Now().UTC()
 	if dg.CreatedAt.IsZero() {
 		dg.CreatedAt = now
@@ -27,7 +27,7 @@ func (d *DB) CreateDiagram(ctx context.Context, dg diagram.Diagram) error {
 	}
 	_, err := d.db.ExecContext(ctx, q,
 		dg.ID, dg.OrgID, dg.FolderID, dg.TeamID, dg.Name, dg.ContentKey, dg.ContentHash,
-		dg.PreviewImageFileID, dg.Source, dg.CreatedBy, dg.UpdatedBy, dg.CreatedAt, dg.UpdatedAt,
+		dg.PreviewAssetID, dg.PreviewContentHash, dg.Source, dg.CreatedBy, dg.UpdatedBy, dg.CreatedAt, dg.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("postgres: CreateDiagram: %w", err)
@@ -38,7 +38,7 @@ func (d *DB) CreateDiagram(ctx context.Context, dg diagram.Diagram) error {
 func (d *DB) GetDiagram(ctx context.Context, id string) (*diagram.Diagram, error) {
 	const q = `
 		SELECT id, org_id, folder_id, team_id, name, content_key, content_hash,
-		       preview_image_file_id, source, created_by, updated_by,
+		       preview_asset_id, preview_content_hash, source, created_by, updated_by,
 		       created_at, updated_at, deleted_at, deleted_by
 		FROM diagrams WHERE id = $1`
 	dg, err := scanDiagram(d.db.QueryRowContext(ctx, q, id))
@@ -54,7 +54,7 @@ func (d *DB) GetDiagram(ctx context.Context, id string) (*diagram.Diagram, error
 func (d *DB) ListDiagrams(ctx context.Context, orgID string, folderID, teamID *string) ([]diagram.Diagram, error) {
 	q := `
 		SELECT id, org_id, folder_id, team_id, name, content_key, content_hash,
-		       preview_image_file_id, source, created_by, updated_by,
+		       preview_asset_id, preview_content_hash, source, created_by, updated_by,
 		       created_at, updated_at, deleted_at, deleted_by
 		FROM diagrams WHERE org_id = $1 AND deleted_at IS NULL`
 	args := []any{orgID}
@@ -89,11 +89,11 @@ func (d *DB) UpdateDiagram(ctx context.Context, dg diagram.Diagram) error {
 	const q = `
 		UPDATE diagrams
 		SET name=$1, folder_id=$2, team_id=$3, content_key=$4, content_hash=$5,
-		    preview_image_file_id=$6, source=$7, updated_by=$8, updated_at=$9
-		WHERE id=$10 AND deleted_at IS NULL`
+		    preview_asset_id=$6, preview_content_hash=$7, source=$8, updated_by=$9, updated_at=$10
+		WHERE id=$11 AND deleted_at IS NULL`
 	_, err := d.db.ExecContext(ctx, q,
 		dg.Name, dg.FolderID, dg.TeamID, dg.ContentKey, dg.ContentHash,
-		dg.PreviewImageFileID, dg.Source, dg.UpdatedBy, time.Now().UTC(), dg.ID,
+		dg.PreviewAssetID, dg.PreviewContentHash, dg.Source, dg.UpdatedBy, time.Now().UTC(), dg.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("postgres: UpdateDiagram: %w", err)
@@ -183,13 +183,13 @@ func (d *DB) LatestVersionNumber(ctx context.Context, diagramID string) (int, er
 func (d *DB) CreateDiagramImage(ctx context.Context, img diagram.Image) error {
 	const q = `
 		INSERT INTO diagram_images
-			(id, diagram_id, org_id, file_id, file_name, "order", created_by, created_at)
+			(id, diagram_id, org_id, asset_id, file_name, "order", created_by, created_at)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`
 	if img.CreatedAt.IsZero() {
 		img.CreatedAt = time.Now().UTC()
 	}
 	_, err := d.db.ExecContext(ctx, q,
-		img.ID, img.DiagramID, img.OrgID, img.FileID, img.FileName, img.Order,
+		img.ID, img.DiagramID, img.OrgID, img.AssetID, img.FileName, img.Order,
 		img.CreatedBy, img.CreatedAt,
 	)
 	if err != nil {
@@ -200,7 +200,7 @@ func (d *DB) CreateDiagramImage(ctx context.Context, img diagram.Image) error {
 
 func (d *DB) ListDiagramImages(ctx context.Context, diagramID string) ([]diagram.Image, error) {
 	const q = `
-		SELECT id, diagram_id, org_id, file_id, file_name, "order", created_by, created_at
+		SELECT id, diagram_id, org_id, asset_id, file_name, "order", created_by, created_at
 		FROM diagram_images WHERE diagram_id = $1 ORDER BY "order" ASC, created_at ASC`
 
 	rows, err := d.db.QueryContext(ctx, q, diagramID)
@@ -213,7 +213,7 @@ func (d *DB) ListDiagramImages(ctx context.Context, diagramID string) ([]diagram
 	for rows.Next() {
 		var img diagram.Image
 		if err := rows.Scan(
-			&img.ID, &img.DiagramID, &img.OrgID, &img.FileID, &img.FileName,
+			&img.ID, &img.DiagramID, &img.OrgID, &img.AssetID, &img.FileName,
 			&img.Order, &img.CreatedBy, &img.CreatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("postgres: ListDiagramImages scan: %w", err)
@@ -229,7 +229,7 @@ func scanDiagram(row interface{ Scan(...any) error }) (diagram.Diagram, error) {
 	var dg diagram.Diagram
 	return dg, row.Scan(
 		&dg.ID, &dg.OrgID, &dg.FolderID, &dg.TeamID, &dg.Name,
-		&dg.ContentKey, &dg.ContentHash, &dg.PreviewImageFileID,
+		&dg.ContentKey, &dg.ContentHash, &dg.PreviewAssetID, &dg.PreviewContentHash,
 		&dg.Source, &dg.CreatedBy, &dg.UpdatedBy,
 		&dg.CreatedAt, &dg.UpdatedAt, &dg.DeletedAt, &dg.DeletedBy,
 	)
