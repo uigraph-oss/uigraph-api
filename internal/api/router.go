@@ -232,6 +232,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	protected("GET", "/api/v1/orgs/{orgID}/maps/{mapID}/frames", frameH.List)
 	protected("POST", "/api/v1/orgs/{orgID}/maps/{mapID}/frames", frameH.Create)
 	protected("POST", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/sync", frameH.Sync)
+	protected("GET", "/api/v1/orgs/{orgID}/frames/{frameID}", frameH.Get) // by id, without map scope (UI deep-link)
 	protected("GET", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}", frameH.Get)
 	protected("PUT", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}", frameH.Update)
 	protected("DELETE", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}", frameH.Delete)
