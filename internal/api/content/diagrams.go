@@ -24,7 +24,6 @@ import (
 
 const diagramCacheTTL = time.Hour
 
-// DiagramHandler serves /api/v1/orgs/{orgID}/diagrams.
 type DiagramHandler struct {
 	store   store.Store
 	storage storage.Client
@@ -35,9 +34,6 @@ func NewDiagramHandler(s store.Store, st storage.Client, c cache.Client) *Diagra
 	return &DiagramHandler{store: s, storage: st, cache: c}
 }
 
-// ── Diagram CRUD ──────────────────────────────────────────────────────────────
-
-// List handles GET /api/v1/orgs/{orgID}/diagrams
 func (h *DiagramHandler) List(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	q := r.URL.Query()
@@ -56,7 +52,6 @@ func (h *DiagramHandler) List(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"diagrams": diagrams})
 }
 
-// Create handles POST /api/v1/orgs/{orgID}/diagrams
 func (h *DiagramHandler) Create(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	p, ok := authmw.PrincipalFromCtx(r.Context())
@@ -134,8 +129,6 @@ func (h *DiagramHandler) Create(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, dg)
 }
 
-// Get handles GET /api/v1/orgs/{orgID}/diagrams/{diagramID}
-// Returns diagram metadata without content.
 func (h *DiagramHandler) Get(w http.ResponseWriter, r *http.Request) {
 	dg, err := h.store.GetDiagram(r.Context(), r.PathValue("diagramID"))
 	if err != nil {
@@ -149,11 +142,6 @@ func (h *DiagramHandler) Get(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, dg)
 }
 
-// UpdateThumbnail handles POST /api/v1/orgs/{orgID}/diagrams/{diagramID}/thumbnail
-// The browser posts the preview image bytes directly (multipart field "file").
-// The thumbnail is stored under the deterministic public asset id
-// "diagram_<diagramId>" so regenerating overwrites it in place; the browser then
-// reads it directly from storage at ${ASSETS_URL}/diagram_<id>.
 func (h *DiagramHandler) UpdateThumbnail(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("diagramID")
 	p, ok := authmw.PrincipalFromCtx(r.Context())
@@ -211,18 +199,14 @@ func (h *DiagramHandler) UpdateThumbnail(w http.ResponseWriter, r *http.Request)
 	})
 }
 
-// GetContent handles GET /api/v1/orgs/{orgID}/diagrams/{diagramID}/content
-// Returns the ReactFlow JSON. Tries Redis cache first; falls back to storage.
 func (h *DiagramHandler) GetContent(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("diagramID")
 
-	// 1. Cache hit.
 	if content, ok := h.cacheGet(r.Context(), id); ok {
 		writeJSON(w, http.StatusOK, map[string]any{"diagramId": id, "content": content})
 		return
 	}
 
-	// 2. Fetch metadata for the storage key.
 	dg, err := h.store.GetDiagram(r.Context(), id)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "internal error")
@@ -233,20 +217,17 @@ func (h *DiagramHandler) GetContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3. Download from storage.
 	content, err := h.downloadContent(r.Context(), dg.ContentKey)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "failed to fetch content")
 		return
 	}
 
-	// 4. Populate cache.
 	h.cacheSet(r.Context(), id, content)
 
 	writeJSON(w, http.StatusOK, map[string]any{"diagramId": id, "content": content})
 }
 
-// Update handles PUT /api/v1/orgs/{orgID}/diagrams/{diagramID}
 func (h *DiagramHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("diagramID")
 	p, ok := authmw.PrincipalFromCtx(r.Context())
@@ -294,8 +275,6 @@ func (h *DiagramHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if body.Content != nil {
 		newHash := sha256Hex(*body.Content)
 		if newHash != dg.ContentHash {
-			// Content changed — upload only. Versions are created solely on
-			// manual publish (CreateVersion) or CLI/CI sync (Sync).
 			if err := h.uploadContent(r.Context(), dg.ContentKey, *body.Content); err != nil {
 				writeErr(w, http.StatusInternalServerError, "failed to store content")
 				return
@@ -312,7 +291,6 @@ func (h *DiagramHandler) Update(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, dg)
 }
 
-// Delete handles DELETE /api/v1/orgs/{orgID}/diagrams/{diagramID}
 func (h *DiagramHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("diagramID")
 	p, ok := authmw.PrincipalFromCtx(r.Context())
@@ -328,9 +306,6 @@ func (h *DiagramHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ── Versions ──────────────────────────────────────────────────────────────────
-
-// ListVersions handles GET /api/v1/orgs/{orgID}/diagrams/{diagramID}/versions
 func (h *DiagramHandler) ListVersions(w http.ResponseWriter, r *http.Request) {
 	versions, err := h.store.ListDiagramVersions(r.Context(), r.PathValue("diagramID"))
 	if err != nil {
@@ -340,8 +315,6 @@ func (h *DiagramHandler) ListVersions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"versions": versions})
 }
 
-// CreateVersion handles POST /api/v1/orgs/{orgID}/diagrams/{diagramID}/versions
-// Creates an explicit (non-auto) named snapshot of the current content.
 func (h *DiagramHandler) CreateVersion(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("diagramID")
 	orgID := r.PathValue("orgID")
@@ -362,7 +335,6 @@ func (h *DiagramHandler) CreateVersion(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 
-	// Download current content to write as an immutable version object.
 	content, err := h.getContent(r.Context(), id, dg.ContentKey)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "failed to read current content")
@@ -396,7 +368,6 @@ func (h *DiagramHandler) CreateVersion(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, v)
 }
 
-// GetVersionContent handles GET /api/v1/orgs/{orgID}/diagrams/{diagramID}/versions/{versionID}/content
 func (h *DiagramHandler) GetVersionContent(w http.ResponseWriter, r *http.Request) {
 	v, err := h.store.GetDiagramVersion(r.Context(), r.PathValue("versionID"))
 	if err != nil {
@@ -415,8 +386,6 @@ func (h *DiagramHandler) GetVersionContent(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, map[string]any{"versionId": v.ID, "content": content})
 }
 
-// RestoreVersion handles POST /api/v1/orgs/{orgID}/diagrams/{diagramID}/versions/{versionID}/restore
-// Promotes a version's content to be the current diagram content.
 func (h *DiagramHandler) RestoreVersion(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("diagramID")
 	orgID := r.PathValue("orgID")
@@ -480,9 +449,6 @@ func (h *DiagramHandler) RestoreVersion(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, dg)
 }
 
-// ── Diagram images ────────────────────────────────────────────────────────────
-
-// ListImages handles GET /api/v1/orgs/{orgID}/diagrams/{diagramID}/images
 func (h *DiagramHandler) ListImages(w http.ResponseWriter, r *http.Request) {
 	images, err := h.store.ListDiagramImages(r.Context(), r.PathValue("diagramID"))
 	if err != nil {
@@ -492,11 +458,6 @@ func (h *DiagramHandler) ListImages(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"images": images})
 }
 
-// CreateImage handles POST /api/v1/orgs/{orgID}/diagrams/{diagramID}/images
-// The browser posts the image bytes directly (multipart field "file"). The image
-// is stored under a random public asset id (file_<uuid>); the returned assetId
-// resolves to a stable public URL (${ASSETS_URL}/file_<uuid>) the browser reads
-// directly and can safely embed in diagram content.
 func (h *DiagramHandler) CreateImage(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	id := r.PathValue("diagramID")
@@ -602,7 +563,6 @@ func (h *DiagramHandler) Sync(w http.ResponseWriter, r *http.Request) {
 
 	newHash := sha256Hex(body.Content)
 
-	// Update path — diagramId provided.
 	if body.DiagramID != nil {
 		dg, err := h.store.GetDiagram(r.Context(), *body.DiagramID)
 		if err != nil {
@@ -615,7 +575,6 @@ func (h *DiagramHandler) Sync(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if newHash == dg.ContentHash {
-			// Unchanged — skip write.
 			writeJSON(w, http.StatusOK, map[string]any{
 				"diagramId":      dg.ID,
 				"versionCreated": false,
@@ -729,7 +688,6 @@ func (h *DiagramHandler) downloadContent(ctx context.Context, key string) (strin
 	return buf.String(), nil
 }
 
-// getContent checks cache first, then falls back to storage.
 func (h *DiagramHandler) getContent(ctx context.Context, id, key string) (string, error) {
 	if content, ok := h.cacheGet(ctx, id); ok {
 		return content, nil

@@ -63,10 +63,9 @@ type FocalPoint struct {
 	CreatedAt  time.Time  `json:"createdAt"`
 	UpdatedAt  time.Time  `json:"updatedAt"`
 	DeletedAt  *time.Time `json:"deletedAt,omitempty"`
-	DeletedBy  *string    `json:"deletedBy,omitempty"`
+	DeletedBy   *string    `json:"deletedBy,omitempty"`
 }
 
-// FrameGroup is a named rectangular region drawn on a Frame (renamed from "page group").
 type FrameGroup struct {
 	ID          string     `json:"id"`
 	FrameID     string     `json:"frameId"`
@@ -87,8 +86,6 @@ type FrameGroup struct {
 	DeletedBy   *string    `json:"deletedBy,omitempty"`
 }
 
-// FrameLink is a navigation hotspot from a source Frame to another Frame (kind="frame")
-// or to a Map (kind="map"). Unifies enterprise page↔page and page↔project links.
 type FrameLink struct {
 	ID            string     `json:"id"`
 	FrameID       string     `json:"frameId"`
@@ -108,8 +105,6 @@ type FrameLink struct {
 	DeletedBy     *string    `json:"deletedBy,omitempty"`
 }
 
-// FocalPointMeta attaches a flow-diagram component plus its captured field values,
-// images, and an optional flow diagram reference to a FocalPoint.
 type FocalPointMeta struct {
 	ID                   string          `json:"id"`
 	FocalPointID         string          `json:"focalPointId"`
@@ -128,14 +123,11 @@ type FocalPointMeta struct {
 	DeletedBy            *string         `json:"deletedBy,omitempty"`
 }
 
-// FramePosition stores the (x,y) position of a frame on the map canvas board.
 type FramePosition struct {
 	X float64 `json:"x"`
 	Y float64 `json:"y"`
 }
 
-// Canvas holds the pan/zoom state and per-frame positions for the map board view.
-// One row per map, upserted on every save.
 type Canvas struct {
 	MapID           string                    `json:"mapId"`
 	OrgID           string                    `json:"orgId"`
@@ -146,51 +138,43 @@ type Canvas struct {
 	UpdatedAt       time.Time                 `json:"updatedAt"`
 }
 
-// Store is the persistence interface for all map-related entities.
 type Store interface {
-	// Maps
 	CreateMap(ctx context.Context, m Map) error
 	GetMap(ctx context.Context, id string) (*Map, error)
 	ListMaps(ctx context.Context, orgID string, folderID, teamID *string) ([]Map, error)
 	UpdateMap(ctx context.Context, m Map) error
 	SoftDeleteMap(ctx context.Context, id, deletedBy string) error
 
-	// Frames
 	CreateFrame(ctx context.Context, f Frame) error
 	GetFrame(ctx context.Context, id string) (*Frame, error)
 	ListFrames(ctx context.Context, mapID string) ([]Frame, error)
 	UpdateFrame(ctx context.Context, f Frame) error
 	SoftDeleteFrame(ctx context.Context, id, deletedBy string) error
 
-	// Focal points
 	CreateFocalPoint(ctx context.Context, fp FocalPoint) error
 	GetFocalPoint(ctx context.Context, id string) (*FocalPoint, error)
 	ListFocalPoints(ctx context.Context, frameID string) ([]FocalPoint, error)
 	UpdateFocalPoint(ctx context.Context, fp FocalPoint) error
 	SoftDeleteFocalPoint(ctx context.Context, id, deletedBy string) error
 
-	// Frame groups
 	CreateFrameGroup(ctx context.Context, g FrameGroup) error
 	GetFrameGroup(ctx context.Context, id string) (*FrameGroup, error)
 	ListFrameGroups(ctx context.Context, frameID string) ([]FrameGroup, error)
 	UpdateFrameGroup(ctx context.Context, g FrameGroup) error
 	SoftDeleteFrameGroup(ctx context.Context, id, deletedBy string) error
 
-	// Frame links
 	CreateFrameLink(ctx context.Context, l FrameLink) error
 	GetFrameLink(ctx context.Context, id string) (*FrameLink, error)
 	ListFrameLinks(ctx context.Context, frameID string) ([]FrameLink, error)
 	UpdateFrameLink(ctx context.Context, l FrameLink) error
 	SoftDeleteFrameLink(ctx context.Context, id, deletedBy string) error
 
-	// Focal point meta
 	CreateFocalPointMeta(ctx context.Context, m FocalPointMeta) error
 	GetFocalPointMeta(ctx context.Context, id string) (*FocalPointMeta, error)
 	ListFocalPointMeta(ctx context.Context, focalPointID string) ([]FocalPointMeta, error)
 	UpdateFocalPointMeta(ctx context.Context, m FocalPointMeta) error
 	SoftDeleteFocalPointMeta(ctx context.Context, id, deletedBy string) error
 
-	// Canvas
 	GetCanvas(ctx context.Context, mapID string) (*Canvas, error)
 	UpsertCanvas(ctx context.Context, c Canvas) error
 }

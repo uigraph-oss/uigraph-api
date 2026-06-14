@@ -11,9 +11,6 @@ import (
 	"github.com/uigraph/app/internal/uimap"
 )
 
-// ── Frame groups ────────────────────────────────────────────────────────────────
-
-// ListGroups handles GET .../frames/{frameID}/groups
 func (h *FrameHandler) ListGroups(w http.ResponseWriter, r *http.Request) {
 	groups, err := h.store.ListFrameGroups(r.Context(), r.PathValue("frameID"))
 	if err != nil {
@@ -23,7 +20,6 @@ func (h *FrameHandler) ListGroups(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"groups": groups})
 }
 
-// CreateGroup handles POST .../frames/{frameID}/groups
 func (h *FrameHandler) CreateGroup(w http.ResponseWriter, r *http.Request) {
 	frameID := r.PathValue("frameID")
 	orgID := r.PathValue("orgID")
@@ -76,7 +72,6 @@ func (h *FrameHandler) CreateGroup(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, g)
 }
 
-// UpdateGroup handles PUT .../frames/{frameID}/groups/{groupID}
 func (h *FrameHandler) UpdateGroup(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {
@@ -140,7 +135,6 @@ func (h *FrameHandler) UpdateGroup(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, g)
 }
 
-// DeleteGroup handles DELETE .../frames/{frameID}/groups/{groupID}
 func (h *FrameHandler) DeleteGroup(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {
@@ -154,9 +148,6 @@ func (h *FrameHandler) DeleteGroup(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ── Frame links ─────────────────────────────────────────────────────────────────
-
-// ListLinks handles GET .../frames/{frameID}/links
 func (h *FrameHandler) ListLinks(w http.ResponseWriter, r *http.Request) {
 	links, err := h.store.ListFrameLinks(r.Context(), r.PathValue("frameID"))
 	if err != nil {
@@ -166,7 +157,6 @@ func (h *FrameHandler) ListLinks(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"links": links})
 }
 
-// CreateLink handles POST .../frames/{frameID}/links
 func (h *FrameHandler) CreateLink(w http.ResponseWriter, r *http.Request) {
 	frameID := r.PathValue("frameID")
 	orgID := r.PathValue("orgID")
@@ -217,7 +207,6 @@ func (h *FrameHandler) CreateLink(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, l)
 }
 
-// UpdateLink handles PUT .../frames/{frameID}/links/{linkID}
 func (h *FrameHandler) UpdateLink(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {
@@ -277,7 +266,6 @@ func (h *FrameHandler) UpdateLink(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, l)
 }
 
-// DeleteLink handles DELETE .../frames/{frameID}/links/{linkID}
 func (h *FrameHandler) DeleteLink(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {
@@ -291,9 +279,6 @@ func (h *FrameHandler) DeleteLink(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ── Focal point meta ────────────────────────────────────────────────────────────
-
-// ListMeta handles GET .../focal-points/{fpID}/meta
 func (h *FrameHandler) ListMeta(w http.ResponseWriter, r *http.Request) {
 	metas, err := h.store.ListFocalPointMeta(r.Context(), r.PathValue("fpID"))
 	if err != nil {
@@ -303,7 +288,6 @@ func (h *FrameHandler) ListMeta(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"meta": metas})
 }
 
-// CreateMeta handles POST .../focal-points/{fpID}/meta
 func (h *FrameHandler) CreateMeta(w http.ResponseWriter, r *http.Request) {
 	fpID := r.PathValue("fpID")
 	frameID := r.PathValue("frameID")
@@ -348,7 +332,6 @@ func (h *FrameHandler) CreateMeta(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, m)
 }
 
-// UpdateMeta handles PUT .../focal-points/{fpID}/meta/{metaID}
 func (h *FrameHandler) UpdateMeta(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {
@@ -400,7 +383,6 @@ func (h *FrameHandler) UpdateMeta(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, m)
 }
 
-// DeleteMeta handles DELETE .../focal-points/{fpID}/meta/{metaID}
 func (h *FrameHandler) DeleteMeta(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {

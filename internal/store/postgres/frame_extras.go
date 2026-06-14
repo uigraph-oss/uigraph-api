@@ -10,8 +10,6 @@ import (
 	"github.com/uigraph/app/internal/uimap"
 )
 
-// ── Frame groups ────────────────────────────────────────────────────────────────
-
 func (d *DB) CreateFrameGroup(ctx context.Context, g uimap.FrameGroup) error {
 	const q = `
 		INSERT INTO frame_groups
@@ -116,8 +114,6 @@ func scanFrameGroup(row interface{ Scan(...any) error }) (uimap.FrameGroup, erro
 	)
 }
 
-// ── Frame links ─────────────────────────────────────────────────────────────────
-
 func (d *DB) CreateFrameLink(ctx context.Context, l uimap.FrameLink) error {
 	const q = `
 		INSERT INTO frame_links
@@ -221,8 +217,6 @@ func scanFrameLink(row interface{ Scan(...any) error }) (uimap.FrameLink, error)
 		&l.CreatedAt, &l.UpdatedAt, &l.DeletedAt, &l.DeletedBy,
 	)
 }
-
-// ── Focal point meta ────────────────────────────────────────────────────────────
 
 func (d *DB) CreateFocalPointMeta(ctx context.Context, m uimap.FocalPointMeta) error {
 	const q = `
@@ -333,7 +327,6 @@ func scanFocalPointMeta(row interface{ Scan(...any) error }) (uimap.FocalPointMe
 	)
 }
 
-// defaultJSON returns raw if it is non-empty, otherwise the fallback JSON literal.
 func defaultJSON(raw []byte, fallback string) []byte {
 	if len(raw) == 0 {
 		return []byte(fallback)

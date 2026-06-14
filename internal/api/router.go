@@ -232,7 +232,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	protected("GET", "/api/v1/orgs/{orgID}/maps/{mapID}/frames", frameH.List)
 	protected("POST", "/api/v1/orgs/{orgID}/maps/{mapID}/frames", frameH.Create)
 	protected("POST", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/sync", frameH.Sync)
-	protected("GET", "/api/v1/orgs/{orgID}/frames/{frameID}", frameH.Get) // by id, without map scope (UI deep-link)
+	protected("GET", "/api/v1/orgs/{orgID}/frames/{frameID}", frameH.Get)
 	protected("GET", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}", frameH.Get)
 	protected("PUT", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}", frameH.Update)
 	protected("DELETE", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}", frameH.Delete)
@@ -244,19 +244,16 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	protected("GET", "/api/v1/orgs/{orgID}/maps/{mapID}/canvas", frameH.GetCanvas)
 	protected("PUT", "/api/v1/orgs/{orgID}/maps/{mapID}/canvas", frameH.UpsertCanvas)
 
-	// Frame groups (rectangular regions on a frame).
 	protected("GET", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/groups", frameH.ListGroups)
 	protected("POST", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/groups", frameH.CreateGroup)
 	protected("PUT", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/groups/{groupID}", frameH.UpdateGroup)
 	protected("DELETE", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/groups/{groupID}", frameH.DeleteGroup)
 
-	// Frame links (frame→frame and frame→map navigation hotspots).
 	protected("GET", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/links", frameH.ListLinks)
 	protected("POST", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/links", frameH.CreateLink)
 	protected("PUT", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/links/{linkID}", frameH.UpdateLink)
 	protected("DELETE", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/links/{linkID}", frameH.DeleteLink)
 
-	// Focal point meta (component metadata attached to a focal point).
 	protected("GET", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta", frameH.ListMeta)
 	protected("POST", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta", frameH.CreateMeta)
 	protected("PUT", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta/{metaID}", frameH.UpdateMeta)

@@ -52,29 +52,18 @@ func FileKey(orgID, fileID, filename string) string {
 	return orgID + "/files/" + fileID + "/" + filename
 }
 
-// AssetKey returns the object key for a public, browser-readable asset. Every
-// browser-facing blob (frame screenshot, diagram thumbnail, diagram image) is
-// stored under the assets/ prefix and addressed by its asset id. The frontend
-// builds the read URL as ${ASSETS_URL}/{assetId}, so the browser reads the
-// object directly from storage and the app is never in the read path.
 func AssetKey(assetID string) string {
 	return "assets/" + assetID
 }
 
-// NewFileAssetID mints a random asset id for many-per-entity / generic blobs
-// (e.g. diagram images, future user uploads). Mirrors prod's file_<uuid>.
 func NewFileAssetID() string {
 	return "file_" + uuid.NewString()
 }
 
-// DiagramThumbnailAssetID returns the deterministic asset id for a diagram's
-// thumbnail, derived from the diagram id so regenerating overwrites in place.
 func DiagramThumbnailAssetID(diagramID string) string {
 	return "diagram_" + diagramID
 }
 
-// FrameScreenshotAssetID returns the deterministic asset id for a frame's
-// screenshot, derived from the frame id so re-uploading overwrites in place.
 func FrameScreenshotAssetID(frameID string) string {
 	return "frame_" + frameID
 }

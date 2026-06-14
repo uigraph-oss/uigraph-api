@@ -178,8 +178,6 @@ func (d *DB) LatestVersionNumber(ctx context.Context, diagramID string) (int, er
 	return n, nil
 }
 
-// ── Diagram images ─────────────────────────────────────────────────────────────
-
 func (d *DB) CreateDiagramImage(ctx context.Context, img diagram.Image) error {
 	const q = `
 		INSERT INTO diagram_images

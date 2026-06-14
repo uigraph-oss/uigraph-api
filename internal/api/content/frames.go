@@ -200,9 +200,6 @@ func (h *FrameHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// Sync handles POST /api/v1/orgs/{orgID}/maps/{mapID}/frames/sync
-// CLI upsert: creates or updates a frame, skipping the screenshot upload when
-// the content hash is unchanged.
 func (h *FrameHandler) Sync(w http.ResponseWriter, r *http.Request) {
 	mapID := r.PathValue("mapID")
 	orgID := r.PathValue("orgID")
@@ -526,12 +523,6 @@ func (h *FrameHandler) UpsertCanvas(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, c)
 }
 
-// ── internal helpers ──────────────────────────────────────────────────────────
-
-// uploadScreenshot stores a frame screenshot. The content may be a data URL
-// (e.g. "data:image/png;base64,...") sent by the browser, in which case it is
-// decoded to its raw bytes and stored with the declared content type. Any other
-// value (e.g. raw bytes sent by the CLI) is stored verbatim as image/png.
 func (h *FrameHandler) uploadScreenshot(ctx context.Context, key, content string) error {
 	if contentType, raw, ok := decodeDataURL(content); ok {
 		return h.storage.Upload(ctx, key, contentType, bytes.NewReader(raw), int64(len(raw)))
@@ -540,9 +531,7 @@ func (h *FrameHandler) uploadScreenshot(ctx context.Context, key, content string
 	return h.storage.Upload(ctx, key, "image/png", r, int64(r.Len()))
 }
 
-// decodeDataURL parses a "data:<contentType>;base64,<payload>" string into its
-// content type and decoded bytes. Returns ok=false for non data-URL input.
-func decodeDataURL(s string) (contentType string, data []byte, ok bool) {
+	func decodeDataURL(s string) (contentType string, data []byte, ok bool) {
 	if !strings.HasPrefix(s, "data:") {
 		return "", nil, false
 	}

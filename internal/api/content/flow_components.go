@@ -11,7 +11,6 @@ import (
 //go:embed flow_diagram_components.json
 var flowComponentCatalogRaw []byte
 
-// FlowDiagramComponentField mirrors a single configurable field on a component.
 type FlowDiagramComponentField struct {
 	FlowDiagramComponentFieldID string   `json:"flowDiagramComponentFieldId"`
 	Label                       string   `json:"label"`
@@ -43,8 +42,6 @@ var (
 	flowCatalog     []FlowDiagramComponent
 )
 
-// loadFlowCatalog parses the embedded native component catalog once, deriving a
-// stable componentId and slug for each entry.
 func loadFlowCatalog() []FlowDiagramComponent {
 	flowCatalogOnce.Do(func() {
 		var parsed struct {
@@ -64,14 +61,10 @@ func loadFlowCatalog() []FlowDiagramComponent {
 	return flowCatalog
 }
 
-// FlowComponentHandler serves the flow diagram component palette.
 type FlowComponentHandler struct{}
 
 func NewFlowComponentHandler() *FlowComponentHandler { return &FlowComponentHandler{} }
 
-// List handles GET /api/v1/orgs/{orgID}/flow-diagram-components
-// Native components come from the embedded catalog; custom components are
-// per-org and currently empty (no custom-component authoring in this scope).
 func (h *FlowComponentHandler) List(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"components":       loadFlowCatalog(),
@@ -79,7 +72,6 @@ func (h *FlowComponentHandler) List(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// slugify converts a component name into a URL-friendly slug.
 func slugify(s string) string {
 	s = strings.ToLower(strings.TrimSpace(s))
 	var b strings.Builder

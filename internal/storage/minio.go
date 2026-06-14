@@ -63,11 +63,6 @@ func (c *minioClient) EnsureBucket(ctx context.Context) error {
 		}
 	}
 
-	// Grant anonymous read on the assets/ prefix so the browser fetches public
-	// blobs (screenshots, thumbnails, diagram images) straight from storage — the
-	// app is never in the read path. Everything outside assets/ stays private.
-	// Only managed for the bundled MinIO backend; S3/GCS deployments manage their
-	// own bucket access (e.g. CloudFront + OAC) externally.
 	if c.backend == "minio" {
 		if err := c.mc.SetBucketPolicy(ctx, c.bucket, assetsPublicPolicy(c.bucket)); err != nil {
 			return fmt.Errorf("storage: set assets public policy: %w", err)
@@ -76,8 +71,6 @@ func (c *minioClient) EnsureBucket(ctx context.Context) error {
 	return nil
 }
 
-// assetsPublicPolicy returns an S3 bucket policy granting anonymous s3:GetObject
-// on the assets/ prefix only.
 func assetsPublicPolicy(bucket string) string {
 	return fmt.Sprintf(`{
   "Version": "2012-10-17",

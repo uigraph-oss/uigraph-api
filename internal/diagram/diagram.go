@@ -23,9 +23,7 @@ type Diagram struct {
 	TeamID      *string `json:"teamId,omitempty"`
 	Name        string  `json:"name"`
 	ContentKey  string  `json:"contentKey"`
-	ContentHash string  `json:"contentHash"`
-	// PreviewAssetID is the asset id of the diagram's thumbnail (deterministic,
-	// "diagram_<id>"). The frontend builds the public URL ${ASSETS_URL}/{id}.
+	ContentHash string `json:"contentHash"`
 	PreviewAssetID     *string    `json:"previewAssetId,omitempty"`
 	PreviewContentHash *string    `json:"previewContentHash,omitempty"`
 	Source             *string    `json:"source,omitempty"`
@@ -51,8 +49,6 @@ type Version struct {
 	CreatedAt     time.Time `json:"createdAt"`
 }
 
-// Image is a user-uploaded image attached to a diagram. The binary lives in
-// object storage; this record holds the metadata.
 type Image struct {
 	ID        string    `json:"diagramImageId"`
 	DiagramID string    `json:"diagramId"`
@@ -64,7 +60,7 @@ type Image struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
-// Store is the persistence interface for diagrams.
+type Store interface {
 type Store interface {
 	CreateDiagram(ctx context.Context, d Diagram) error
 	GetDiagram(ctx context.Context, id string) (*Diagram, error)
