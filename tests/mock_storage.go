@@ -53,3 +53,7 @@ func (m *mockStorage) Delete(_ context.Context, key string) error {
 func (m *mockStorage) PresignURL(_ context.Context, key string) (string, error) {
 	return "http://mock-storage/" + key, nil
 }
+
+func (m *mockStorage) PresignPutURL(_ context.Context, key string) (string, error) {
+	return "http://mock-storage/put/" + key, nil
+}

@@ -4,6 +4,7 @@ package uimap
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 )
 
@@ -36,6 +37,7 @@ type Frame struct {
 	TemplateType          string     `json:"templateType"`
 	ScreenshotKey         *string    `json:"screenshotKey,omitempty"`
 	ScreenshotContentHash *string    `json:"screenshotContentHash,omitempty"`
+	ScreenshotURL         *string    `json:"screenshotUrl,omitempty"` // computed: presigned GET URL, not persisted
 	Status                string     `json:"status"`
 	Order                 float64    `json:"order"`
 	Source                *string    `json:"source,omitempty"`
@@ -63,6 +65,68 @@ type FocalPoint struct {
 	UpdatedAt  time.Time  `json:"updatedAt"`
 	DeletedAt  *time.Time `json:"deletedAt,omitempty"`
 	DeletedBy  *string    `json:"deletedBy,omitempty"`
+}
+
+// FrameGroup is a named rectangular region drawn on a Frame (renamed from "page group").
+type FrameGroup struct {
+	ID          string     `json:"id"`
+	FrameID     string     `json:"frameId"`
+	OrgID       string     `json:"orgId"`
+	Name        string     `json:"name"`
+	Description string     `json:"description"`
+	LocationX   float64    `json:"locationX"`
+	LocationY   float64    `json:"locationY"`
+	Width       float64    `json:"width"`
+	Height      float64    `json:"height"`
+	Order       float64    `json:"order"`
+	IsActive    bool       `json:"isActive"`
+	CreatedBy   string     `json:"createdBy"`
+	UpdatedBy   *string    `json:"updatedBy,omitempty"`
+	CreatedAt   time.Time  `json:"createdAt"`
+	UpdatedAt   time.Time  `json:"updatedAt"`
+	DeletedAt   *time.Time `json:"deletedAt,omitempty"`
+	DeletedBy   *string    `json:"deletedBy,omitempty"`
+}
+
+// FrameLink is a navigation hotspot from a source Frame to another Frame (kind="frame")
+// or to a Map (kind="map"). Unifies enterprise page↔page and page↔project links.
+type FrameLink struct {
+	ID            string     `json:"id"`
+	FrameID       string     `json:"frameId"`
+	OrgID         string     `json:"orgId"`
+	Kind          string     `json:"kind"`
+	TargetFrameID *string    `json:"targetFrameId,omitempty"`
+	TargetMapID   *string    `json:"targetMapId,omitempty"`
+	Label         string     `json:"label"`
+	LocationX     float64    `json:"locationX"`
+	LocationY     float64    `json:"locationY"`
+	IsActive      bool       `json:"isActive"`
+	CreatedBy     string     `json:"createdBy"`
+	UpdatedBy     *string    `json:"updatedBy,omitempty"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	UpdatedAt     time.Time  `json:"updatedAt"`
+	DeletedAt     *time.Time `json:"deletedAt,omitempty"`
+	DeletedBy     *string    `json:"deletedBy,omitempty"`
+}
+
+// FocalPointMeta attaches a flow-diagram component plus its captured field values,
+// images, and an optional flow diagram reference to a FocalPoint.
+type FocalPointMeta struct {
+	ID                   string          `json:"id"`
+	FocalPointID         string          `json:"focalPointId"`
+	OrgID                string          `json:"orgId"`
+	FrameID              string          `json:"frameId"`
+	ComponentID          string          `json:"componentId"`
+	ComponentLinkID      *string         `json:"componentLinkId,omitempty"`
+	ComponentImages      json.RawMessage `json:"componentImages"`
+	ComponentFlowDiagram *string         `json:"componentFlowDiagram,omitempty"`
+	ComponentModalFields json.RawMessage `json:"componentModalFields"`
+	CreatedBy            string          `json:"createdBy"`
+	UpdatedBy            *string         `json:"updatedBy,omitempty"`
+	CreatedAt            time.Time       `json:"createdAt"`
+	UpdatedAt            time.Time       `json:"updatedAt"`
+	DeletedAt            *time.Time      `json:"deletedAt,omitempty"`
+	DeletedBy            *string         `json:"deletedBy,omitempty"`
 }
 
 // FramePosition stores the (x,y) position of a frame on the map canvas board.
@@ -105,6 +169,27 @@ type Store interface {
 	ListFocalPoints(ctx context.Context, frameID string) ([]FocalPoint, error)
 	UpdateFocalPoint(ctx context.Context, fp FocalPoint) error
 	SoftDeleteFocalPoint(ctx context.Context, id, deletedBy string) error
+
+	// Frame groups
+	CreateFrameGroup(ctx context.Context, g FrameGroup) error
+	GetFrameGroup(ctx context.Context, id string) (*FrameGroup, error)
+	ListFrameGroups(ctx context.Context, frameID string) ([]FrameGroup, error)
+	UpdateFrameGroup(ctx context.Context, g FrameGroup) error
+	SoftDeleteFrameGroup(ctx context.Context, id, deletedBy string) error
+
+	// Frame links
+	CreateFrameLink(ctx context.Context, l FrameLink) error
+	GetFrameLink(ctx context.Context, id string) (*FrameLink, error)
+	ListFrameLinks(ctx context.Context, frameID string) ([]FrameLink, error)
+	UpdateFrameLink(ctx context.Context, l FrameLink) error
+	SoftDeleteFrameLink(ctx context.Context, id, deletedBy string) error
+
+	// Focal point meta
+	CreateFocalPointMeta(ctx context.Context, m FocalPointMeta) error
+	GetFocalPointMeta(ctx context.Context, id string) (*FocalPointMeta, error)
+	ListFocalPointMeta(ctx context.Context, focalPointID string) ([]FocalPointMeta, error)
+	UpdateFocalPointMeta(ctx context.Context, m FocalPointMeta) error
+	SoftDeleteFocalPointMeta(ctx context.Context, id, deletedBy string) error
 
 	// Canvas
 	GetCanvas(ctx context.Context, mapID string) (*Canvas, error)

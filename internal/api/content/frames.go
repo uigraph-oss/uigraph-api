@@ -1,8 +1,10 @@
 package content
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -35,6 +37,9 @@ func (h *FrameHandler) List(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "internal error")
 		return
+	}
+	for i := range frames {
+		h.resolveScreenshotURL(r.Context(), &frames[i])
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"frames": frames})
 }
@@ -113,6 +118,7 @@ func (h *FrameHandler) Get(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "not found")
 		return
 	}
+	h.resolveScreenshotURL(r.Context(), f)
 	writeJSON(w, http.StatusOK, f)
 }
 
@@ -528,9 +534,54 @@ func (h *FrameHandler) UpsertCanvas(w http.ResponseWriter, r *http.Request) {
 
 // ── internal helpers ──────────────────────────────────────────────────────────
 
+// resolveScreenshotURL populates f.ScreenshotURL with a presigned GET URL when
+// the frame has a stored screenshot.
+func (h *FrameHandler) resolveScreenshotURL(ctx context.Context, f *uimap.Frame) {
+	if f == nil || h.storage == nil || f.ScreenshotKey == nil || *f.ScreenshotKey == "" {
+		return
+	}
+	u, err := h.storage.PresignURL(ctx, *f.ScreenshotKey)
+	if err != nil {
+		return
+	}
+	f.ScreenshotURL = &u
+}
+
+// uploadScreenshot stores a frame screenshot. The content may be a data URL
+// (e.g. "data:image/png;base64,...") sent by the browser, in which case it is
+// decoded to its raw bytes and stored with the declared content type. Any other
+// value (e.g. raw bytes sent by the CLI) is stored verbatim as image/png.
 func (h *FrameHandler) uploadScreenshot(ctx context.Context, key, content string) error {
+	if contentType, raw, ok := decodeDataURL(content); ok {
+		return h.storage.Upload(ctx, key, contentType, bytes.NewReader(raw), int64(len(raw)))
+	}
 	r := strings.NewReader(content)
 	return h.storage.Upload(ctx, key, "image/png", r, int64(r.Len()))
+}
+
+// decodeDataURL parses a "data:<contentType>;base64,<payload>" string into its
+// content type and decoded bytes. Returns ok=false for non data-URL input.
+func decodeDataURL(s string) (contentType string, data []byte, ok bool) {
+	if !strings.HasPrefix(s, "data:") {
+		return "", nil, false
+	}
+	comma := strings.IndexByte(s, ',')
+	if comma < 0 {
+		return "", nil, false
+	}
+	meta := s[len("data:"):comma]
+	if !strings.Contains(meta, ";base64") {
+		return "", nil, false
+	}
+	contentType = strings.TrimSuffix(meta, ";base64")
+	if contentType == "" {
+		contentType = "image/png"
+	}
+	raw, err := base64.StdEncoding.DecodeString(s[comma+1:])
+	if err != nil {
+		return "", nil, false
+	}
+	return contentType, raw, true
 }
 
 func screenshotHash(s string) string {
