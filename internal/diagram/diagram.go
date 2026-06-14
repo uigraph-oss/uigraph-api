@@ -25,7 +25,10 @@ type Diagram struct {
 	ContentKey         string     `json:"contentKey"`
 	ContentHash        string     `json:"contentHash"`
 	PreviewImageFileID *string    `json:"previewImageFileId,omitempty"`
-	Source             *string    `json:"source,omitempty"`
+	// PreviewImageURL is a computed, non-persisted presigned GET URL for the
+	// preview image (populated on read when PreviewImageFileID is set).
+	PreviewImageURL *string    `json:"previewImageUrl,omitempty"`
+	Source          *string    `json:"source,omitempty"`
 	CreatedBy          string     `json:"createdBy"`
 	UpdatedBy          *string    `json:"updatedBy,omitempty"`
 	CreatedAt          time.Time  `json:"createdAt"`
@@ -48,6 +51,21 @@ type Version struct {
 	CreatedAt     time.Time  `json:"createdAt"`
 }
 
+// Image is a user-uploaded image attached to a diagram. The binary lives in
+// object storage; this record holds the metadata.
+type Image struct {
+	ID        string    `json:"diagramImageId"`
+	DiagramID string    `json:"diagramId"`
+	OrgID     string    `json:"orgId"`
+	FileID    string    `json:"fileId"`
+	FileName  *string   `json:"fileName,omitempty"`
+	Order     int       `json:"order"`
+	CreatedBy string    `json:"createdBy"`
+	CreatedAt time.Time `json:"createdAt"`
+	// FileURL is a computed, non-persisted presigned GET URL for the image.
+	FileURL *string `json:"fileURL,omitempty"`
+}
+
 // Store is the persistence interface for diagrams.
 type Store interface {
 	CreateDiagram(ctx context.Context, d Diagram) error
@@ -61,4 +79,7 @@ type Store interface {
 	ListDiagramVersions(ctx context.Context, diagramID string) ([]Version, error)
 	// LatestVersionNumber returns the highest version_number for diagramID, or 0 if none.
 	LatestVersionNumber(ctx context.Context, diagramID string) (int, error)
+
+	CreateDiagramImage(ctx context.Context, img Image) error
+	ListDiagramImages(ctx context.Context, diagramID string) ([]Image, error)
 }

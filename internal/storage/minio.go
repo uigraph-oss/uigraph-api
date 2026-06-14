@@ -83,3 +83,11 @@ func (c *minioClient) PresignURL(ctx context.Context, key string) (string, error
 	}
 	return u.String(), nil
 }
+
+func (c *minioClient) PresignPutURL(ctx context.Context, key string) (string, error) {
+	u, err := c.mc.PresignedPutObject(ctx, c.bucket, key, 15*time.Minute)
+	if err != nil {
+		return "", err
+	}
+	return u.String(), nil
+}

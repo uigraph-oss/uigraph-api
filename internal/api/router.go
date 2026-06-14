@@ -183,11 +183,18 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	protected("GET", "/api/v1/orgs/{orgID}/diagrams/{diagramID}", diagramH.Get)
 	protected("PUT", "/api/v1/orgs/{orgID}/diagrams/{diagramID}", diagramH.Update)
 	protected("DELETE", "/api/v1/orgs/{orgID}/diagrams/{diagramID}", diagramH.Delete)
+	protected("POST", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/thumbnail", diagramH.UpdateThumbnail)
+	protected("GET", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/images", diagramH.ListImages)
+	protected("POST", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/images", diagramH.CreateImage)
 	protected("GET", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/content", diagramH.GetContent)
 	protected("GET", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/versions", diagramH.ListVersions)
 	protected("POST", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/versions", diagramH.CreateVersion)
 	protected("GET", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/versions/{versionID}/content", diagramH.GetVersionContent)
 	protected("POST", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/versions/{versionID}/restore", diagramH.RestoreVersion)
+
+	// ── Flow diagram component palette ────────────────────────────────────
+	flowCompH := content.NewFlowComponentHandler()
+	protected("GET", "/api/v1/orgs/{orgID}/flow-diagram-components", flowCompH.List)
 
 	// ── Services + API Groups + API Endpoints ─────────────────────────────
 	svcH := content.NewServiceHandler(s, st)

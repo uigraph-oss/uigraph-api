@@ -21,6 +21,8 @@ type Client interface {
 	Delete(ctx context.Context, key string) error
 	// PresignURL returns a short-lived (15 min) GET URL for key.
 	PresignURL(ctx context.Context, key string) (string, error)
+	// PresignPutURL returns a short-lived (15 min) PUT URL for uploading to key.
+	PresignPutURL(ctx context.Context, key string) (string, error)
 }
 
 // DiagramContentKey returns the object key for a diagram's current content.
@@ -51,4 +53,14 @@ func FrameScreenshotKey(orgID, mapID, frameID string) string {
 // FileKey returns the object key for a user-uploaded file.
 func FileKey(orgID, fileID, filename string) string {
 	return orgID + "/files/" + fileID + "/" + filename
+}
+
+// DiagramPreviewKey returns the object key for a diagram's preview image.
+func DiagramPreviewKey(orgID, diagramID, fileID string) string {
+	return orgID + "/diagrams/" + diagramID + "/previews/" + fileID
+}
+
+// DiagramImageKey returns the object key for an image attached to a diagram.
+func DiagramImageKey(orgID, diagramID, fileID string) string {
+	return orgID + "/diagrams/" + diagramID + "/images/" + fileID
 }

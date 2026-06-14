@@ -52,6 +52,9 @@ func (h *DiagramHandler) List(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+	for i := range diagrams {
+		h.resolvePreviewURL(r.Context(), orgID, &diagrams[i])
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"diagrams": diagrams})
 }
 
@@ -145,7 +148,64 @@ func (h *DiagramHandler) Get(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "not found")
 		return
 	}
+	h.resolvePreviewURL(r.Context(), r.PathValue("orgID"), dg)
 	writeJSON(w, http.StatusOK, dg)
+}
+
+// UpdateThumbnail handles POST /api/v1/orgs/{orgID}/diagrams/{diagramID}/thumbnail
+// Generates a presigned upload URL for a preview image and persists its file id.
+func (h *DiagramHandler) UpdateThumbnail(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("diagramID")
+	orgID := r.PathValue("orgID")
+	p, ok := authmw.PrincipalFromCtx(r.Context())
+	if !ok {
+		writeErr(w, http.StatusUnauthorized, "unauthenticated")
+		return
+	}
+
+	dg, err := h.store.GetDiagram(r.Context(), id)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if dg == nil || dg.DeletedAt != nil {
+		writeErr(w, http.StatusNotFound, "not found")
+		return
+	}
+
+	fileID := uuid.NewString()
+	key := storage.DiagramPreviewKey(orgID, id, fileID)
+	uploadURL, err := h.storage.PresignPutURL(r.Context(), key)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "failed to presign upload")
+		return
+	}
+
+	dg.PreviewImageFileID = &fileID
+	dg.UpdatedBy = &p.UserID
+	if err := h.store.UpdateDiagram(r.Context(), *dg); err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"fileId":        fileID,
+		"fileUploadURL": uploadURL,
+	})
+}
+
+// resolvePreviewURL populates dg.PreviewImageURL with a presigned GET URL when
+// a preview image file id is set.
+func (h *DiagramHandler) resolvePreviewURL(ctx context.Context, orgID string, dg *diagram.Diagram) {
+	if dg == nil || dg.PreviewImageFileID == nil || *dg.PreviewImageFileID == "" {
+		return
+	}
+	key := storage.DiagramPreviewKey(orgID, dg.ID, *dg.PreviewImageFileID)
+	u, err := h.storage.PresignURL(ctx, key)
+	if err != nil {
+		return
+	}
+	dg.PreviewImageURL = &u
 }
 
 // GetContent handles GET /api/v1/orgs/{orgID}/diagrams/{diagramID}/content
@@ -432,6 +492,83 @@ func (h *DiagramHandler) RestoreVersion(w http.ResponseWriter, r *http.Request) 
 
 	h.cacheDel(r.Context(), id)
 	writeJSON(w, http.StatusOK, dg)
+}
+
+// ── Diagram images ────────────────────────────────────────────────────────────
+
+// ListImages handles GET /api/v1/orgs/{orgID}/diagrams/{diagramID}/images
+func (h *DiagramHandler) ListImages(w http.ResponseWriter, r *http.Request) {
+	orgID := r.PathValue("orgID")
+	id := r.PathValue("diagramID")
+	images, err := h.store.ListDiagramImages(r.Context(), id)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	for i := range images {
+		key := storage.DiagramImageKey(orgID, id, images[i].FileID)
+		if u, err := h.storage.PresignURL(r.Context(), key); err == nil {
+			images[i].FileURL = &u
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"images": images})
+}
+
+// CreateImage handles POST /api/v1/orgs/{orgID}/diagrams/{diagramID}/images
+// Generates a presigned upload URL and persists the image metadata.
+func (h *DiagramHandler) CreateImage(w http.ResponseWriter, r *http.Request) {
+	orgID := r.PathValue("orgID")
+	id := r.PathValue("diagramID")
+	p, ok := authmw.PrincipalFromCtx(r.Context())
+	if !ok {
+		writeErr(w, http.StatusUnauthorized, "unauthenticated")
+		return
+	}
+
+	dg, err := h.store.GetDiagram(r.Context(), id)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if dg == nil || dg.DeletedAt != nil {
+		writeErr(w, http.StatusNotFound, "not found")
+		return
+	}
+
+	var body struct {
+		FileName *string `json:"fileName"`
+		Order    int     `json:"order"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+
+	fileID := uuid.NewString()
+	key := storage.DiagramImageKey(orgID, id, fileID)
+	uploadURL, err := h.storage.PresignPutURL(r.Context(), key)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "failed to presign upload")
+		return
+	}
+
+	img := diagram.Image{
+		ID:        uuid.NewString(),
+		DiagramID: id,
+		OrgID:     orgID,
+		FileID:    fileID,
+		FileName:  body.FileName,
+		Order:     body.Order,
+		CreatedBy: p.UserID,
+		CreatedAt: time.Now().UTC(),
+	}
+	if err := h.store.CreateDiagramImage(r.Context(), img); err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"diagramImageId": img.ID,
+		"fileId":         fileID,
+		"fileUploadURL":  uploadURL,
+	})
 }
 
 // ── Sync (CLI / CI-CD) ────────────────────────────────────────────────────────

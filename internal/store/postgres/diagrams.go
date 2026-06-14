@@ -178,6 +178,51 @@ func (d *DB) LatestVersionNumber(ctx context.Context, diagramID string) (int, er
 	return n, nil
 }
 
+// ── Diagram images ─────────────────────────────────────────────────────────────
+
+func (d *DB) CreateDiagramImage(ctx context.Context, img diagram.Image) error {
+	const q = `
+		INSERT INTO diagram_images
+			(id, diagram_id, org_id, file_id, file_name, "order", created_by, created_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`
+	if img.CreatedAt.IsZero() {
+		img.CreatedAt = time.Now().UTC()
+	}
+	_, err := d.db.ExecContext(ctx, q,
+		img.ID, img.DiagramID, img.OrgID, img.FileID, img.FileName, img.Order,
+		img.CreatedBy, img.CreatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("postgres: CreateDiagramImage: %w", err)
+	}
+	return nil
+}
+
+func (d *DB) ListDiagramImages(ctx context.Context, diagramID string) ([]diagram.Image, error) {
+	const q = `
+		SELECT id, diagram_id, org_id, file_id, file_name, "order", created_by, created_at
+		FROM diagram_images WHERE diagram_id = $1 ORDER BY "order" ASC, created_at ASC`
+
+	rows, err := d.db.QueryContext(ctx, q, diagramID)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: ListDiagramImages: %w", err)
+	}
+	defer rows.Close()
+
+	var out []diagram.Image
+	for rows.Next() {
+		var img diagram.Image
+		if err := rows.Scan(
+			&img.ID, &img.DiagramID, &img.OrgID, &img.FileID, &img.FileName,
+			&img.Order, &img.CreatedBy, &img.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("postgres: ListDiagramImages scan: %w", err)
+		}
+		out = append(out, img)
+	}
+	return out, rows.Err()
+}
+
 // ── scanners ──────────────────────────────────────────────────────────────────
 
 func scanDiagram(row interface{ Scan(...any) error }) (diagram.Diagram, error) {
