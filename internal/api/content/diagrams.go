@@ -246,7 +246,6 @@ func (h *DiagramHandler) GetContent(w http.ResponseWriter, r *http.Request) {
 // Update handles PUT /api/v1/orgs/{orgID}/diagrams/{diagramID}
 func (h *DiagramHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("diagramID")
-	orgID := r.PathValue("orgID")
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {
 		writeErr(w, http.StatusUnauthorized, "unauthenticated")
@@ -292,30 +291,14 @@ func (h *DiagramHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if body.Content != nil {
 		newHash := sha256Hex(*body.Content)
 		if newHash != dg.ContentHash {
-			// Content changed — upload and create auto-version.
+			// Content changed — upload only. Versions are created solely on
+			// manual publish (CreateVersion) or CLI/CI sync (Sync).
 			if err := h.uploadContent(r.Context(), dg.ContentKey, *body.Content); err != nil {
 				writeErr(w, http.StatusInternalServerError, "failed to store content")
 				return
 			}
 			dg.ContentHash = newHash
 			h.cacheDel(r.Context(), id)
-
-			latestVer, _ := h.store.LatestVersionNumber(r.Context(), id)
-			versionID := uuid.NewString()
-			vKey := storage.DiagramVersionKey(orgID, id, versionID)
-			if err := h.uploadContent(r.Context(), vKey, *body.Content); err == nil {
-				_ = h.store.CreateDiagramVersion(r.Context(), diagram.Version{
-					ID:            versionID,
-					DiagramID:     id,
-					VersionNumber: latestVer + 1,
-					ContentKey:    vKey,
-					ContentHash:   newHash,
-					IsAutoVersion: true,
-					Source:        body.Source,
-					CreatedBy:     p.UserID,
-					CreatedAt:     time.Now().UTC(),
-				})
-			}
 		}
 	}
 
