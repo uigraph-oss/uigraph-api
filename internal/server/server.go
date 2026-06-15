@@ -57,6 +57,10 @@ func Run(ctx context.Context, cfg *config.Config) error {
 		return fmt.Errorf("server: ensure storage bucket: %w", err)
 	}
 
+	if err := bootstrap.SeedComponents(ctx, db, storageClient); err != nil {
+		return fmt.Errorf("server: seed components: %w", err)
+	}
+
 	var cacheClient cache.Client
 	if cfg.RedisURL != "" {
 		c, err := cache.New(cfg.RedisURL)

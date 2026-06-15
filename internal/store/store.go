@@ -8,6 +8,7 @@ import (
 
 	"github.com/uigraph/app/internal/authz"
 	"github.com/uigraph/app/internal/catalog"
+	"github.com/uigraph/app/internal/componentcatalog"
 	"github.com/uigraph/app/internal/diagram"
 	"github.com/uigraph/app/internal/folder"
 	"github.com/uigraph/app/internal/identity"
@@ -34,4 +35,5 @@ type Store interface {
 	diagram.Store
 	uimap.Store
 	catalog.Store
+	componentcatalog.Store
 }

@@ -52,6 +52,7 @@ func (h *FolderHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Name     string       `json:"name"`
 		Type     folder.Type  `json:"type"`
 		ParentID *string      `json:"parentId"`
+		TeamID   *string      `json:"teamId"`
 		Order    float64      `json:"order"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -68,6 +69,7 @@ func (h *FolderHandler) Create(w http.ResponseWriter, r *http.Request) {
 		ID:        uuid.NewString(),
 		OrgID:     orgID,
 		ParentID:  body.ParentID,
+		TeamID:    body.TeamID,
 		Type:      body.Type,
 		Name:      body.Name,
 		Order:     body.Order,
@@ -111,6 +113,7 @@ func (h *FolderHandler) Update(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Name     *string  `json:"name"`
 		ParentID *string  `json:"parentId"`
+		TeamID   *string  `json:"teamId"`
 		Order    *float64 `json:"order"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -122,6 +125,9 @@ func (h *FolderHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.ParentID != nil {
 		existing.ParentID = body.ParentID
+	}
+	if body.TeamID != nil {
+		existing.TeamID = body.TeamID
 	}
 	if body.Order != nil {
 		existing.Order = *body.Order

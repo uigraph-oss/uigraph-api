@@ -12,8 +12,8 @@ import (
 
 func (d *DB) CreateFolder(ctx context.Context, f folder.Folder) error {
 	const q = `
-		INSERT INTO folders (id, org_id, parent_id, type, name, ord, created_by, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`
+		INSERT INTO folders (id, org_id, parent_id, team_id, type, name, ord, created_by, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`
 	now := time.Now().UTC()
 	if f.CreatedAt.IsZero() {
 		f.CreatedAt = now
@@ -22,7 +22,7 @@ func (d *DB) CreateFolder(ctx context.Context, f folder.Folder) error {
 		f.UpdatedAt = now
 	}
 	_, err := d.db.ExecContext(ctx, q,
-		f.ID, f.OrgID, f.ParentID, string(f.Type), f.Name, f.Order,
+		f.ID, f.OrgID, f.ParentID, f.TeamID, string(f.Type), f.Name, f.Order,
 		f.CreatedBy, f.CreatedAt, f.UpdatedAt,
 	)
 	if err != nil {
@@ -33,7 +33,7 @@ func (d *DB) CreateFolder(ctx context.Context, f folder.Folder) error {
 
 func (d *DB) GetFolder(ctx context.Context, id string) (*folder.Folder, error) {
 	const q = `
-		SELECT id, org_id, parent_id, type, name, ord, created_by, created_at, updated_at, deleted_at
+		SELECT id, org_id, parent_id, team_id, type, name, ord, created_by, created_at, updated_at, deleted_at
 		FROM folders WHERE id = $1`
 	f, err := scanFolder(d.db.QueryRowContext(ctx, q, id))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -47,7 +47,7 @@ func (d *DB) GetFolder(ctx context.Context, id string) (*folder.Folder, error) {
 
 func (d *DB) ListFolders(ctx context.Context, orgID string, t *folder.Type) ([]folder.Folder, error) {
 	q := `
-		SELECT id, org_id, parent_id, type, name, ord, created_by, created_at, updated_at, deleted_at
+		SELECT id, org_id, parent_id, team_id, type, name, ord, created_by, created_at, updated_at, deleted_at
 		FROM folders WHERE org_id = $1 AND deleted_at IS NULL`
 	args := []any{orgID}
 	if t != nil {
@@ -75,9 +75,9 @@ func (d *DB) ListFolders(ctx context.Context, orgID string, t *folder.Type) ([]f
 
 func (d *DB) UpdateFolder(ctx context.Context, f folder.Folder) error {
 	const q = `
-		UPDATE folders SET name=$1, ord=$2, parent_id=$3, updated_at=$4
-		WHERE id=$5 AND deleted_at IS NULL`
-	_, err := d.db.ExecContext(ctx, q, f.Name, f.Order, f.ParentID, time.Now().UTC(), f.ID)
+		UPDATE folders SET name=$1, ord=$2, parent_id=$3, team_id=$4, updated_at=$5
+		WHERE id=$6 AND deleted_at IS NULL`
+	_, err := d.db.ExecContext(ctx, q, f.Name, f.Order, f.ParentID, f.TeamID, time.Now().UTC(), f.ID)
 	if err != nil {
 		return fmt.Errorf("postgres: UpdateFolder: %w", err)
 	}
@@ -97,7 +97,7 @@ func scanFolder(row interface{ Scan(...any) error }) (folder.Folder, error) {
 	var f folder.Folder
 	var t string
 	err := row.Scan(
-		&f.ID, &f.OrgID, &f.ParentID, &t, &f.Name, &f.Order,
+		&f.ID, &f.OrgID, &f.ParentID, &f.TeamID, &t, &f.Name, &f.Order,
 		&f.CreatedBy, &f.CreatedAt, &f.UpdatedAt, &f.DeletedAt,
 	)
 	f.Type = folder.Type(t)
