@@ -82,10 +82,16 @@ type meResponse struct {
 }
 
 type myOrg struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	Slug string `json:"slug"`
-	Role string `json:"role"`
+	ID         string     `json:"id"`
+	Name       string     `json:"name"`
+	Slug       string     `json:"slug"`
+	Membership membership `json:"membership"`
+}
+
+// membership is the caller's membership within an org.
+type membership struct {
+	Role     string    `json:"role"` // admin | editor | viewer
+	JoinedAt time.Time `json:"joinedAt"`
 }
 
 type providersResponse struct {
@@ -428,7 +434,10 @@ func (h *SessionHandler) MyOrgs(w http.ResponseWriter, r *http.Request) {
 			ID:   m.Org.ID,
 			Name: m.Org.Name,
 			Slug: m.Org.Slug,
-			Role: m.Role,
+			Membership: membership{
+				Role:     m.Role,
+				JoinedAt: m.JoinedAt,
+			},
 		})
 	}
 	httputil.JSON(w, http.StatusOK, map[string]any{"orgs": orgs})
