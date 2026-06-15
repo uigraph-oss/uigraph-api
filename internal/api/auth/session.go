@@ -77,7 +77,7 @@ type meResponse struct {
 	Name         string `json:"name"`
 	Login        string `json:"login"`
 	Kind         string `json:"kind"`         // user | service_account
-	IsAdmin      bool   `json:"isAdmin"`      // true when user has server_admin role
+	Role         string `json:"role"`         // global server role: 'user' | 'server_admin'
 	AuthProvider string `json:"authProvider"` // 'password' or OAuth provider instance name
 }
 
@@ -403,7 +403,7 @@ func (h *SessionHandler) Me(w http.ResponseWriter, r *http.Request) {
 		Name:         u.Name,
 		Login:        u.Login,
 		Kind:         "user",
-		IsAdmin:      u.Role == "server_admin",
+		Role:         u.Role,
 		AuthProvider: p.AuthProvider,
 	})
 }
