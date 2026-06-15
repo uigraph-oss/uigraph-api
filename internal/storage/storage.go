@@ -47,6 +47,11 @@ func APIGroupVersionSpecKey(orgID, serviceID, apiGroupID, versionID string) stri
 	return orgID + "/services/" + serviceID + "/api-groups/" + apiGroupID + "/versions/" + versionID + "/spec"
 }
 
+// ServiceDocFileKey returns the object key for a service doc file.
+func ServiceDocFileKey(orgID, serviceID, docID, filename string) string {
+	return orgID + "/services/" + serviceID + "/docs/" + docID + "/" + filename
+}
+
 // FileKey returns the object key for a user-uploaded file.
 func FileKey(orgID, fileID, filename string) string {
 	return orgID + "/files/" + fileID + "/" + filename

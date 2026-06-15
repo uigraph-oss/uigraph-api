@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/lib/pq"
@@ -121,6 +122,225 @@ func (d *DB) ListServices(ctx context.Context, orgID string, folderID, teamID *s
 		out = append(out, s)
 	}
 	return out, rows.Err()
+}
+
+func (d *DB) ListServiceStats(ctx context.Context, orgID string, serviceID *string) ([]catalog.ServiceStats, error) {
+	q := `
+		SELECT id
+		FROM services
+		WHERE org_id = $1 AND deleted_at IS NULL`
+	args := []any{orgID}
+	if serviceID != nil && *serviceID != "" {
+		args = append(args, *serviceID)
+		q += fmt.Sprintf(" AND id = $%d", len(args))
+	}
+	q += " ORDER BY name ASC"
+
+	rows, err := d.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: ListServiceStats list services: %w", err)
+	}
+	defer rows.Close()
+
+	stats := make([]catalog.ServiceStats, 0)
+	for rows.Next() {
+		var sid string
+		if err := rows.Scan(&sid); err != nil {
+			return nil, fmt.Errorf("postgres: ListServiceStats scan service id: %w", err)
+		}
+		s, err := d.serviceStatsForID(ctx, orgID, sid)
+		if err != nil {
+			return nil, err
+		}
+		stats = append(stats, s)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("postgres: ListServiceStats rows: %w", err)
+	}
+	return stats, nil
+}
+
+func (d *DB) serviceStatsForID(ctx context.Context, orgID, serviceID string) (catalog.ServiceStats, error) {
+	out := catalog.ServiceStats{ServiceID: serviceID}
+
+	const endpointQ = `
+		SELECT COUNT(*)
+		FROM api_endpoints e
+		JOIN api_groups g ON g.id = e.api_group_id
+		WHERE e.org_id = $1
+		  AND e.service_id = $2
+		  AND e.deleted_at IS NULL
+		  AND g.deleted_at IS NULL`
+	if err := d.db.QueryRowContext(ctx, endpointQ, orgID, serviceID).Scan(&out.EndpointCount); err != nil {
+		return out, fmt.Errorf("postgres: ListServiceStats endpoint count: %w", err)
+	}
+
+	diagramCount, err := d.countOptionalServiceRows(ctx, "service_diagrams", orgID, serviceID)
+	if err != nil {
+		return out, err
+	}
+	out.DiagramCount = diagramCount
+
+	docCount, err := d.countOptionalServiceRows(ctx, "service_docs", orgID, serviceID)
+	if err != nil {
+		return out, err
+	}
+	out.DocCount = docCount
+
+	dbTableCount, err := d.countOptionalServiceRows(ctx, "service_dbs", orgID, serviceID)
+	if err != nil {
+		return out, err
+	}
+	out.DBTableCount = dbTableCount
+
+	testCaseCount, err := d.countOptionalTestCases(ctx, orgID, serviceID)
+	if err != nil {
+		return out, err
+	}
+	out.TestCaseCount = testCaseCount
+
+	return out, nil
+}
+
+func (d *DB) countOptionalServiceRows(ctx context.Context, tableName, orgID, serviceID string) (int, error) {
+	exists, err := d.tableExists(ctx, tableName)
+	if err != nil || !exists {
+		return 0, err
+	}
+
+	var clauses []string
+	args := []any{serviceID}
+	clauses = append(clauses, "service_id = $1")
+
+	hasOrgID, err := d.columnExists(ctx, tableName, "org_id")
+	if err != nil {
+		return 0, fmt.Errorf("postgres: ListServiceStats %s org column check: %w", tableName, err)
+	}
+	if hasOrgID {
+		args = append(args, orgID)
+		clauses = append(clauses, fmt.Sprintf("org_id = $%d", len(args)))
+	}
+
+	hasDeletedAt, err := d.columnExists(ctx, tableName, "deleted_at")
+	if err != nil {
+		return 0, fmt.Errorf("postgres: ListServiceStats %s deleted column check: %w", tableName, err)
+	}
+	if hasDeletedAt {
+		clauses = append(clauses, "deleted_at IS NULL")
+	}
+
+	q := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s", tableName, strings.Join(clauses, " AND "))
+	var count int
+	if err := d.db.QueryRowContext(ctx, q, args...).Scan(&count); err != nil {
+		return 0, fmt.Errorf("postgres: ListServiceStats %s count: %w", tableName, err)
+	}
+	return count, nil
+}
+
+func (d *DB) countOptionalTestCases(ctx context.Context, orgID, serviceID string) (int, error) {
+	testCasesExists, err := d.tableExists(ctx, "test_cases")
+	if err != nil || !testCasesExists {
+		return 0, err
+	}
+
+	testCasesHasServiceID, err := d.columnExists(ctx, "test_cases", "service_id")
+	if err != nil {
+		return 0, fmt.Errorf("postgres: ListServiceStats test_cases service_id check: %w", err)
+	}
+	if testCasesHasServiceID {
+		return d.countOptionalServiceRows(ctx, "test_cases", orgID, serviceID)
+	}
+
+	testPacksExists, err := d.tableExists(ctx, "test_packs")
+	if err != nil || !testPacksExists {
+		return 0, err
+	}
+	testCasesHasPackID, err := d.columnExists(ctx, "test_cases", "test_pack_id")
+	if err != nil {
+		return 0, fmt.Errorf("postgres: ListServiceStats test_cases test_pack_id check: %w", err)
+	}
+	testPacksHasServiceID, err := d.columnExists(ctx, "test_packs", "service_id")
+	if err != nil {
+		return 0, fmt.Errorf("postgres: ListServiceStats test_packs service_id check: %w", err)
+	}
+	if !testCasesHasPackID || !testPacksHasServiceID {
+		return 0, nil
+	}
+
+	var testCasesHasDeletedAt bool
+	testCasesHasDeletedAt, err = d.columnExists(ctx, "test_cases", "deleted_at")
+	if err != nil {
+		return 0, fmt.Errorf("postgres: ListServiceStats test_cases deleted_at check: %w", err)
+	}
+	var testPacksHasDeletedAt bool
+	testPacksHasDeletedAt, err = d.columnExists(ctx, "test_packs", "deleted_at")
+	if err != nil {
+		return 0, fmt.Errorf("postgres: ListServiceStats test_packs deleted_at check: %w", err)
+	}
+
+	q := `
+		SELECT COUNT(*)
+		FROM test_cases tc
+		JOIN test_packs tp ON tp.id = tc.test_pack_id
+		WHERE tp.service_id = $1`
+	args := []any{serviceID}
+	if testPacksHasDeletedAt {
+		q += " AND tp.deleted_at IS NULL"
+	}
+	if testCasesHasDeletedAt {
+		q += " AND tc.deleted_at IS NULL"
+	}
+
+	testCasesHasOrgID, err := d.columnExists(ctx, "test_cases", "org_id")
+	if err != nil {
+		return 0, fmt.Errorf("postgres: ListServiceStats test_cases org_id check: %w", err)
+	}
+	testPacksHasOrgID, err := d.columnExists(ctx, "test_packs", "org_id")
+	if err != nil {
+		return 0, fmt.Errorf("postgres: ListServiceStats test_packs org_id check: %w", err)
+	}
+	if testCasesHasOrgID {
+		args = append(args, orgID)
+		q += fmt.Sprintf(" AND tc.org_id = $%d", len(args))
+	} else if testPacksHasOrgID {
+		args = append(args, orgID)
+		q += fmt.Sprintf(" AND tp.org_id = $%d", len(args))
+	}
+
+	var count int
+	if err := d.db.QueryRowContext(ctx, q, args...).Scan(&count); err != nil {
+		return 0, fmt.Errorf("postgres: ListServiceStats test case count: %w", err)
+	}
+	return count, nil
+}
+
+func (d *DB) tableExists(ctx context.Context, tableName string) (bool, error) {
+	var exists bool
+	err := d.db.QueryRowContext(
+		ctx,
+		`SELECT to_regclass($1) IS NOT NULL`,
+		"public."+tableName,
+	).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("postgres: tableExists %s: %w", tableName, err)
+	}
+	return exists, nil
+}
+
+func (d *DB) columnExists(ctx context.Context, tableName, columnName string) (bool, error) {
+	const q = `
+		SELECT EXISTS (
+			SELECT 1
+			FROM information_schema.columns
+			WHERE table_schema = 'public'
+			  AND table_name = $1
+			  AND column_name = $2
+		)`
+	var exists bool
+	if err := d.db.QueryRowContext(ctx, q, tableName, columnName).Scan(&exists); err != nil {
+		return false, fmt.Errorf("postgres: columnExists %s.%s: %w", tableName, columnName, err)
+	}
+	return exists, nil
 }
 
 func (d *DB) UpdateService(ctx context.Context, s catalog.Service) error {
@@ -478,6 +698,93 @@ func scanAPIEndpoint(row interface{ Scan(...any) error }) (catalog.APIEndpoint, 
 	e.RequestBody = reqBody
 	e.Responses = resps
 	return e, nil
+}
+
+// ── Service Docs ──────────────────────────────────────────────────────────────
+
+func (d *DB) CreateServiceDoc(ctx context.Context, sd catalog.ServiceDoc) error {
+	const q = `
+		INSERT INTO service_docs
+			(id, service_id, org_id, file_key, file_name, file_type, description, content_hash,
+			 created_by, updated_by, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`
+	now := time.Now().UTC()
+	if sd.CreatedAt.IsZero() {
+		sd.CreatedAt = now
+	}
+	if sd.UpdatedAt.IsZero() {
+		sd.UpdatedAt = now
+	}
+	_, err := d.db.ExecContext(ctx, q,
+		sd.ID, sd.ServiceID, sd.OrgID, sd.FileKey, sd.FileName, sd.FileType, sd.Description, sd.ContentHash,
+		sd.CreatedBy, sd.UpdatedBy, sd.CreatedAt, sd.UpdatedAt,
+	)
+	return wrapErr("CreateServiceDoc", err)
+}
+
+func (d *DB) GetServiceDoc(ctx context.Context, id string) (*catalog.ServiceDoc, error) {
+	const q = `
+		SELECT id, service_id, org_id, file_key, file_name, file_type, description, content_hash,
+		       created_by, updated_by, created_at, updated_at, deleted_at
+		FROM service_docs WHERE id = $1`
+	sd, err := scanServiceDoc(d.db.QueryRowContext(ctx, q, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("postgres: GetServiceDoc: %w", err)
+	}
+	return &sd, nil
+}
+
+func (d *DB) ListServiceDocs(ctx context.Context, serviceID string) ([]catalog.ServiceDoc, error) {
+	const q = `
+		SELECT id, service_id, org_id, file_key, file_name, file_type, description, content_hash,
+		       created_by, updated_by, created_at, updated_at, deleted_at
+		FROM service_docs
+		WHERE service_id = $1 AND deleted_at IS NULL
+		ORDER BY created_at DESC`
+	rows, err := d.db.QueryContext(ctx, q, serviceID)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: ListServiceDocs: %w", err)
+	}
+	defer rows.Close()
+	var out []catalog.ServiceDoc
+	for rows.Next() {
+		sd, scanErr := scanServiceDoc(rows)
+		if scanErr != nil {
+			return nil, fmt.Errorf("postgres: ListServiceDocs scan: %w", scanErr)
+		}
+		out = append(out, sd)
+	}
+	return out, rows.Err()
+}
+
+func (d *DB) UpdateServiceDoc(ctx context.Context, sd catalog.ServiceDoc) error {
+	const q = `
+		UPDATE service_docs
+		SET file_key=$1, file_name=$2, file_type=$3, description=$4, content_hash=$5,
+		    updated_by=$6, updated_at=$7
+		WHERE id=$8 AND deleted_at IS NULL`
+	_, err := d.db.ExecContext(ctx, q,
+		sd.FileKey, sd.FileName, sd.FileType, sd.Description, sd.ContentHash,
+		sd.UpdatedBy, time.Now().UTC(), sd.ID,
+	)
+	return wrapErr("UpdateServiceDoc", err)
+}
+
+func (d *DB) SoftDeleteServiceDoc(ctx context.Context, id string) error {
+	const q = `UPDATE service_docs SET deleted_at=$1 WHERE id=$2 AND deleted_at IS NULL`
+	_, err := d.db.ExecContext(ctx, q, time.Now().UTC(), id)
+	return wrapErr("SoftDeleteServiceDoc", err)
+}
+
+func scanServiceDoc(row interface{ Scan(...any) error }) (catalog.ServiceDoc, error) {
+	var sd catalog.ServiceDoc
+	return sd, row.Scan(
+		&sd.ID, &sd.ServiceID, &sd.OrgID, &sd.FileKey, &sd.FileName, &sd.FileType, &sd.Description, &sd.ContentHash,
+		&sd.CreatedBy, &sd.UpdatedBy, &sd.CreatedAt, &sd.UpdatedAt, &sd.DeletedAt,
+	)
 }
 
 // wrapErr wraps a postgres error with a method name prefix; nil passes through.
