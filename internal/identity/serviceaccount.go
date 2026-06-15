@@ -8,8 +8,10 @@ type ServiceAccount struct {
 	OrgID       string    `json:"orgId"`
 	Name        string    `json:"name"`
 	Description string    `json:"description,omitempty"`
-	Role        string    `json:"role"` // admin | editor | viewer
-	Disabled    bool      `json:"disabled"`
+	// Scopes are the named permissions granted to this account's tokens,
+	// e.g. "diagrams:create". See authz.AllScopes for the full catalog.
+	Scopes   []string `json:"scopes"`
+	Disabled bool     `json:"disabled"`
 	CreatedBy   string    `json:"createdBy,omitempty"`
 	CreatedAt   time.Time `json:"createdAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`

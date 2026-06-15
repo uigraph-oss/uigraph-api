@@ -98,6 +98,7 @@ func (m *Middleware) verifyAPIKey(r *http.Request, plaintext string) (identity.P
 		UserID:           sa.ID,
 		OrgID:            sa.OrgID,
 		ServiceAccountID: sa.ID,
+		Scopes:           sa.Scopes,
 	}, nil
 }
 

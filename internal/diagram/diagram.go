@@ -61,7 +61,6 @@ type Image struct {
 }
 
 type Store interface {
-type Store interface {
 	CreateDiagram(ctx context.Context, d Diagram) error
 	GetDiagram(ctx context.Context, id string) (*Diagram, error)
 	ListDiagrams(ctx context.Context, orgID string, folderID, teamID *string) ([]Diagram, error)
