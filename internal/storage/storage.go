@@ -5,6 +5,8 @@ package storage
 import (
 	"context"
 	"io"
+
+	"github.com/google/uuid"
 )
 
 // Client is the object storage interface used by handlers.
@@ -21,6 +23,8 @@ type Client interface {
 	Delete(ctx context.Context, key string) error
 	// PresignURL returns a short-lived (15 min) GET URL for key.
 	PresignURL(ctx context.Context, key string) (string, error)
+	// PresignPutURL returns a short-lived (15 min) PUT URL for uploading to key.
+	PresignPutURL(ctx context.Context, key string) (string, error)
 }
 
 // DiagramContentKey returns the object key for a diagram's current content.
@@ -43,12 +47,23 @@ func APIGroupVersionSpecKey(orgID, serviceID, apiGroupID, versionID string) stri
 	return orgID + "/services/" + serviceID + "/api-groups/" + apiGroupID + "/versions/" + versionID + "/spec"
 }
 
-// FrameScreenshotKey returns the object key for a frame's screenshot.
-func FrameScreenshotKey(orgID, mapID, frameID string) string {
-	return orgID + "/maps/" + mapID + "/frames/" + frameID + "/screenshot"
-}
-
 // FileKey returns the object key for a user-uploaded file.
 func FileKey(orgID, fileID, filename string) string {
 	return orgID + "/files/" + fileID + "/" + filename
+}
+
+func AssetKey(assetID string) string {
+	return "assets/" + assetID
+}
+
+func NewFileAssetID() string {
+	return "file_" + uuid.NewString()
+}
+
+func DiagramThumbnailAssetID(diagramID string) string {
+	return "diagram_" + diagramID
+}
+
+func FrameScreenshotAssetID(frameID string) string {
+	return "frame_" + frameID
 }

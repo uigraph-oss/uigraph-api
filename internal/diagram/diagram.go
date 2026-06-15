@@ -17,14 +17,15 @@ import (
 // Diagram is the metadata record stored in Postgres.
 // The actual ReactFlow JSON content lives in object storage.
 type Diagram struct {
-	ID                 string     `json:"id"`
-	OrgID              string     `json:"orgId"`
-	FolderID           *string    `json:"folderId,omitempty"`
-	TeamID             *string    `json:"teamId,omitempty"`
-	Name               string     `json:"name"`
-	ContentKey         string     `json:"contentKey"`
-	ContentHash        string     `json:"contentHash"`
-	PreviewImageFileID *string    `json:"previewImageFileId,omitempty"`
+	ID          string  `json:"id"`
+	OrgID       string  `json:"orgId"`
+	FolderID    *string `json:"folderId,omitempty"`
+	TeamID      *string `json:"teamId,omitempty"`
+	Name        string  `json:"name"`
+	ContentKey  string  `json:"contentKey"`
+	ContentHash string `json:"contentHash"`
+	PreviewAssetID     *string    `json:"previewAssetId,omitempty"`
+	PreviewContentHash *string    `json:"previewContentHash,omitempty"`
 	Source             *string    `json:"source,omitempty"`
 	CreatedBy          string     `json:"createdBy"`
 	UpdatedBy          *string    `json:"updatedBy,omitempty"`
@@ -36,19 +37,30 @@ type Diagram struct {
 
 // Version is an immutable snapshot of a diagram's content at a point in time.
 type Version struct {
-	ID            string     `json:"id"`
-	DiagramID     string     `json:"diagramId"`
-	VersionNumber int        `json:"versionNumber"`
-	Label         *string    `json:"label,omitempty"`
-	ContentKey    string     `json:"contentKey"`
-	ContentHash   string     `json:"contentHash"`
-	IsAutoVersion bool       `json:"isAutoVersion"`
-	Source        *string    `json:"source,omitempty"`
-	CreatedBy     string     `json:"createdBy"`
-	CreatedAt     time.Time  `json:"createdAt"`
+	ID            string    `json:"id"`
+	DiagramID     string    `json:"diagramId"`
+	VersionNumber int       `json:"versionNumber"`
+	Label         *string   `json:"label,omitempty"`
+	ContentKey    string    `json:"contentKey"`
+	ContentHash   string    `json:"contentHash"`
+	IsAutoVersion bool      `json:"isAutoVersion"`
+	Source        *string   `json:"source,omitempty"`
+	CreatedBy     string    `json:"createdBy"`
+	CreatedAt     time.Time `json:"createdAt"`
 }
 
-// Store is the persistence interface for diagrams.
+type Image struct {
+	ID        string    `json:"diagramImageId"`
+	DiagramID string    `json:"diagramId"`
+	OrgID     string    `json:"orgId"`
+	AssetID   string    `json:"assetId"`
+	FileName  *string   `json:"fileName,omitempty"`
+	Order     int       `json:"order"`
+	CreatedBy string    `json:"createdBy"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+type Store interface {
 type Store interface {
 	CreateDiagram(ctx context.Context, d Diagram) error
 	GetDiagram(ctx context.Context, id string) (*Diagram, error)
@@ -61,4 +73,7 @@ type Store interface {
 	ListDiagramVersions(ctx context.Context, diagramID string) ([]Version, error)
 	// LatestVersionNumber returns the highest version_number for diagramID, or 0 if none.
 	LatestVersionNumber(ctx context.Context, diagramID string) (int, error)
+
+	CreateDiagramImage(ctx context.Context, img Image) error
+	ListDiagramImages(ctx context.Context, diagramID string) ([]Image, error)
 }

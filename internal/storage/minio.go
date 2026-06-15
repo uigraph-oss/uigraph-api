@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/url"
 	"strings"
@@ -12,8 +13,9 @@ import (
 )
 
 type minioClient struct {
-	mc     *minio.Client
-	bucket string
+	mc      *minio.Client
+	bucket  string
+	backend string
 }
 
 // Config is the minimal configuration needed to create a storage client.
@@ -47,7 +49,7 @@ func New(cfg Config) (Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &minioClient{mc: mc, bucket: cfg.Bucket}, nil
+	return &minioClient{mc: mc, bucket: cfg.Bucket, backend: cfg.Backend}, nil
 }
 
 func (c *minioClient) EnsureBucket(ctx context.Context) error {
@@ -55,10 +57,32 @@ func (c *minioClient) EnsureBucket(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if exists {
-		return nil
+	if !exists {
+		if err := c.mc.MakeBucket(ctx, c.bucket, minio.MakeBucketOptions{}); err != nil {
+			return err
+		}
 	}
-	return c.mc.MakeBucket(ctx, c.bucket, minio.MakeBucketOptions{})
+
+	if c.backend == "minio" {
+		if err := c.mc.SetBucketPolicy(ctx, c.bucket, assetsPublicPolicy(c.bucket)); err != nil {
+			return fmt.Errorf("storage: set assets public policy: %w", err)
+		}
+	}
+	return nil
+}
+
+func assetsPublicPolicy(bucket string) string {
+	return fmt.Sprintf(`{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {"AWS": ["*"]},
+      "Action": ["s3:GetObject"],
+      "Resource": ["arn:aws:s3:::%s/assets/*"]
+    }
+  ]
+}`, bucket)
 }
 
 func (c *minioClient) Upload(ctx context.Context, key, contentType string, r io.Reader, size int64) error {
@@ -78,6 +102,14 @@ func (c *minioClient) Delete(ctx context.Context, key string) error {
 
 func (c *minioClient) PresignURL(ctx context.Context, key string) (string, error) {
 	u, err := c.mc.PresignedGetObject(ctx, c.bucket, key, 15*time.Minute, url.Values{})
+	if err != nil {
+		return "", err
+	}
+	return u.String(), nil
+}
+
+func (c *minioClient) PresignPutURL(ctx context.Context, key string) (string, error) {
+	u, err := c.mc.PresignedPutObject(ctx, c.bucket, key, 15*time.Minute)
 	if err != nil {
 		return "", err
 	}

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,7 +24,6 @@ import (
 
 const diagramCacheTTL = time.Hour
 
-// DiagramHandler serves /api/v1/orgs/{orgID}/diagrams.
 type DiagramHandler struct {
 	store   store.Store
 	storage storage.Client
@@ -34,9 +34,6 @@ func NewDiagramHandler(s store.Store, st storage.Client, c cache.Client) *Diagra
 	return &DiagramHandler{store: s, storage: st, cache: c}
 }
 
-// ── Diagram CRUD ──────────────────────────────────────────────────────────────
-
-// List handles GET /api/v1/orgs/{orgID}/diagrams
 func (h *DiagramHandler) List(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	q := r.URL.Query()
@@ -55,7 +52,6 @@ func (h *DiagramHandler) List(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"diagrams": diagrams})
 }
 
-// Create handles POST /api/v1/orgs/{orgID}/diagrams
 func (h *DiagramHandler) Create(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	p, ok := authmw.PrincipalFromCtx(r.Context())
@@ -133,8 +129,6 @@ func (h *DiagramHandler) Create(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, dg)
 }
 
-// Get handles GET /api/v1/orgs/{orgID}/diagrams/{diagramID}
-// Returns diagram metadata without content.
 func (h *DiagramHandler) Get(w http.ResponseWriter, r *http.Request) {
 	dg, err := h.store.GetDiagram(r.Context(), r.PathValue("diagramID"))
 	if err != nil {
@@ -148,18 +142,14 @@ func (h *DiagramHandler) Get(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, dg)
 }
 
-// GetContent handles GET /api/v1/orgs/{orgID}/diagrams/{diagramID}/content
-// Returns the ReactFlow JSON. Tries Redis cache first; falls back to storage.
-func (h *DiagramHandler) GetContent(w http.ResponseWriter, r *http.Request) {
+func (h *DiagramHandler) UpdateThumbnail(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("diagramID")
-
-	// 1. Cache hit.
-	if content, ok := h.cacheGet(r.Context(), id); ok {
-		writeJSON(w, http.StatusOK, map[string]any{"diagramId": id, "content": content})
+	p, ok := authmw.PrincipalFromCtx(r.Context())
+	if !ok {
+		writeErr(w, http.StatusUnauthorized, "unauthenticated")
 		return
 	}
 
-	// 2. Fetch metadata for the storage key.
 	dg, err := h.store.GetDiagram(r.Context(), id)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "internal error")
@@ -170,23 +160,76 @@ func (h *DiagramHandler) GetContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3. Download from storage.
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "missing file")
+		return
+	}
+	defer file.Close()
+
+	contentType := header.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	raw, err := io.ReadAll(file)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "failed to read thumbnail")
+		return
+	}
+
+	assetID := storage.DiagramThumbnailAssetID(id)
+	if err := h.storage.Upload(r.Context(), storage.AssetKey(assetID), contentType, bytes.NewReader(raw), int64(len(raw))); err != nil {
+		writeErr(w, http.StatusInternalServerError, "failed to store thumbnail")
+		return
+	}
+	hash := sha256Hex(string(raw))
+
+	dg.PreviewAssetID = &assetID
+	dg.PreviewContentHash = &hash
+	dg.UpdatedBy = &p.UserID
+	if err := h.store.UpdateDiagram(r.Context(), *dg); err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"assetId":            assetID,
+		"previewContentHash": hash,
+	})
+}
+
+func (h *DiagramHandler) GetContent(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("diagramID")
+
+	if content, ok := h.cacheGet(r.Context(), id); ok {
+		writeJSON(w, http.StatusOK, map[string]any{"diagramId": id, "content": content})
+		return
+	}
+
+	dg, err := h.store.GetDiagram(r.Context(), id)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if dg == nil || dg.DeletedAt != nil {
+		writeErr(w, http.StatusNotFound, "not found")
+		return
+	}
+
 	content, err := h.downloadContent(r.Context(), dg.ContentKey)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "failed to fetch content")
 		return
 	}
 
-	// 4. Populate cache.
 	h.cacheSet(r.Context(), id, content)
 
 	writeJSON(w, http.StatusOK, map[string]any{"diagramId": id, "content": content})
 }
 
-// Update handles PUT /api/v1/orgs/{orgID}/diagrams/{diagramID}
 func (h *DiagramHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("diagramID")
-	orgID := r.PathValue("orgID")
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {
 		writeErr(w, http.StatusUnauthorized, "unauthenticated")
@@ -232,30 +275,12 @@ func (h *DiagramHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if body.Content != nil {
 		newHash := sha256Hex(*body.Content)
 		if newHash != dg.ContentHash {
-			// Content changed — upload and create auto-version.
 			if err := h.uploadContent(r.Context(), dg.ContentKey, *body.Content); err != nil {
 				writeErr(w, http.StatusInternalServerError, "failed to store content")
 				return
 			}
 			dg.ContentHash = newHash
 			h.cacheDel(r.Context(), id)
-
-			latestVer, _ := h.store.LatestVersionNumber(r.Context(), id)
-			versionID := uuid.NewString()
-			vKey := storage.DiagramVersionKey(orgID, id, versionID)
-			if err := h.uploadContent(r.Context(), vKey, *body.Content); err == nil {
-				_ = h.store.CreateDiagramVersion(r.Context(), diagram.Version{
-					ID:            versionID,
-					DiagramID:     id,
-					VersionNumber: latestVer + 1,
-					ContentKey:    vKey,
-					ContentHash:   newHash,
-					IsAutoVersion: true,
-					Source:        body.Source,
-					CreatedBy:     p.UserID,
-					CreatedAt:     time.Now().UTC(),
-				})
-			}
 		}
 	}
 
@@ -266,7 +291,6 @@ func (h *DiagramHandler) Update(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, dg)
 }
 
-// Delete handles DELETE /api/v1/orgs/{orgID}/diagrams/{diagramID}
 func (h *DiagramHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("diagramID")
 	p, ok := authmw.PrincipalFromCtx(r.Context())
@@ -282,9 +306,6 @@ func (h *DiagramHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ── Versions ──────────────────────────────────────────────────────────────────
-
-// ListVersions handles GET /api/v1/orgs/{orgID}/diagrams/{diagramID}/versions
 func (h *DiagramHandler) ListVersions(w http.ResponseWriter, r *http.Request) {
 	versions, err := h.store.ListDiagramVersions(r.Context(), r.PathValue("diagramID"))
 	if err != nil {
@@ -294,8 +315,6 @@ func (h *DiagramHandler) ListVersions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"versions": versions})
 }
 
-// CreateVersion handles POST /api/v1/orgs/{orgID}/diagrams/{diagramID}/versions
-// Creates an explicit (non-auto) named snapshot of the current content.
 func (h *DiagramHandler) CreateVersion(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("diagramID")
 	orgID := r.PathValue("orgID")
@@ -316,7 +335,6 @@ func (h *DiagramHandler) CreateVersion(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 
-	// Download current content to write as an immutable version object.
 	content, err := h.getContent(r.Context(), id, dg.ContentKey)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "failed to read current content")
@@ -350,7 +368,6 @@ func (h *DiagramHandler) CreateVersion(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, v)
 }
 
-// GetVersionContent handles GET /api/v1/orgs/{orgID}/diagrams/{diagramID}/versions/{versionID}/content
 func (h *DiagramHandler) GetVersionContent(w http.ResponseWriter, r *http.Request) {
 	v, err := h.store.GetDiagramVersion(r.Context(), r.PathValue("versionID"))
 	if err != nil {
@@ -369,8 +386,6 @@ func (h *DiagramHandler) GetVersionContent(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, map[string]any{"versionId": v.ID, "content": content})
 }
 
-// RestoreVersion handles POST /api/v1/orgs/{orgID}/diagrams/{diagramID}/versions/{versionID}/restore
-// Promotes a version's content to be the current diagram content.
 func (h *DiagramHandler) RestoreVersion(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("diagramID")
 	orgID := r.PathValue("orgID")
@@ -434,6 +449,88 @@ func (h *DiagramHandler) RestoreVersion(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, dg)
 }
 
+func (h *DiagramHandler) ListImages(w http.ResponseWriter, r *http.Request) {
+	images, err := h.store.ListDiagramImages(r.Context(), r.PathValue("diagramID"))
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"images": images})
+}
+
+func (h *DiagramHandler) CreateImage(w http.ResponseWriter, r *http.Request) {
+	orgID := r.PathValue("orgID")
+	id := r.PathValue("diagramID")
+	p, ok := authmw.PrincipalFromCtx(r.Context())
+	if !ok {
+		writeErr(w, http.StatusUnauthorized, "unauthenticated")
+		return
+	}
+
+	dg, err := h.store.GetDiagram(r.Context(), id)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if dg == nil || dg.DeletedAt != nil {
+		writeErr(w, http.StatusNotFound, "not found")
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "missing file")
+		return
+	}
+	defer file.Close()
+
+	contentType := header.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	order := 0
+	if v := r.FormValue("order"); v != "" {
+		if n, convErr := strconv.Atoi(v); convErr == nil {
+			order = n
+		}
+	}
+
+	var fileName *string
+	if v := r.FormValue("fileName"); v != "" {
+		fileName = &v
+	} else if header.Filename != "" {
+		name := header.Filename
+		fileName = &name
+	}
+
+	assetID := storage.NewFileAssetID()
+	if err := h.storage.Upload(r.Context(), storage.AssetKey(assetID), contentType, file, header.Size); err != nil {
+		writeErr(w, http.StatusInternalServerError, "failed to store image")
+		return
+	}
+
+	img := diagram.Image{
+		ID:        uuid.NewString(),
+		DiagramID: id,
+		OrgID:     orgID,
+		AssetID:   assetID,
+		FileName:  fileName,
+		Order:     order,
+		CreatedBy: p.UserID,
+		CreatedAt: time.Now().UTC(),
+	}
+	if err := h.store.CreateDiagramImage(r.Context(), img); err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"diagramImageId": img.ID,
+		"assetId":        assetID,
+	})
+}
+
 // ── Sync (CLI / CI-CD) ────────────────────────────────────────────────────────
 
 // Sync handles POST /api/v1/orgs/{orgID}/diagrams/sync
@@ -466,7 +563,6 @@ func (h *DiagramHandler) Sync(w http.ResponseWriter, r *http.Request) {
 
 	newHash := sha256Hex(body.Content)
 
-	// Update path — diagramId provided.
 	if body.DiagramID != nil {
 		dg, err := h.store.GetDiagram(r.Context(), *body.DiagramID)
 		if err != nil {
@@ -479,7 +575,6 @@ func (h *DiagramHandler) Sync(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if newHash == dg.ContentHash {
-			// Unchanged — skip write.
 			writeJSON(w, http.StatusOK, map[string]any{
 				"diagramId":      dg.ID,
 				"versionCreated": false,
@@ -593,7 +688,6 @@ func (h *DiagramHandler) downloadContent(ctx context.Context, key string) (strin
 	return buf.String(), nil
 }
 
-// getContent checks cache first, then falls back to storage.
 func (h *DiagramHandler) getContent(ctx context.Context, id, key string) (string, error) {
 	if content, ok := h.cacheGet(ctx, id); ok {
 		return content, nil

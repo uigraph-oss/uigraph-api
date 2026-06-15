@@ -193,8 +193,8 @@ func TestFrames_WithScreenshot(t *testing.T) {
 		"screenshot": screenshot,
 	})
 	id := str(created, "id")
-	if str(created, "screenshotKey") == "" {
-		t.Fatal("expected screenshotKey in response when screenshot provided")
+	if str(created, "screenshotAssetId") == "" {
+		t.Fatal("expected screenshotAssetId in response when screenshot provided")
 	}
 	if str(created, "screenshotContentHash") == "" {
 		t.Fatal("expected screenshotContentHash in response")

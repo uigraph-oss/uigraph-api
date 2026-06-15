@@ -1,8 +1,10 @@
 package content
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -85,13 +87,13 @@ func (h *FrameHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if body.Screenshot != "" && h.storage != nil {
-		key := storage.FrameScreenshotKey(orgID, mapID, id)
-		if err := h.uploadScreenshot(r.Context(), key, body.Screenshot); err != nil {
+		assetID := storage.FrameScreenshotAssetID(id)
+		if err := h.uploadScreenshot(r.Context(), storage.AssetKey(assetID), body.Screenshot); err != nil {
 			writeErr(w, http.StatusInternalServerError, "failed to store screenshot")
 			return
 		}
 		hash := screenshotHash(body.Screenshot)
-		frame.ScreenshotKey = &key
+		frame.ScreenshotAssetID = &assetID
 		frame.ScreenshotContentHash = &hash
 	}
 
@@ -118,8 +120,6 @@ func (h *FrameHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 // Update handles PUT /api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}
 func (h *FrameHandler) Update(w http.ResponseWriter, r *http.Request) {
-	orgID := r.PathValue("orgID")
-	mapID := r.PathValue("mapID")
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {
 		writeErr(w, http.StatusUnauthorized, "unauthenticated")
@@ -169,12 +169,12 @@ func (h *FrameHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if body.Screenshot != nil && h.storage != nil {
 		newHash := screenshotHash(*body.Screenshot)
 		if f.ScreenshotContentHash == nil || newHash != *f.ScreenshotContentHash {
-			key := storage.FrameScreenshotKey(orgID, mapID, f.ID)
-			if err := h.uploadScreenshot(r.Context(), key, *body.Screenshot); err != nil {
+			assetID := storage.FrameScreenshotAssetID(f.ID)
+			if err := h.uploadScreenshot(r.Context(), storage.AssetKey(assetID), *body.Screenshot); err != nil {
 				writeErr(w, http.StatusInternalServerError, "failed to store screenshot")
 				return
 			}
-			f.ScreenshotKey = &key
+			f.ScreenshotAssetID = &assetID
 			f.ScreenshotContentHash = &newHash
 		}
 	}
@@ -200,9 +200,6 @@ func (h *FrameHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// Sync handles POST /api/v1/orgs/{orgID}/maps/{mapID}/frames/sync
-// CLI upsert: creates or updates a frame, skipping the screenshot upload when
-// the content hash is unchanged.
 func (h *FrameHandler) Sync(w http.ResponseWriter, r *http.Request) {
 	mapID := r.PathValue("mapID")
 	orgID := r.PathValue("orgID")
@@ -253,12 +250,12 @@ func (h *FrameHandler) Sync(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if body.Screenshot != "" && h.storage != nil {
-			key := storage.FrameScreenshotKey(orgID, mapID, f.ID)
-			if err := h.uploadScreenshot(r.Context(), key, body.Screenshot); err != nil {
+			assetID := storage.FrameScreenshotAssetID(f.ID)
+			if err := h.uploadScreenshot(r.Context(), storage.AssetKey(assetID), body.Screenshot); err != nil {
 				writeErr(w, http.StatusInternalServerError, "failed to store screenshot")
 				return
 			}
-			f.ScreenshotKey = &key
+			f.ScreenshotAssetID = &assetID
 			f.ScreenshotContentHash = &newHash
 		}
 		f.Name = body.Name
@@ -295,12 +292,12 @@ func (h *FrameHandler) Sync(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if body.Screenshot != "" && h.storage != nil {
-		key := storage.FrameScreenshotKey(orgID, mapID, id)
-		if err := h.uploadScreenshot(r.Context(), key, body.Screenshot); err != nil {
+		assetID := storage.FrameScreenshotAssetID(id)
+		if err := h.uploadScreenshot(r.Context(), storage.AssetKey(assetID), body.Screenshot); err != nil {
 			writeErr(w, http.StatusInternalServerError, "failed to store screenshot")
 			return
 		}
-		frame.ScreenshotKey = &key
+		frame.ScreenshotAssetID = &assetID
 		frame.ScreenshotContentHash = &newHash
 	}
 
@@ -526,11 +523,35 @@ func (h *FrameHandler) UpsertCanvas(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, c)
 }
 
-// ── internal helpers ──────────────────────────────────────────────────────────
-
 func (h *FrameHandler) uploadScreenshot(ctx context.Context, key, content string) error {
+	if contentType, raw, ok := decodeDataURL(content); ok {
+		return h.storage.Upload(ctx, key, contentType, bytes.NewReader(raw), int64(len(raw)))
+	}
 	r := strings.NewReader(content)
 	return h.storage.Upload(ctx, key, "image/png", r, int64(r.Len()))
+}
+
+	func decodeDataURL(s string) (contentType string, data []byte, ok bool) {
+	if !strings.HasPrefix(s, "data:") {
+		return "", nil, false
+	}
+	comma := strings.IndexByte(s, ',')
+	if comma < 0 {
+		return "", nil, false
+	}
+	meta := s[len("data:"):comma]
+	if !strings.Contains(meta, ";base64") {
+		return "", nil, false
+	}
+	contentType = strings.TrimSuffix(meta, ";base64")
+	if contentType == "" {
+		contentType = "image/png"
+	}
+	raw, err := base64.StdEncoding.DecodeString(s[comma+1:])
+	if err != nil {
+		return "", nil, false
+	}
+	return contentType, raw, true
 }
 
 func screenshotHash(s string) string {
