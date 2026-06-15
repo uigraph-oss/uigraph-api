@@ -67,3 +67,8 @@ func DiagramThumbnailAssetID(diagramID string) string {
 func FrameScreenshotAssetID(frameID string) string {
 	return "frame_" + frameID
 }
+
+// ComponentIconKey returns the object key for a native component icon SVG.
+func ComponentIconKey(slug string) string {
+	return "system/components/icons/" + slug + ".svg"
+}

@@ -1,0 +1,163 @@
+{
+  "flowDiagramComponents":[
+  {
+    "name": "Service",
+    "type": "modal",
+    "description": "Represents a internal or third-party system this element talks to.",
+    "category": "Integrations",
+    "tags": ["saas","integration","internal","third-party"],
+    "previewImageJpg": "https://placehold.co/64x64",
+    "isActive": true,
+    "order": 1,
+   "flowDiagramComponentFields": [
+      { "label": "Name", "type": "Text Input", "required": true, "flowDiagramComponentFieldId": "component_field_es_0001", "order": 1 },
+      { "label": "Service Type", "type": "Dropdown", "options": ["SaaS","Internal Service","Third-party API","Webhook"], "flowDiagramComponentFieldId": "component_field_es_0002", "order": 2 },
+      { "label": "Base URL", "type": "URL Input", "flowDiagramComponentFieldId": "component_field_es_0003", "order": 3 },
+      { "label": "Authentication", "type": "Dropdown", "options": ["None","Basic","Bearer","API Key","OAuth 2.0","HMAC"], "flowDiagramComponentFieldId": "component_field_es_0004", "order": 4 },
+      { "label": "API Version", "type": "Text Input", "flowDiagramComponentFieldId": "component_field_es_0005", "order": 5 },
+      { "label": "Timeout (ms)", "type": "Number Input", "flowDiagramComponentFieldId": "component_field_es_0006", "order": 6 },
+      { "label": "Retry Attempts", "type": "Number Input", "flowDiagramComponentFieldId": "component_field_es_0007", "order": 7 },
+      { "label": "Rate Limit (e.g., 100 req/min)", "type": "Text Input", "flowDiagramComponentFieldId": "component_field_es_0008", "order": 8 },
+      { "label": "SLA Tier", "type": "Dropdown", "options": ["Gold","Silver","Bronze","None"], "flowDiagramComponentFieldId": "component_field_es_0009", "order": 9 },
+      { "label": "Docs URL", "type": "URL Input", "flowDiagramComponentFieldId": "component_field_es_0010", "order": 10 },
+      { "label": "Owner Team", "type": "Text Input", "flowDiagramComponentFieldId": "component_field_es_0011", "order": 11 },
+      { "label": "Notes", "type": "Rich Text Editor", "flowDiagramComponentFieldId": "component_field_es_0012", "order": 12 }
+    ]
+  },
+  {
+    "name": "Database",
+    "type": "modal",
+    "description": "Connection details and data-governance context for a datastore used by this flow.",
+    "category": "Data Stores",
+    "tags": ["database", "datastore", "sql", "nosql"],
+    "previewImageJpg": "https://placehold.co/64x64",
+    "isActive": true,
+    "order": 2,
+   "flowDiagramComponentFields": [
+      { "label": "Name", "type": "Text Input", "required": true, "flowDiagramComponentFieldId": "component_field_db_0001", "order": 1 },
+      { "label": "Engine", "type": "Dropdown", "options": ["PostgreSQL","MySQL","MariaDB","Aurora","SQL Server","SQLite","MongoDB","DynamoDB","Redis","OpenSearch/Elasticsearch","Snowflake","BigQuery","Other"], "flowDiagramComponentFieldId": "component_field_db_0002", "order": 2 },
+      { "label": "Authentication", "type": "Dropdown", "options": ["None","Username/Password","IAM Role","API Key","OAuth","TLS Cert"], "flowDiagramComponentFieldId": "component_field_db_0003", "order": 3 },
+      { "label": "Host", "type": "Text Input", "flowDiagramComponentFieldId": "component_field_db_0004", "order": 4 },
+      { "label": "Port", "type": "Number Input", "flowDiagramComponentFieldId": "component_field_db_0005", "order": 5 },
+      { "label": "Database", "type": "Text Input", "flowDiagramComponentFieldId": "component_field_db_0006", "order": 6 },
+      { "label": "Username", "type": "Text Input", "flowDiagramComponentFieldId": "component_field_db_0007", "order": 7 },
+      { "label": "Secret Ref", "type": "Text Input", "flowDiagramComponentFieldId": "component_field_db_0008", "order": 8 },
+      { "label": "Table", "type": "Text Input", "flowDiagramComponentFieldId": "component_field_db_0009", "order": 9 },
+      { "label": "Schema", "type": "Text Input", "flowDiagramComponentFieldId": "component_field_db_0010", "order": 10 },
+      { "label": "Sample Query", "type": "Code Editor", "flowDiagramComponentFieldId": "component_field_db_0011", "order": 11 },
+      { "label": "Password", "type": "Text Input", "flowDiagramComponentFieldId": "component_field_db_0012", "order": 12 },
+      { "label": "Notes", "type": "Rich Text Editor", "flowDiagramComponentFieldId": "component_field_db_0013", "order": 13 }
+    ]
+  },
+  {
+    "name": "Message Queue",
+    "type": "modal",
+    "description": "Defines a queue/topic/stream used for async communication and its delivery semantics.",
+    "category": "Messaging & Streaming",
+    "tags": ["queue","topic","stream","events"],
+    "previewImageJpg": "https://placehold.co/64x64",
+    "isActive": true,
+    "order": 3,
+   "flowDiagramComponentFields": [
+      { "label": "Name", "type": "Text Input", "required": true, "flowDiagramComponentFieldId": "component_field_mq_0001", "order": 1 },
+      { "label": "Provider", "type": "Dropdown", "options": ["AWS SQS","AWS SNS","Amazon Kinesis","Apache Kafka","RabbitMQ","Google Pub/Sub","EventBridge","Redis Streams","Other"], "flowDiagramComponentFieldId": "component_field_mq_0002", "order": 2 },
+      { "label": "Type", "type": "Dropdown", "options": ["Queue","Topic","Stream"], "flowDiagramComponentFieldId": "component_field_mq_0003", "order": 3 },
+      { "label": "Resource Name / ARN", "type": "Text Input", "flowDiagramComponentFieldId": "component_field_mq_0004", "order": 4 },
+      { "label": "Topic / Queue Name", "type": "Text Input", "flowDiagramComponentFieldId": "component_field_mq_0005", "order": 5 },
+      { "label": "Consumer Groups / Subscriptions", "type": "Tag Input", "flowDiagramComponentFieldId": "component_field_mq_0006", "order": 6 },
+      { "label": "Message Schema (JSON Schema)", "type": "Code Editor", "flowDiagramComponentFieldId": "component_field_mq_0007", "order": 7 },
+      { "label": "Example Message", "type": "Code Editor", "flowDiagramComponentFieldId": "component_field_mq_0008", "order": 8 },
+      { "label": "Dead-Letter Queue", "type": "Text Input", "flowDiagramComponentFieldId": "component_field_mq_0009", "order": 9 },
+      { "label": "Retention (hours)", "type": "Number Input", "flowDiagramComponentFieldId": "component_field_mq_0010", "order": 10 },
+      { "label": "Max Retries", "type": "Number Input", "flowDiagramComponentFieldId": "component_field_mq_0011", "order": 11 },
+      { "label": "Ordering", "type": "Dropdown", "options": ["Best Effort","Ordered","FIFO"], "flowDiagramComponentFieldId": "component_field_mq_0012", "order": 12 },
+      { "label": "Visibility Timeout (seconds)", "type": "Number Input", "flowDiagramComponentFieldId": "component_field_mq_0013", "order": 13 },
+      { "label": "Emitted By / Triggers", "type": "Tag Input", "flowDiagramComponentFieldId": "component_field_mq_0014", "order": 14 },
+      { "label": "Notes", "type": "Rich Text Editor", "flowDiagramComponentFieldId": "component_field_mq_0015", "order": 15 }
+    ]
+  },
+  {
+    "name": "Function / Lambda",
+    "type": "modal",
+    "description": "A serverless function or micro-compute unit that handles an event or request.",
+    "category": "Compute",
+    "tags": ["lambda","function","serverless"],
+    "previewImageJpg": "https://placehold.co/64x64",
+    "isActive": true,
+    "order": 4,
+   "flowDiagramComponentFields": [
+      { "label": "Name", "type": "Text Input", "required": true, "flowDiagramComponentFieldId": "component_field_fn_0001", "order": 1 },
+      { "label": "Cloud Provider", "type": "Dropdown", "options": ["AWS Lambda","GCP Cloud Functions","Azure Functions","Other"], "flowDiagramComponentFieldId": "component_field_fn_0002", "order": 2 },
+      { "label": "Runtime", "type": "Dropdown", "options": ["Node.js","Python","Go","Java",".NET","Other"], "flowDiagramComponentFieldId": "component_field_fn_0003", "order": 3 },
+      { "label": "Handler", "type": "Text Input", "flowDiagramComponentFieldId": "component_field_fn_0004", "order": 4 },
+      { "label": "Memory (MB)", "type": "Number Input", "flowDiagramComponentFieldId": "component_field_fn_0005", "order": 5 },
+      { "label": "Timeout (seconds)", "type": "Number Input", "flowDiagramComponentFieldId": "component_field_fn_0006", "order": 6 },
+      { "label": "Event Source", "type": "Dropdown", "options": ["HTTP / API Gateway","SQS","SNS","EventBridge / Cron","S3","DynamoDB Streams","Kafka","Webhook","Other"], "flowDiagramComponentFieldId": "component_field_fn_0007", "order": 7 },
+      { "label": "Additional Triggers", "type": "Tag Input", "flowDiagramComponentFieldId": "component_field_fn_0008", "order": 8 },
+      { "label": "Environment Variables", "type": "Key-Value List", "flowDiagramComponentFieldId": "component_field_fn_0009", "order": 9 },
+      { "label": "Artifact URL", "type": "URL Input", "flowDiagramComponentFieldId": "component_field_fn_0010", "order": 10 },
+      { "label": "Version / Alias", "type": "Text Input", "flowDiagramComponentFieldId": "component_field_fn_0011", "order": 11 },
+      { "label": "IAM Role", "type": "Text Input", "flowDiagramComponentFieldId": "component_field_fn_0012", "order": 12 },
+      { "label": "Notes", "type": "Rich Text Editor", "flowDiagramComponentFieldId": "component_field_fn_0013", "order": 13 }
+    ]
+  },
+  {
+    "name": "Job / Scheduler",
+    "type": "modal",
+    "description": "A recurring or delayed task and its schedule/target.",
+    "category": "Scheduling",
+    "tags": ["cron","schedule","eventbridge","automation"],
+    "previewImageJpg": "https://placehold.co/64x64",
+    "isActive": true,
+    "order": 5,
+   "flowDiagramComponentFields": [
+      { "label": "Name", "type": "Text Input", "required": true, "flowDiagramComponentFieldId": "component_field_job_0001", "order": 1 },
+      { "label": "Platform", "type": "Dropdown", "options": ["Cron","AWS EventBridge Scheduler","GCP Cloud Scheduler","Azure Logic Apps","Airflow","Dagster","Kubernetes CronJob","GitHub Actions","Other"], "flowDiagramComponentFieldId": "component_field_job_0002", "order": 2 },
+      { "label": "Schedule (CRON or rate)", "type": "Text Input", "flowDiagramComponentFieldId": "component_field_job_0003", "order": 3 },
+      { "label": "Timezone", "type": "Text Input", "flowDiagramComponentFieldId": "component_field_job_0004", "order": 4 },
+      { "label": "Target Type", "type": "Dropdown", "options": ["HTTP","Function/Lambda","Queue Message","Script/Container"], "flowDiagramComponentFieldId": "component_field_job_0005", "order": 5 },
+      { "label": "Target URL / ARN", "type": "Text Input", "flowDiagramComponentFieldId": "component_field_job_0006", "order": 6 },
+      { "label": "Retry Attempts", "type": "Number Input", "flowDiagramComponentFieldId": "component_field_job_0007", "order": 7 },
+      { "label": "Owner Team", "type": "Text Input", "flowDiagramComponentFieldId": "component_field_job_0008", "order": 8 },
+      { "label": "Success Criteria", "type": "Rich Text Editor", "flowDiagramComponentFieldId": "component_field_job_0009", "order": 9 },
+      { "label": "Last Run", "type": "Date Picker", "flowDiagramComponentFieldId": "component_field_job_0010", "order": 10 },
+      { "label": "Next Run", "type": "Date Picker", "flowDiagramComponentFieldId": "component_field_job_0011", "order": 11 },
+      { "label": "Notes", "type": "Rich Text Editor", "flowDiagramComponentFieldId": "component_field_job_0012", "order": 12 }
+    ]
+  },
+  {
+    "name": "Code Block",
+    "type": "modal",
+    "description": "Attach a code snippet with links back to source control.",
+    "category": "Code & Docs",
+    "tags": ["code","snippet","repo"],
+    "previewImageJpg": "https://placehold.co/64x64",
+    "isActive": true,
+    "order": 6,
+   "flowDiagramComponentFields": [
+      { "label": "Name", "type": "Text Input", "required": true, "flowDiagramComponentFieldId": "component_field_code_0001", "order": 1 },
+      { "label": "Language", "type": "Dropdown", "options": ["TypeScript","JavaScript","Python","Go","Java","C#",".NET","Bash","SQL","YAML","JSON","Other"], "flowDiagramComponentFieldId": "component_field_code_0002", "order": 2 },
+      { "label": "Snippet", "type": "Code Editor", "flowDiagramComponentFieldId": "component_field_code_0003", "order": 3 },
+      { "label": "Repository URL", "type": "URL Input", "flowDiagramComponentFieldId": "component_field_code_0004", "order": 4 },
+      { "label": "Notes", "type": "Rich Text Editor", "flowDiagramComponentFieldId": "component_field_code_0005", "order": 5 }
+    ]
+  },
+  {
+    "name": "File / Note",
+    "type": "modal",
+    "description": "Attach a file or capture a free-form note linked to this element.",
+    "category": "Files & Docs",
+    "tags": ["file","note","attachment"],
+    "previewImageJpg": "https://placehold.co/64x64",
+    "isActive": true,
+    "order": 7,
+   "flowDiagramComponentFields": [
+      { "label": "Name", "type": "Text Input", "required": true, "flowDiagramComponentFieldId": "component_field_file_0001", "order": 1 },
+      { "label": "Type", "type": "Dropdown", "options": ["Design Doc","Runbook","Spreadsheet","Screenshot","Log","Other"], "flowDiagramComponentFieldId": "component_field_file_0002", "order": 2 },
+      { "label": "Link or Upload", "type": "Link or File Upload", "flowDiagramComponentFieldId": "component_field_file_0003", "order": 3 },
+      { "label": "Owner", "type": "Text Input", "flowDiagramComponentFieldId": "component_field_file_0004", "order": 4 },
+      { "label": "Description", "type": "Rich Text Editor", "flowDiagramComponentFieldId": "component_field_file_0005", "order": 5 }
+    ]
+  }
+  ]
+}

@@ -1,92 +1,56 @@
 package content
 
 import (
-	_ "embed"
-	"encoding/json"
 	"net/http"
-	"strings"
-	"sync"
+
+	"github.com/uigraph/app/internal/componentcatalog"
+	"github.com/uigraph/app/internal/storage"
+	"github.com/uigraph/app/internal/store"
 )
 
-//go:embed flow_diagram_components.json
-var flowComponentCatalogRaw []byte
-
-type FlowDiagramComponentField struct {
-	FlowDiagramComponentFieldID string   `json:"flowDiagramComponentFieldId"`
-	Label                       string   `json:"label"`
-	Type                        string   `json:"type"`
-	Required                    bool     `json:"required"`
-	Readonly                    *bool    `json:"readonly,omitempty"`
-	Options                     []string `json:"options,omitempty"`
-	Order                       int      `json:"order"`
+// FlowComponentHandler serves the flow diagram component palette.
+type FlowComponentHandler struct {
+	store store.Store
 }
 
-// FlowDiagramComponent is a single palette component (native or custom).
-type FlowDiagramComponent struct {
-	ComponentID                string                      `json:"componentId"`
-	Type                       string                      `json:"type"`
-	Name                       string                      `json:"name"`
-	Description                string                      `json:"description"`
-	Category                   string                      `json:"category"`
-	Tags                       []string                    `json:"tags"`
-	Slug                       string                      `json:"slug"`
-	PreviewImageJpg            string                      `json:"previewImageJpg"`
-	IsActive                   bool                        `json:"isActive"`
-	Order                      int                         `json:"order"`
-	OrganizationID             *string                     `json:"organizationId,omitempty"`
-	FlowDiagramComponentFields []FlowDiagramComponentField `json:"flowDiagramComponentFields"`
+func NewFlowComponentHandler(s store.Store) *FlowComponentHandler {
+	return &FlowComponentHandler{store: s}
 }
 
-var (
-	flowCatalogOnce sync.Once
-	flowCatalog     []FlowDiagramComponent
-)
-
-func loadFlowCatalog() []FlowDiagramComponent {
-	flowCatalogOnce.Do(func() {
-		var parsed struct {
-			FlowDiagramComponents []FlowDiagramComponent `json:"flowDiagramComponents"`
-		}
-		if err := json.Unmarshal(flowComponentCatalogRaw, &parsed); err != nil {
-			flowCatalog = []FlowDiagramComponent{}
-			return
-		}
-		for i := range parsed.FlowDiagramComponents {
-			c := &parsed.FlowDiagramComponents[i]
-			c.Slug = slugify(c.Name)
-			c.ComponentID = "flow_diagram_component_" + c.Slug
-		}
-		flowCatalog = parsed.FlowDiagramComponents
-	})
-	return flowCatalog
-}
-
-type FlowComponentHandler struct{}
-
-func NewFlowComponentHandler() *FlowComponentHandler { return &FlowComponentHandler{} }
-
+// List handles GET /api/v1/orgs/{orgID}/flow-diagram-components
 func (h *FlowComponentHandler) List(w http.ResponseWriter, r *http.Request) {
+	comps, err := h.store.ListComponentsByKind(r.Context(), componentcatalog.KindFlowDiagram)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "failed to list flow diagram components")
+		return
+	}
+
+	out := make([]componentcatalog.FlowDiagramComponent, len(comps))
+	for i, c := range comps {
+		out[i] = componentcatalog.ToFlowDiagramComponent(c, componentIconURL(r, c))
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
-		"components":       loadFlowCatalog(),
-		"customComponents": []FlowDiagramComponent{},
+		"components":       out,
+		"customComponents": []componentcatalog.FlowDiagramComponent{},
 	})
 }
 
-func slugify(s string) string {
-	s = strings.ToLower(strings.TrimSpace(s))
-	var b strings.Builder
-	prevDash := false
-	for _, r := range s {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
-			b.WriteRune(r)
-			prevDash = false
-		default:
-			if !prevDash {
-				b.WriteByte('-')
-				prevDash = true
-			}
-		}
+// ComponentIconHandler serves native component icon SVGs from object storage.
+type ComponentIconHandler struct {
+	storage storage.Client
+}
+
+func NewComponentIconHandler(st storage.Client) *ComponentIconHandler {
+	return &ComponentIconHandler{storage: st}
+}
+
+// Get handles GET /api/v1/component-icons/{slug}
+func (h *ComponentIconHandler) Get(w http.ResponseWriter, r *http.Request) {
+	slug := r.PathValue("slug")
+	if slug == "" {
+		writeErr(w, http.StatusBadRequest, "slug is required")
+		return
 	}
-	return strings.Trim(b.String(), "-")
+	streamObject(w, r, h.storage, storage.ComponentIconKey(slug))
 }

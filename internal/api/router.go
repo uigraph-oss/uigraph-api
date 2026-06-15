@@ -36,6 +36,9 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	mux.HandleFunc("GET /healthz", healthHandler.Healthz)
 	mux.HandleFunc("GET /livez", healthHandler.Livez)
 
+	componentIconH := content.NewComponentIconHandler(st)
+	mux.HandleFunc("GET /api/v1/component-icons/{slug}", componentIconH.Get)
+
 	sessionH := auth.NewSessionHandler(s, cfg.PublicURL, cfg.FrontendURL)
 	mux.HandleFunc("POST /api/v1/auth/login", sessionH.Login)
 	mux.HandleFunc("GET /api/v1/auth/providers", sessionH.ListProviders)
@@ -192,8 +195,12 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	protected("GET", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/versions/{versionID}/content", diagramH.GetVersionContent)
 	protected("POST", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/versions/{versionID}/restore", diagramH.RestoreVersion)
 
+	// ── Focal point component palette ─────────────────────────────────────
+	componentH := content.NewComponentHandler(s)
+	protected("GET", "/api/v1/orgs/{orgID}/components", componentH.List)
+
 	// ── Flow diagram component palette ────────────────────────────────────
-	flowCompH := content.NewFlowComponentHandler()
+	flowCompH := content.NewFlowComponentHandler(s)
 	protected("GET", "/api/v1/orgs/{orgID}/flow-diagram-components", flowCompH.List)
 
 	// ── Services + API Groups + API Endpoints ─────────────────────────────
