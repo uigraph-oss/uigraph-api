@@ -1,10 +1,13 @@
 package content
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -12,6 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/uigraph/app/internal/catalog"
+	diagramdom "github.com/uigraph/app/internal/diagram"
 	authmw "github.com/uigraph/app/internal/middleware"
 	"github.com/uigraph/app/internal/storage"
 	"github.com/uigraph/app/internal/store"
@@ -45,6 +49,21 @@ func (h *ServiceHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"services": svcs})
+}
+
+func (h *ServiceHandler) ListStats(w http.ResponseWriter, r *http.Request) {
+	orgID := r.PathValue("orgID")
+	var serviceID *string
+	if v := r.URL.Query().Get("serviceId"); v != "" {
+		serviceID = &v
+	}
+
+	stats, err := h.store.ListServiceStats(r.Context(), orgID, serviceID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"stats": stats})
 }
 
 func (h *ServiceHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -229,6 +248,326 @@ func (h *ServiceHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.store.SoftDeleteService(r.Context(), r.PathValue("serviceID"), p.UserID); err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ── Service docs ──────────────────────────────────────────────────────────────
+
+func (h *ServiceHandler) ListDocs(w http.ResponseWriter, r *http.Request) {
+	serviceID := r.PathValue("serviceID")
+	if ok := h.ensureServiceInOrg(w, r, serviceID); !ok {
+		return
+	}
+	docs, err := h.store.ListServiceDocs(r.Context(), serviceID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"docs": docs})
+}
+
+func (h *ServiceHandler) GetDoc(w http.ResponseWriter, r *http.Request) {
+	serviceID := r.PathValue("serviceID")
+	if ok := h.ensureServiceInOrg(w, r, serviceID); !ok {
+		return
+	}
+	doc, err := h.store.GetServiceDoc(r.Context(), r.PathValue("docID"))
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if doc == nil || doc.DeletedAt != nil || doc.ServiceID != serviceID {
+		writeErr(w, http.StatusNotFound, "not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, doc)
+}
+
+func (h *ServiceHandler) CreateDoc(w http.ResponseWriter, r *http.Request) {
+	orgID := r.PathValue("orgID")
+	serviceID := r.PathValue("serviceID")
+	p, ok := authmw.PrincipalFromCtx(r.Context())
+	if !ok {
+		writeErr(w, http.StatusUnauthorized, "unauthenticated")
+		return
+	}
+	if h.storage == nil {
+		writeErr(w, http.StatusInternalServerError, "storage is not configured")
+		return
+	}
+	if ok := h.ensureServiceInOrg(w, r, serviceID); !ok {
+		return
+	}
+
+	fileName, fileType, description, fileBytes, err := h.readServiceDocPayload(r)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	docID := uuid.NewString()
+	fileKey := storage.ServiceDocFileKey(orgID, serviceID, docID, fileName)
+	if err := h.storage.Upload(r.Context(), fileKey, fileType, bytes.NewReader(fileBytes), int64(len(fileBytes))); err != nil {
+		writeErr(w, http.StatusInternalServerError, "failed to store doc file")
+		return
+	}
+
+	now := time.Now().UTC()
+	doc := catalog.ServiceDoc{
+		ID:          docID,
+		ServiceID:   serviceID,
+		OrgID:       orgID,
+		FileKey:     fileKey,
+		FileName:    fileName,
+		FileType:    fileType,
+		Description: description,
+		ContentHash: sha256Bytes(fileBytes),
+		CreatedBy:   p.UserID,
+		UpdatedBy:   &p.UserID,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := h.store.CreateServiceDoc(r.Context(), doc); err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	writeJSON(w, http.StatusCreated, doc)
+}
+
+func (h *ServiceHandler) UpdateDoc(w http.ResponseWriter, r *http.Request) {
+	orgID := r.PathValue("orgID")
+	serviceID := r.PathValue("serviceID")
+	docID := r.PathValue("docID")
+	p, ok := authmw.PrincipalFromCtx(r.Context())
+	if !ok {
+		writeErr(w, http.StatusUnauthorized, "unauthenticated")
+		return
+	}
+	if h.storage == nil {
+		writeErr(w, http.StatusInternalServerError, "storage is not configured")
+		return
+	}
+	if ok := h.ensureServiceInOrg(w, r, serviceID); !ok {
+		return
+	}
+
+	doc, err := h.store.GetServiceDoc(r.Context(), docID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if doc == nil || doc.DeletedAt != nil || doc.ServiceID != serviceID {
+		writeErr(w, http.StatusNotFound, "not found")
+		return
+	}
+
+	fileName, fileType, description, fileBytes, payloadErr := h.readOptionalServiceDocPayload(r, doc)
+	if payloadErr != nil {
+		writeErr(w, http.StatusBadRequest, payloadErr.Error())
+		return
+	}
+
+	doc.Description = description
+	doc.FileName = fileName
+	doc.FileType = fileType
+	doc.OrgID = orgID
+	doc.UpdatedBy = &p.UserID
+
+	if fileBytes != nil {
+		newFileKey := storage.ServiceDocFileKey(orgID, serviceID, docID, fileName)
+		if err := h.storage.Upload(r.Context(), newFileKey, fileType, bytes.NewReader(fileBytes), int64(len(fileBytes))); err != nil {
+			writeErr(w, http.StatusInternalServerError, "failed to store doc file")
+			return
+		}
+		if doc.FileKey != newFileKey {
+			_ = h.storage.Delete(r.Context(), doc.FileKey)
+		}
+		doc.FileKey = newFileKey
+		doc.ContentHash = sha256Bytes(fileBytes)
+	}
+
+	if err := h.store.UpdateServiceDoc(r.Context(), *doc); err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	writeJSON(w, http.StatusOK, doc)
+}
+
+func (h *ServiceHandler) DeleteDoc(w http.ResponseWriter, r *http.Request) {
+	serviceID := r.PathValue("serviceID")
+	docID := r.PathValue("docID")
+	if ok := h.ensureServiceInOrg(w, r, serviceID); !ok {
+		return
+	}
+	doc, err := h.store.GetServiceDoc(r.Context(), docID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if doc == nil || doc.DeletedAt != nil || doc.ServiceID != serviceID {
+		writeErr(w, http.StatusNotFound, "not found")
+		return
+	}
+	if err := h.store.SoftDeleteServiceDoc(r.Context(), docID); err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ── Service diagrams ──────────────────────────────────────────────────────────
+
+func (h *ServiceHandler) ListDiagrams(w http.ResponseWriter, r *http.Request) {
+	serviceID := r.PathValue("serviceID")
+	if ok := h.ensureServiceInOrg(w, r, serviceID); !ok {
+		return
+	}
+	diagrams, err := h.store.ListServiceDiagrams(r.Context(), serviceID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"diagrams": diagrams})
+}
+
+func (h *ServiceHandler) CreateDiagram(w http.ResponseWriter, r *http.Request) {
+	orgID := r.PathValue("orgID")
+	serviceID := r.PathValue("serviceID")
+	p, ok := authmw.PrincipalFromCtx(r.Context())
+	if !ok {
+		writeErr(w, http.StatusUnauthorized, "unauthenticated")
+		return
+	}
+	if ok := h.ensureServiceInOrg(w, r, serviceID); !ok {
+		return
+	}
+
+	var body struct {
+		DiagramID *string `json:"diagramId"`
+		Name      *string `json:"name"`
+		Content   *string `json:"content"`
+		FolderID  *string `json:"folderId"`
+		TeamID    *string `json:"teamId"`
+		Source    *string `json:"source"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	var dg *diagramdom.Diagram
+	if body.DiagramID != nil && strings.TrimSpace(*body.DiagramID) != "" {
+		existing, err := h.store.GetDiagram(r.Context(), strings.TrimSpace(*body.DiagramID))
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+		if existing == nil || existing.DeletedAt != nil || existing.OrgID != orgID {
+			writeErr(w, http.StatusNotFound, "diagram not found")
+			return
+		}
+		dg = existing
+	} else {
+		if h.storage == nil {
+			writeErr(w, http.StatusInternalServerError, "storage is not configured")
+			return
+		}
+		if body.Name == nil || strings.TrimSpace(*body.Name) == "" || body.Content == nil || strings.TrimSpace(*body.Content) == "" {
+			writeErr(w, http.StatusBadRequest, "name and content are required when diagramId is not provided")
+			return
+		}
+
+		id := uuid.NewString()
+		content := *body.Content
+		contentKey := storage.DiagramContentKey(orgID, id)
+		if err := h.uploadSpec(r.Context(), contentKey, content); err != nil {
+			writeErr(w, http.StatusInternalServerError, "failed to store content")
+			return
+		}
+
+		now := time.Now().UTC()
+		newDiagram := diagramdom.Diagram{
+			ID:          id,
+			OrgID:       orgID,
+			FolderID:    body.FolderID,
+			TeamID:      body.TeamID,
+			Name:        strings.TrimSpace(*body.Name),
+			ContentKey:  contentKey,
+			ContentHash: specHash(content),
+			Source:      body.Source,
+			CreatedBy:   p.UserID,
+			UpdatedBy:   &p.UserID,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}
+		if err := h.store.CreateDiagram(r.Context(), newDiagram); err != nil {
+			writeErr(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+
+		versionID := uuid.NewString()
+		versionKey := storage.DiagramVersionKey(orgID, id, versionID)
+		if err := h.uploadSpec(r.Context(), versionKey, content); err != nil {
+			writeErr(w, http.StatusInternalServerError, "failed to store version content")
+			return
+		}
+		_ = h.store.CreateDiagramVersion(r.Context(), diagramdom.Version{
+			ID:            versionID,
+			DiagramID:     id,
+			VersionNumber: 1,
+			ContentKey:    versionKey,
+			ContentHash:   newDiagram.ContentHash,
+			IsAutoVersion: body.Source != nil,
+			Source:        body.Source,
+			CreatedBy:     p.UserID,
+			CreatedAt:     now,
+		})
+
+		dg = &newDiagram
+	}
+
+	now := time.Now().UTC()
+	link := catalog.ServiceDiagram{
+		ServiceID: serviceID,
+		DiagramID: dg.ID,
+		OrgID:     orgID,
+		CreatedBy: p.UserID,
+		UpdatedBy: &p.UserID,
+		CreatedAt: now,
+		UpdatedAt: now,
+		Diagram:   dg,
+	}
+	if err := h.store.CreateServiceDiagram(r.Context(), link); err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	writeJSON(w, http.StatusCreated, link)
+}
+
+func (h *ServiceHandler) DeleteDiagram(w http.ResponseWriter, r *http.Request) {
+	serviceID := r.PathValue("serviceID")
+	diagramID := r.PathValue("diagramID")
+	p, ok := authmw.PrincipalFromCtx(r.Context())
+	if !ok {
+		writeErr(w, http.StatusUnauthorized, "unauthenticated")
+		return
+	}
+	if ok := h.ensureServiceInOrg(w, r, serviceID); !ok {
+		return
+	}
+	link, err := h.store.GetServiceDiagram(r.Context(), serviceID, diagramID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if link == nil || link.DeletedAt != nil {
+		writeErr(w, http.StatusNotFound, "not found")
+		return
+	}
+	if err := h.store.SoftDeleteServiceDiagram(r.Context(), serviceID, diagramID, p.UserID); err != nil {
 		writeErr(w, http.StatusInternalServerError, "internal error")
 		return
 	}
@@ -731,6 +1070,133 @@ func (h *ServiceHandler) uploadSpec(ctx context.Context, key, content string) er
 func specHash(s string) string {
 	sum := sha256.Sum256([]byte(s))
 	return fmt.Sprintf("%x", sum)
+}
+
+func sha256Bytes(b []byte) string {
+	sum := sha256.Sum256(b)
+	return fmt.Sprintf("%x", sum)
+}
+
+func (h *ServiceHandler) ensureServiceInOrg(w http.ResponseWriter, r *http.Request, serviceID string) bool {
+	svc, err := h.store.GetService(r.Context(), serviceID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal error")
+		return false
+	}
+	if svc == nil || svc.DeletedAt != nil || svc.OrgID != r.PathValue("orgID") {
+		writeErr(w, http.StatusNotFound, "not found")
+		return false
+	}
+	return true
+}
+
+func (h *ServiceHandler) readServiceDocPayload(r *http.Request) (string, string, string, []byte, error) {
+	fileName, fileType, description, fileBytes, err := h.readOptionalServiceDocPayload(r, nil)
+	if err != nil {
+		return "", "", "", nil, err
+	}
+	if len(fileBytes) == 0 {
+		return "", "", "", nil, fmt.Errorf("file content is required")
+	}
+	return fileName, fileType, description, fileBytes, nil
+}
+
+func (h *ServiceHandler) readOptionalServiceDocPayload(r *http.Request, existing *catalog.ServiceDoc) (string, string, string, []byte, error) {
+	if strings.HasPrefix(strings.ToLower(r.Header.Get("Content-Type")), "multipart/form-data") {
+		return readServiceDocFromMultipart(r, existing)
+	}
+	return readServiceDocFromJSON(r, existing)
+}
+
+func readServiceDocFromJSON(r *http.Request, existing *catalog.ServiceDoc) (string, string, string, []byte, error) {
+	var body struct {
+		FileName      *string `json:"fileName"`
+		FileType      *string `json:"fileType"`
+		Description   *string `json:"description"`
+		ContentBase64 *string `json:"contentBase64"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		return "", "", "", nil, fmt.Errorf("invalid request body")
+	}
+
+	fileName, fileType, description := "", "", ""
+	if existing != nil {
+		fileName, fileType, description = existing.FileName, existing.FileType, existing.Description
+	}
+	if body.FileName != nil {
+		fileName = strings.TrimSpace(*body.FileName)
+	}
+	if body.FileType != nil {
+		fileType = strings.TrimSpace(*body.FileType)
+	}
+	if body.Description != nil {
+		description = strings.TrimSpace(*body.Description)
+	}
+	if fileType == "" {
+		fileType = "application/octet-stream"
+	}
+	if fileName == "" {
+		return "", "", "", nil, fmt.Errorf("fileName is required")
+	}
+	var out []byte
+	if body.ContentBase64 != nil && strings.TrimSpace(*body.ContentBase64) != "" {
+		raw, err := base64.StdEncoding.DecodeString(*body.ContentBase64)
+		if err != nil {
+			return "", "", "", nil, fmt.Errorf("contentBase64 must be valid base64")
+		}
+		out = raw
+	}
+	return fileName, fileType, description, out, nil
+}
+
+func readServiceDocFromMultipart(r *http.Request, existing *catalog.ServiceDoc) (string, string, string, []byte, error) {
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		return "", "", "", nil, fmt.Errorf("invalid multipart form")
+	}
+	fileName, fileType, description := "", "", ""
+	if existing != nil {
+		fileName, fileType, description = existing.FileName, existing.FileType, existing.Description
+	}
+	if v := strings.TrimSpace(r.FormValue("fileName")); v != "" {
+		fileName = v
+	}
+	if v := strings.TrimSpace(r.FormValue("fileType")); v != "" {
+		fileType = v
+	}
+	if v := r.FormValue("description"); v != "" {
+		description = strings.TrimSpace(v)
+	}
+	if fileType == "" {
+		fileType = "application/octet-stream"
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		if existing != nil {
+			if fileName == "" {
+				return "", "", "", nil, fmt.Errorf("fileName is required")
+			}
+			return fileName, fileType, description, nil, nil
+		}
+		return "", "", "", nil, fmt.Errorf("file is required")
+	}
+	defer file.Close()
+	content, err := io.ReadAll(file)
+	if err != nil {
+		return "", "", "", nil, fmt.Errorf("failed to read file")
+	}
+	if fileName == "" {
+		fileName = strings.TrimSpace(header.Filename)
+	}
+	if fileName == "" {
+		return "", "", "", nil, fmt.Errorf("fileName is required")
+	}
+	if fileType == "application/octet-stream" {
+		if headerType := strings.TrimSpace(header.Header.Get("Content-Type")); headerType != "" {
+			fileType = headerType
+		}
+	}
+	return fileName, fileType, description, content, nil
 }
 
 // toSlug converts a name to a URL-safe slug (lowercase, hyphens).
