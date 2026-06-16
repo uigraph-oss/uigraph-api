@@ -11,6 +11,7 @@ import (
 	"github.com/uigraph/app/internal/authz"
 	"github.com/uigraph/app/internal/cache"
 	"github.com/uigraph/app/internal/config"
+	"github.com/uigraph/app/internal/identity"
 	"github.com/uigraph/app/internal/storage"
 	"github.com/uigraph/app/internal/store"
 )
@@ -24,7 +25,7 @@ import (
 //	/api/v1/users/*                           — user management  (requires auth)
 //	/api/v1/orgs/*                            — org + nested resources (requires auth)
 //	/api/v1/orgs/{orgID}/folders/*            — folder hierarchy
-//	/api/v1/orgs/{orgID}/diagrams/*           — diagrams + versions + sync
+//	/api/v1/orgs/{orgID}/diagrams/*           — diagrams + versions
 //	/api/v1/orgs/{orgID}/maps/*               — maps + frames + focal points + canvas
 func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st storage.Client, c cache.Client) http.Handler {
 	mux := http.NewServeMux()
@@ -52,22 +53,32 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 		mux.Handle(method+" "+pattern, mw.Handler(http.HandlerFunc(h)))
 	}
 
-	// orgAdmin requires the authenticated principal to hold the admin role in the
-	// {orgID} path segment, or to be a server admin. Applied to org-scoped admin endpoints.
-	orgAdmin := func(method, pattern string, h http.HandlerFunc) {
+	// requireScope authenticates the request and authorizes it against scope.
+	// Service accounts are checked against their granted scopes; users are checked
+	// against the scopes resolved from their org role in the {orgID} path segment.
+	// The global server_admin axis is intentionally not consulted here.
+	requireScope := func(scope authz.Scope, method, pattern string, h http.HandlerFunc) {
 		guarded := func(w http.ResponseWriter, r *http.Request) {
 			p, ok := authmw.PrincipalFromCtx(r.Context())
 			if !ok {
 				http.Error(w, `{"error":"unauthenticated","code":401}`, http.StatusUnauthorized)
 				return
 			}
-			// server admins bypass org-level checks
-			if isAdmin, _ := authorizer.IsUserServerAdmin(r.Context(), p.UserID); isAdmin {
-				h(w, r)
-				return
+			var scopes []string
+			if p.Kind == identity.PrincipalServiceAccount {
+				scopes = p.Scopes
+			} else {
+				resolved, err := authorizer.ScopesForUser(r.Context(), p.UserID, r.PathValue("orgID"))
+				if err != nil {
+					http.Error(w, `{"error":"forbidden","code":403}`, http.StatusForbidden)
+					return
+				}
+				scopes = make([]string, len(resolved))
+				for i, s := range resolved {
+					scopes[i] = string(s)
+				}
 			}
-			ok, err := authorizer.HasOrgRole(r.Context(), p.UserID, r.PathValue("orgID"), authz.RoleAdmin)
-			if err != nil || !ok {
+			if !authz.Has(scopes, scope) {
 				http.Error(w, `{"error":"forbidden","code":403}`, http.StatusForbidden)
 				return
 			}
@@ -113,44 +124,47 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	protected("GET", "/api/v1/orgs", orgH.List)
 	protected("POST", "/api/v1/orgs", orgH.Create)
 	protected("GET", "/api/v1/orgs/{orgID}", orgH.Get)
-	orgAdmin("PUT", "/api/v1/orgs/{orgID}", orgH.Update)
-	orgAdmin("DELETE", "/api/v1/orgs/{orgID}", orgH.Delete)
+	requireScope(authz.ScopeOrgUpdate, "PUT", "/api/v1/orgs/{orgID}", orgH.Update)
+	requireScope(authz.ScopeOrgDelete, "DELETE", "/api/v1/orgs/{orgID}", orgH.Delete)
+
+	// Scopes catalog — shared by role assignment and service-account assignment.
+	saH := auth.NewServiceAccountHandler(s)
+	requireScope(authz.ScopeMembersView, "GET", "/api/v1/orgs/{orgID}/scopes", saH.ListScopes)
 
 	// Members
 	memberH := auth.NewMemberHandler(s)
-	protected("GET", "/api/v1/orgs/{orgID}/members", memberH.List)
-	orgAdmin("POST", "/api/v1/orgs/{orgID}/members", memberH.Add)
-	orgAdmin("PUT", "/api/v1/orgs/{orgID}/members/{userID}", memberH.UpdateRole)
-	orgAdmin("DELETE", "/api/v1/orgs/{orgID}/members/{userID}", memberH.Remove)
+	requireScope(authz.ScopeMembersView, "GET", "/api/v1/orgs/{orgID}/members", memberH.List)
+	requireScope(authz.ScopeMembersAdd, "POST", "/api/v1/orgs/{orgID}/members", memberH.Add)
+	requireScope(authz.ScopeMembersUpdateRole, "PUT", "/api/v1/orgs/{orgID}/members/{userID}", memberH.UpdateRole)
+	requireScope(authz.ScopeMembersRemove, "DELETE", "/api/v1/orgs/{orgID}/members/{userID}", memberH.Remove)
 
 	// Teams
 	teamH := auth.NewTeamHandler(s)
-	protected("GET", "/api/v1/orgs/{orgID}/teams", teamH.List)
-	orgAdmin("POST", "/api/v1/orgs/{orgID}/teams", teamH.Create)
-	protected("GET", "/api/v1/orgs/{orgID}/teams/{teamID}", teamH.Get)
-	orgAdmin("PUT", "/api/v1/orgs/{orgID}/teams/{teamID}", teamH.Update)
-	orgAdmin("DELETE", "/api/v1/orgs/{orgID}/teams/{teamID}", teamH.Delete)
-	protected("GET", "/api/v1/orgs/{orgID}/teams/{teamID}/members", teamH.ListMembers)
-	orgAdmin("POST", "/api/v1/orgs/{orgID}/teams/{teamID}/members", teamH.AddMember)
-	orgAdmin("DELETE", "/api/v1/orgs/{orgID}/teams/{teamID}/members/{userID}", teamH.RemoveMember)
+	requireScope(authz.ScopeTeamsView, "GET", "/api/v1/orgs/{orgID}/teams", teamH.List)
+	requireScope(authz.ScopeTeamsCreate, "POST", "/api/v1/orgs/{orgID}/teams", teamH.Create)
+	requireScope(authz.ScopeTeamsView, "GET", "/api/v1/orgs/{orgID}/teams/{teamID}", teamH.Get)
+	requireScope(authz.ScopeTeamsEdit, "PUT", "/api/v1/orgs/{orgID}/teams/{teamID}", teamH.Update)
+	requireScope(authz.ScopeTeamsDelete, "DELETE", "/api/v1/orgs/{orgID}/teams/{teamID}", teamH.Delete)
+	requireScope(authz.ScopeTeamsView, "GET", "/api/v1/orgs/{orgID}/teams/{teamID}/members", teamH.ListMembers)
+	requireScope(authz.ScopeTeamsAddMember, "POST", "/api/v1/orgs/{orgID}/teams/{teamID}/members", teamH.AddMember)
+	requireScope(authz.ScopeTeamsRemoveMember, "DELETE", "/api/v1/orgs/{orgID}/teams/{teamID}/members/{userID}", teamH.RemoveMember)
 
 	// Invitations
 	inviteH := auth.NewInvitationHandler(s)
-	protected("GET", "/api/v1/orgs/{orgID}/invitations", inviteH.List)
-	orgAdmin("POST", "/api/v1/orgs/{orgID}/invitations", inviteH.Create)
-	orgAdmin("DELETE", "/api/v1/orgs/{orgID}/invitations/{inviteID}", inviteH.Revoke)
-	orgAdmin("POST", "/api/v1/orgs/{orgID}/invitations/{inviteID}/resend", inviteH.Resend)
+	requireScope(authz.ScopeInvitationsView, "GET", "/api/v1/orgs/{orgID}/invitations", inviteH.List)
+	requireScope(authz.ScopeInvitationsCreate, "POST", "/api/v1/orgs/{orgID}/invitations", inviteH.Create)
+	requireScope(authz.ScopeInvitationsRevoke, "DELETE", "/api/v1/orgs/{orgID}/invitations/{inviteID}", inviteH.Revoke)
+	requireScope(authz.ScopeInvitationsResend, "POST", "/api/v1/orgs/{orgID}/invitations/{inviteID}/resend", inviteH.Resend)
 
 	// Service accounts
-	saH := auth.NewServiceAccountHandler(s)
-	protected("GET", "/api/v1/orgs/{orgID}/service-accounts", saH.List)
-	orgAdmin("POST", "/api/v1/orgs/{orgID}/service-accounts", saH.Create)
-	protected("GET", "/api/v1/orgs/{orgID}/service-accounts/{saID}", saH.Get)
-	orgAdmin("PUT", "/api/v1/orgs/{orgID}/service-accounts/{saID}", saH.Update)
-	orgAdmin("DELETE", "/api/v1/orgs/{orgID}/service-accounts/{saID}", saH.Delete)
-	protected("GET", "/api/v1/orgs/{orgID}/service-accounts/{saID}/tokens", saH.ListTokens)
-	orgAdmin("POST", "/api/v1/orgs/{orgID}/service-accounts/{saID}/tokens", saH.CreateToken)
-	orgAdmin("DELETE", "/api/v1/orgs/{orgID}/service-accounts/{saID}/tokens/{tokenID}", saH.RevokeToken)
+	requireScope(authz.ScopeServiceAccountsView, "GET", "/api/v1/orgs/{orgID}/service-accounts", saH.List)
+	requireScope(authz.ScopeServiceAccountsCreate, "POST", "/api/v1/orgs/{orgID}/service-accounts", saH.Create)
+	requireScope(authz.ScopeServiceAccountsView, "GET", "/api/v1/orgs/{orgID}/service-accounts/{saID}", saH.Get)
+	requireScope(authz.ScopeServiceAccountsEdit, "PUT", "/api/v1/orgs/{orgID}/service-accounts/{saID}", saH.Update)
+	requireScope(authz.ScopeServiceAccountsDelete, "DELETE", "/api/v1/orgs/{orgID}/service-accounts/{saID}", saH.Delete)
+	requireScope(authz.ScopeServiceAccountsView, "GET", "/api/v1/orgs/{orgID}/service-accounts/{saID}/tokens", saH.ListTokens)
+	requireScope(authz.ScopeServiceAccountsCreateToken, "POST", "/api/v1/orgs/{orgID}/service-accounts/{saID}/tokens", saH.CreateToken)
+	requireScope(authz.ScopeServiceAccountsRevokeToken, "DELETE", "/api/v1/orgs/{orgID}/service-accounts/{saID}/tokens/{tokenID}", saH.RevokeToken)
 
 	// SSO (global — server-admin only)
 	ssoH := auth.NewSSOHandler(s)
@@ -171,29 +185,28 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 
 	// ── Folders ───────────────────────────────────────────────────────────
 	folderH := content.NewFolderHandler(s)
-	protected("GET", "/api/v1/orgs/{orgID}/folders", folderH.List)
-	protected("POST", "/api/v1/orgs/{orgID}/folders", folderH.Create)
-	protected("GET", "/api/v1/orgs/{orgID}/folders/{folderID}", folderH.Get)
-	protected("PUT", "/api/v1/orgs/{orgID}/folders/{folderID}", folderH.Update)
-	protected("DELETE", "/api/v1/orgs/{orgID}/folders/{folderID}", folderH.Delete)
+	requireScope(authz.ScopeFoldersView, "GET", "/api/v1/orgs/{orgID}/folders", folderH.List)
+	requireScope(authz.ScopeFoldersCreate, "POST", "/api/v1/orgs/{orgID}/folders", folderH.Create)
+	requireScope(authz.ScopeFoldersView, "GET", "/api/v1/orgs/{orgID}/folders/{folderID}", folderH.Get)
+	requireScope(authz.ScopeFoldersEdit, "PUT", "/api/v1/orgs/{orgID}/folders/{folderID}", folderH.Update)
+	requireScope(authz.ScopeFoldersDelete, "DELETE", "/api/v1/orgs/{orgID}/folders/{folderID}", folderH.Delete)
 
 	// ── Diagrams ──────────────────────────────────────────────────────────
-	// NOTE: /sync must be registered before /{diagramID} so the literal path wins.
 	diagramH := content.NewDiagramHandler(s, st, c)
-	protected("GET", "/api/v1/orgs/{orgID}/diagrams", diagramH.List)
-	protected("POST", "/api/v1/orgs/{orgID}/diagrams", diagramH.Create)
-	protected("POST", "/api/v1/orgs/{orgID}/diagrams/sync", diagramH.Sync)
-	protected("GET", "/api/v1/orgs/{orgID}/diagrams/{diagramID}", diagramH.Get)
-	protected("PUT", "/api/v1/orgs/{orgID}/diagrams/{diagramID}", diagramH.Update)
-	protected("DELETE", "/api/v1/orgs/{orgID}/diagrams/{diagramID}", diagramH.Delete)
-	protected("POST", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/thumbnail", diagramH.UpdateThumbnail)
-	protected("GET", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/images", diagramH.ListImages)
-	protected("POST", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/images", diagramH.CreateImage)
-	protected("GET", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/content", diagramH.GetContent)
-	protected("GET", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/versions", diagramH.ListVersions)
-	protected("POST", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/versions", diagramH.CreateVersion)
-	protected("GET", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/versions/{versionID}/content", diagramH.GetVersionContent)
-	protected("POST", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/versions/{versionID}/restore", diagramH.RestoreVersion)
+	requireScope(authz.ScopeDiagramsView, "GET", "/api/v1/orgs/{orgID}/diagrams", diagramH.List)
+	requireScope(authz.ScopeDiagramsCreate, "POST", "/api/v1/orgs/{orgID}/diagrams", diagramH.Create)
+	requireScope(authz.ScopeDiagramsCreate, "POST", "/api/v1/orgs/{orgID}/diagrams/sync", diagramH.Sync)
+	requireScope(authz.ScopeDiagramsView, "GET", "/api/v1/orgs/{orgID}/diagrams/{diagramID}", diagramH.Get)
+	requireScope(authz.ScopeDiagramsEdit, "PUT", "/api/v1/orgs/{orgID}/diagrams/{diagramID}", diagramH.Update)
+	requireScope(authz.ScopeDiagramsDelete, "DELETE", "/api/v1/orgs/{orgID}/diagrams/{diagramID}", diagramH.Delete)
+	requireScope(authz.ScopeDiagramsEdit, "POST", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/thumbnail", diagramH.UpdateThumbnail)
+	requireScope(authz.ScopeDiagramsView, "GET", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/images", diagramH.ListImages)
+	requireScope(authz.ScopeDiagramsEdit, "POST", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/images", diagramH.CreateImage)
+	requireScope(authz.ScopeDiagramsView, "GET", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/content", diagramH.GetContent)
+	requireScope(authz.ScopeDiagramsView, "GET", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/versions", diagramH.ListVersions)
+	requireScope(authz.ScopeDiagramsEdit, "POST", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/versions", diagramH.CreateVersion)
+	requireScope(authz.ScopeDiagramsView, "GET", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/versions/{versionID}/content", diagramH.GetVersionContent)
+	requireScope(authz.ScopeDiagramsEdit, "POST", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/versions/{versionID}/restore", diagramH.RestoreVersion)
 
 	// ── Focal point component palette ─────────────────────────────────────
 	componentH := content.NewComponentHandler(s)
@@ -205,103 +218,102 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 
 	// ── Services + API Groups + API Endpoints ─────────────────────────────
 	svcH := content.NewServiceHandler(s, st)
-	protected("GET", "/api/v1/orgs/{orgID}/services", svcH.List)
-	protected("GET", "/api/v1/orgs/{orgID}/services/stats", svcH.ListStats)
-	protected("POST", "/api/v1/orgs/{orgID}/services", svcH.Create)
-	protected("GET", "/api/v1/orgs/{orgID}/services/{serviceID}", svcH.Get)
-	protected("PUT", "/api/v1/orgs/{orgID}/services/{serviceID}", svcH.Update)
-	protected("DELETE", "/api/v1/orgs/{orgID}/services/{serviceID}", svcH.Delete)
+	requireScope(authz.ScopeServicesView, "GET", "/api/v1/orgs/{orgID}/services", svcH.List)
+	requireScope(authz.ScopeServicesView, "GET", "/api/v1/orgs/{orgID}/services/stats", svcH.ListStats)
+	requireScope(authz.ScopeServicesCreate, "POST", "/api/v1/orgs/{orgID}/services", svcH.Create)
+	requireScope(authz.ScopeServicesView, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}", svcH.Get)
+	requireScope(authz.ScopeServicesEdit, "PUT", "/api/v1/orgs/{orgID}/services/{serviceID}", svcH.Update)
+	requireScope(authz.ScopeServicesDelete, "DELETE", "/api/v1/orgs/{orgID}/services/{serviceID}", svcH.Delete)
 	// API groups — /sync before /{apiGroupID}
-	protected("GET", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups", svcH.ListAPIGroups)
-	protected("POST", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups", svcH.CreateAPIGroup)
-	protected("POST", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/sync", svcH.SyncAPIGroup)
-	protected("GET", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}", svcH.GetAPIGroup)
-	protected("PUT", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}", svcH.UpdateAPIGroup)
-	protected("DELETE", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}", svcH.DeleteAPIGroup)
-	protected("GET", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/versions", svcH.ListAPIGroupVersions)
+	requireScope(authz.ScopeServicesView, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups", svcH.ListAPIGroups)
+	requireScope(authz.ScopeServicesEdit, "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups", svcH.CreateAPIGroup)
+	requireScope(authz.ScopeServicesEdit, "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/sync", svcH.SyncAPIGroup)
+	requireScope(authz.ScopeServicesView, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}", svcH.GetAPIGroup)
+	requireScope(authz.ScopeServicesEdit, "PUT", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}", svcH.UpdateAPIGroup)
+	requireScope(authz.ScopeServicesDelete, "DELETE", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}", svcH.DeleteAPIGroup)
+	requireScope(authz.ScopeServicesView, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/versions", svcH.ListAPIGroupVersions)
 	// API endpoints
-	protected("GET", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/endpoints", svcH.ListAPIEndpoints)
-	protected("POST", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/endpoints", svcH.CreateAPIEndpoint)
-	protected("GET", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/endpoints/{endpointID}", svcH.GetAPIEndpoint)
-	protected("PUT", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/endpoints/{endpointID}", svcH.UpdateAPIEndpoint)
-	protected("DELETE", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/endpoints/{endpointID}", svcH.DeleteAPIEndpoint)
+	requireScope(authz.ScopeServicesView, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/endpoints", svcH.ListAPIEndpoints)
+	requireScope(authz.ScopeServicesEdit, "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/endpoints", svcH.CreateAPIEndpoint)
+	requireScope(authz.ScopeServicesView, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/endpoints/{endpointID}", svcH.GetAPIEndpoint)
+	requireScope(authz.ScopeServicesEdit, "PUT", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/endpoints/{endpointID}", svcH.UpdateAPIEndpoint)
+	requireScope(authz.ScopeServicesDelete, "DELETE", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/endpoints/{endpointID}", svcH.DeleteAPIEndpoint)
 	// Service docs
-	protected("GET", "/api/v1/orgs/{orgID}/services/{serviceID}/docs", svcH.ListDocs)
-	protected("POST", "/api/v1/orgs/{orgID}/services/{serviceID}/docs", svcH.CreateDoc)
-	protected("GET", "/api/v1/orgs/{orgID}/services/{serviceID}/docs/{docID}", svcH.GetDoc)
-	protected("PUT", "/api/v1/orgs/{orgID}/services/{serviceID}/docs/{docID}", svcH.UpdateDoc)
-	protected("DELETE", "/api/v1/orgs/{orgID}/services/{serviceID}/docs/{docID}", svcH.DeleteDoc)
+	requireScope(authz.ScopeServicesView, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/docs", svcH.ListDocs)
+	requireScope(authz.ScopeServicesEdit, "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/docs", svcH.CreateDoc)
+	requireScope(authz.ScopeServicesView, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/docs/{docID}", svcH.GetDoc)
+	requireScope(authz.ScopeServicesEdit, "PUT", "/api/v1/orgs/{orgID}/services/{serviceID}/docs/{docID}", svcH.UpdateDoc)
+	requireScope(authz.ScopeServicesDelete, "DELETE", "/api/v1/orgs/{orgID}/services/{serviceID}/docs/{docID}", svcH.DeleteDoc)
 	// Service diagrams
-	protected("GET", "/api/v1/orgs/{orgID}/services/{serviceID}/diagrams", svcH.ListDiagrams)
-	protected("POST", "/api/v1/orgs/{orgID}/services/{serviceID}/diagrams", svcH.CreateDiagram)
-	protected("DELETE", "/api/v1/orgs/{orgID}/services/{serviceID}/diagrams/{diagramID}", svcH.DeleteDiagram)
+	requireScope(authz.ScopeServicesView, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/diagrams", svcH.ListDiagrams)
+	requireScope(authz.ScopeServicesEdit, "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/diagrams", svcH.CreateDiagram)
+	requireScope(authz.ScopeServicesEdit, "DELETE", "/api/v1/orgs/{orgID}/services/{serviceID}/diagrams/{diagramID}", svcH.DeleteDiagram)
 	// Service DBs
-	protected("GET", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs", svcH.ListDBs)
-	protected("POST", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs", svcH.CreateDB)
-	protected("GET", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs/{dbID}", svcH.GetDB)
-	protected("PUT", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs/{dbID}", svcH.UpdateDB)
-	protected("DELETE", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs/{dbID}", svcH.DeleteDB)
-	protected("GET", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs/{dbID}/versions", svcH.ListDBVersions)
-	protected("POST", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs/{dbID}/versions", svcH.CreateDBVersion)
-	protected("POST", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs/{dbID}/versions/{versionID}/restore", svcH.RestoreDBVersion)
+	requireScope(authz.ScopeServicesView, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs", svcH.ListDBs)
+	requireScope(authz.ScopeServicesCreate, "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs", svcH.CreateDB)
+	requireScope(authz.ScopeServicesView, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs/{dbID}", svcH.GetDB)
+	requireScope(authz.ScopeServicesEdit, "PUT", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs/{dbID}", svcH.UpdateDB)
+	requireScope(authz.ScopeServicesDelete, "DELETE", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs/{dbID}", svcH.DeleteDB)
+	requireScope(authz.ScopeServicesView, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs/{dbID}/versions", svcH.ListDBVersions)
+	requireScope(authz.ScopeServicesEdit, "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs/{dbID}/versions", svcH.CreateDBVersion)
+	requireScope(authz.ScopeServicesEdit, "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs/{dbID}/versions/{versionID}/restore", svcH.RestoreDBVersion)
 	// Service tests
-	protected("POST", "/api/v1/orgs/{orgID}/services/{serviceID}/test-pack", svcH.CreateTestPack)
-	protected("GET", "/api/v1/orgs/{orgID}/services/{serviceID}/test-packs", svcH.ListTestPacks)
-	protected("POST", "/api/v1/orgs/{orgID}/services/{serviceID}/test-pack/{testPackID}", svcH.UpdateTestPack)
-	protected("DELETE", "/api/v1/orgs/{orgID}/services/{serviceID}/test-pack/{testPackID}", svcH.DeleteTestPack)
-	protected("POST", "/api/v1/orgs/{orgID}/services/{serviceID}/test-case", svcH.CreateTestCase)
-	protected("GET", "/api/v1/orgs/{orgID}/services/{serviceID}/test-cases", svcH.ListTestCases)
-	protected("POST", "/api/v1/orgs/{orgID}/services/{serviceID}/test-case/{testCaseID}", svcH.UpdateTestCase)
-	protected("DELETE", "/api/v1/orgs/{orgID}/services/{serviceID}/test-case/{testCaseID}", svcH.DeleteTestCase)
-	protected("POST", "/api/v1/orgs/{orgID}/services/{serviceID}/test-run", svcH.CreateTestRun)
-	protected("GET", "/api/v1/orgs/{orgID}/services/{serviceID}/test-runs", svcH.ListTestRuns)
-	protected("GET", "/api/v1/orgs/{orgID}/services/{serviceID}/test-runs-summary", svcH.ListTestRunsSummary)
-	protected("GET", "/api/v1/orgs/{orgID}/services/{serviceID}/test-run/{testRunID}", svcH.GetTestRun)
-	protected("POST", "/api/v1/orgs/{orgID}/services/{serviceID}/test-run/{testRunID}", svcH.UpdateTestRun)
-	protected("POST", "/api/v1/orgs/{orgID}/services/{serviceID}/test-run-result", svcH.CreateTestRunResult)
-	protected("GET", "/api/v1/orgs/{orgID}/services/{serviceID}/test-run-results", svcH.ListTestRunResults)
-	protected("POST", "/api/v1/orgs/{orgID}/services/{serviceID}/test-run-result/{testRunResultID}", svcH.UpdateTestRunResult)
+	requireScope(authz.ScopeServicesEdit, "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/test-pack", svcH.CreateTestPack)
+	requireScope(authz.ScopeServicesView, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/test-packs", svcH.ListTestPacks)
+	requireScope(authz.ScopeServicesEdit, "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/test-pack/{testPackID}", svcH.UpdateTestPack)
+	requireScope(authz.ScopeServicesDelete, "DELETE", "/api/v1/orgs/{orgID}/services/{serviceID}/test-pack/{testPackID}", svcH.DeleteTestPack)
+	requireScope(authz.ScopeServicesEdit, "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/test-case", svcH.CreateTestCase)
+	requireScope(authz.ScopeServicesView, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/test-cases", svcH.ListTestCases)
+	requireScope(authz.ScopeServicesEdit, "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/test-case/{testCaseID}", svcH.UpdateTestCase)
+	requireScope(authz.ScopeServicesDelete, "DELETE", "/api/v1/orgs/{orgID}/services/{serviceID}/test-case/{testCaseID}", svcH.DeleteTestCase)
+	requireScope(authz.ScopeServicesEdit, "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/test-run", svcH.CreateTestRun)
+	requireScope(authz.ScopeServicesView, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/test-runs", svcH.ListTestRuns)
+	requireScope(authz.ScopeServicesView, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/test-runs-summary", svcH.ListTestRunsSummary)
+	requireScope(authz.ScopeServicesView, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/test-run/{testRunID}", svcH.GetTestRun)
+	requireScope(authz.ScopeServicesEdit, "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/test-run/{testRunID}", svcH.UpdateTestRun)
+	requireScope(authz.ScopeServicesEdit, "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/test-run-result", svcH.CreateTestRunResult)
+	requireScope(authz.ScopeServicesView, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/test-run-results", svcH.ListTestRunResults)
+	requireScope(authz.ScopeServicesEdit, "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/test-run-result/{testRunResultID}", svcH.UpdateTestRunResult)
 
 	// ── Maps ──────────────────────────────────────────────────────────────
 	mapH := content.NewMapHandler(s)
-	protected("GET", "/api/v1/orgs/{orgID}/maps", mapH.List)
-	protected("POST", "/api/v1/orgs/{orgID}/maps", mapH.Create)
-	protected("GET", "/api/v1/orgs/{orgID}/maps/{mapID}", mapH.Get)
-	protected("PUT", "/api/v1/orgs/{orgID}/maps/{mapID}", mapH.Update)
-	protected("DELETE", "/api/v1/orgs/{orgID}/maps/{mapID}", mapH.Delete)
+	requireScope(authz.ScopeMapsView, "GET", "/api/v1/orgs/{orgID}/maps", mapH.List)
+	requireScope(authz.ScopeMapsCreate, "POST", "/api/v1/orgs/{orgID}/maps", mapH.Create)
+	requireScope(authz.ScopeMapsView, "GET", "/api/v1/orgs/{orgID}/maps/{mapID}", mapH.Get)
+	requireScope(authz.ScopeMapsEdit, "PUT", "/api/v1/orgs/{orgID}/maps/{mapID}", mapH.Update)
+	requireScope(authz.ScopeMapsDelete, "DELETE", "/api/v1/orgs/{orgID}/maps/{mapID}", mapH.Delete)
 
 	// ── Frames (+ focal points + canvas) ──────────────────────────────────
-	// NOTE: /sync must come before /{frameID} so the literal path wins.
 	frameH := content.NewFrameHandler(s, st)
-	protected("GET", "/api/v1/orgs/{orgID}/maps/{mapID}/frames", frameH.List)
-	protected("POST", "/api/v1/orgs/{orgID}/maps/{mapID}/frames", frameH.Create)
-	protected("POST", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/sync", frameH.Sync)
-	protected("GET", "/api/v1/orgs/{orgID}/frames/{frameID}", frameH.Get)
-	protected("GET", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}", frameH.Get)
-	protected("PUT", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}", frameH.Update)
-	protected("DELETE", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}", frameH.Delete)
-	protected("GET", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points", frameH.ListFocalPoints)
-	protected("POST", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points", frameH.CreateFocalPoint)
-	protected("GET", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}", frameH.GetFocalPoint)
-	protected("PUT", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}", frameH.UpdateFocalPoint)
-	protected("DELETE", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}", frameH.DeleteFocalPoint)
-	protected("GET", "/api/v1/orgs/{orgID}/maps/{mapID}/canvas", frameH.GetCanvas)
-	protected("PUT", "/api/v1/orgs/{orgID}/maps/{mapID}/canvas", frameH.UpsertCanvas)
+	requireScope(authz.ScopeMapsView, "GET", "/api/v1/orgs/{orgID}/maps/{mapID}/frames", frameH.List)
+	requireScope(authz.ScopeMapsEdit, "POST", "/api/v1/orgs/{orgID}/maps/{mapID}/frames", frameH.Create)
+	requireScope(authz.ScopeMapsEdit, "POST", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/sync", frameH.Sync)
+	requireScope(authz.ScopeMapsView, "GET", "/api/v1/orgs/{orgID}/frames/{frameID}", frameH.Get)
+	requireScope(authz.ScopeMapsView, "GET", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}", frameH.Get)
+	requireScope(authz.ScopeMapsEdit, "PUT", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}", frameH.Update)
+	requireScope(authz.ScopeMapsEdit, "DELETE", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}", frameH.Delete)
+	requireScope(authz.ScopeMapsView, "GET", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points", frameH.ListFocalPoints)
+	requireScope(authz.ScopeMapsEdit, "POST", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points", frameH.CreateFocalPoint)
+	requireScope(authz.ScopeMapsView, "GET", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}", frameH.GetFocalPoint)
+	requireScope(authz.ScopeMapsEdit, "PUT", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}", frameH.UpdateFocalPoint)
+	requireScope(authz.ScopeMapsEdit, "DELETE", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}", frameH.DeleteFocalPoint)
+	requireScope(authz.ScopeMapsView, "GET", "/api/v1/orgs/{orgID}/maps/{mapID}/canvas", frameH.GetCanvas)
+	requireScope(authz.ScopeMapsEdit, "PUT", "/api/v1/orgs/{orgID}/maps/{mapID}/canvas", frameH.UpsertCanvas)
 
-	protected("GET", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/groups", frameH.ListGroups)
-	protected("POST", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/groups", frameH.CreateGroup)
-	protected("PUT", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/groups/{groupID}", frameH.UpdateGroup)
-	protected("DELETE", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/groups/{groupID}", frameH.DeleteGroup)
+	requireScope(authz.ScopeMapsView, "GET", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/groups", frameH.ListGroups)
+	requireScope(authz.ScopeMapsEdit, "POST", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/groups", frameH.CreateGroup)
+	requireScope(authz.ScopeMapsEdit, "PUT", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/groups/{groupID}", frameH.UpdateGroup)
+	requireScope(authz.ScopeMapsEdit, "DELETE", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/groups/{groupID}", frameH.DeleteGroup)
 
-	protected("GET", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/links", frameH.ListLinks)
-	protected("POST", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/links", frameH.CreateLink)
-	protected("PUT", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/links/{linkID}", frameH.UpdateLink)
-	protected("DELETE", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/links/{linkID}", frameH.DeleteLink)
+	requireScope(authz.ScopeMapsView, "GET", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/links", frameH.ListLinks)
+	requireScope(authz.ScopeMapsEdit, "POST", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/links", frameH.CreateLink)
+	requireScope(authz.ScopeMapsEdit, "PUT", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/links/{linkID}", frameH.UpdateLink)
+	requireScope(authz.ScopeMapsEdit, "DELETE", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/links/{linkID}", frameH.DeleteLink)
 
-	protected("GET", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta", frameH.ListMeta)
-	protected("POST", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta", frameH.CreateMeta)
-	protected("PUT", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta/{metaID}", frameH.UpdateMeta)
-	protected("DELETE", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta/{metaID}", frameH.DeleteMeta)
+	requireScope(authz.ScopeMapsView, "GET", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta", frameH.ListMeta)
+	requireScope(authz.ScopeMapsEdit, "POST", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta", frameH.CreateMeta)
+	requireScope(authz.ScopeMapsEdit, "PUT", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta/{metaID}", frameH.UpdateMeta)
+	requireScope(authz.ScopeMapsEdit, "DELETE", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta/{metaID}", frameH.DeleteMeta)
 
 	return mux
 }

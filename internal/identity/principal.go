@@ -28,6 +28,12 @@ type Principal struct {
 	// ServiceAccountID is populated only when Kind == PrincipalServiceAccount.
 	ServiceAccountID string
 
+	// Scopes are the permissions granted to a service account, e.g.
+	// "diagrams:create". Populated only when Kind == PrincipalServiceAccount.
+	// User scopes are not stored here; they are resolved per-request from the
+	// user's org role (which depends on the {orgID} route path param).
+	Scopes []string
+
 	// AuthProvider is how the session was created: 'password' or the OAuth
 	// provider instance name. Empty for service accounts.
 	AuthProvider string
