@@ -9,7 +9,7 @@ type ServiceAccount struct {
 	Name        string    `json:"name"`
 	Description string    `json:"description,omitempty"`
 	// Scopes are the named permissions granted to this account's tokens,
-	// e.g. "diagrams:create". See authz.AllScopes for the full catalog.
+	// e.g. "diagrams:write". See authz.AllScopes for the full catalog.
 	Scopes   []string `json:"scopes"`
 	Disabled bool     `json:"disabled"`
 	CreatedBy   string    `json:"createdBy,omitempty"`

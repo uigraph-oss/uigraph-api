@@ -3,7 +3,7 @@ package authz
 import "strings"
 
 // Scope is a named permission in the form "<resource>:<action>" (e.g.
-// "diagrams:create"). Both service-account tokens and human users (via their
+// "diagrams:write"). Both service-account tokens and human users (via their
 // org role, resolved through RoleScopes) are authorized against scopes.
 //
 // A granted scope may also be a per-resource wildcard "<resource>:*", which
@@ -12,46 +12,38 @@ import "strings"
 type Scope string
 
 const (
-	ScopeDiagramsView   Scope = "diagrams:view"
-	ScopeDiagramsCreate Scope = "diagrams:create"
-	ScopeDiagramsEdit   Scope = "diagrams:edit"
-	ScopeDiagramsDelete Scope = "diagrams:delete"
+	ScopeDiagramsRead  Scope = "diagrams:read"
+	ScopeDiagramsWrite Scope = "diagrams:write"
 
-	ScopeMapsView   Scope = "maps:view"
-	ScopeMapsCreate Scope = "maps:create"
-	ScopeMapsEdit   Scope = "maps:edit"
-	ScopeMapsDelete Scope = "maps:delete"
+	ScopeMapsRead  Scope = "maps:read"
+	ScopeMapsWrite Scope = "maps:write"
 
-	ScopeServicesView   Scope = "services:view"
-	ScopeServicesCreate Scope = "services:create"
-	ScopeServicesEdit   Scope = "services:edit"
-	ScopeServicesDelete Scope = "services:delete"
+	ScopeServicesRead  Scope = "services:read"
+	ScopeServicesWrite Scope = "services:write"
 
-	ScopeFoldersView   Scope = "folders:view"
-	ScopeFoldersCreate Scope = "folders:create"
-	ScopeFoldersEdit   Scope = "folders:edit"
-	ScopeFoldersDelete Scope = "folders:delete"
+	ScopeFoldersRead  Scope = "folders:read"
+	ScopeFoldersWrite Scope = "folders:write"
 
-	ScopeMembersView       Scope = "members:view"
+	ScopeMembersRead       Scope = "members:read"
 	ScopeMembersAdd        Scope = "members:add"
 	ScopeMembersRemove     Scope = "members:remove"
 	ScopeMembersUpdateRole Scope = "members:update-role"
 
-	ScopeTeamsView         Scope = "teams:view"
+	ScopeTeamsRead         Scope = "teams:read"
 	ScopeTeamsCreate       Scope = "teams:create"
 	ScopeTeamsEdit         Scope = "teams:edit"
 	ScopeTeamsDelete       Scope = "teams:delete"
 	ScopeTeamsAddMember    Scope = "teams:add-member"
 	ScopeTeamsRemoveMember Scope = "teams:remove-member"
 
-	ScopeServiceAccountsView        Scope = "serviceaccounts:view"
+	ScopeServiceAccountsRead        Scope = "serviceaccounts:read"
 	ScopeServiceAccountsCreate      Scope = "serviceaccounts:create"
 	ScopeServiceAccountsEdit        Scope = "serviceaccounts:edit"
 	ScopeServiceAccountsDelete      Scope = "serviceaccounts:delete"
 	ScopeServiceAccountsCreateToken Scope = "serviceaccounts:create-token"
 	ScopeServiceAccountsRevokeToken Scope = "serviceaccounts:revoke-token"
 
-	ScopeInvitationsView   Scope = "invitations:view"
+	ScopeInvitationsRead   Scope = "invitations:read"
 	ScopeInvitationsCreate Scope = "invitations:create"
 	ScopeInvitationsRevoke Scope = "invitations:revoke"
 	ScopeInvitationsResend Scope = "invitations:resend"
@@ -62,15 +54,15 @@ const (
 
 // AllScopes is the catalog of concrete grantable scopes, returned by the discovery endpoint.
 var AllScopes = []Scope{
-	ScopeDiagramsView, ScopeDiagramsCreate, ScopeDiagramsEdit, ScopeDiagramsDelete,
-	ScopeMapsView, ScopeMapsCreate, ScopeMapsEdit, ScopeMapsDelete,
-	ScopeServicesView, ScopeServicesCreate, ScopeServicesEdit, ScopeServicesDelete,
-	ScopeFoldersView, ScopeFoldersCreate, ScopeFoldersEdit, ScopeFoldersDelete,
-	ScopeMembersView, ScopeMembersAdd, ScopeMembersRemove, ScopeMembersUpdateRole,
-	ScopeTeamsView, ScopeTeamsCreate, ScopeTeamsEdit, ScopeTeamsDelete, ScopeTeamsAddMember, ScopeTeamsRemoveMember,
-	ScopeServiceAccountsView, ScopeServiceAccountsCreate, ScopeServiceAccountsEdit, ScopeServiceAccountsDelete,
+	ScopeDiagramsRead, ScopeDiagramsWrite,
+	ScopeMapsRead, ScopeMapsWrite,
+	ScopeServicesRead, ScopeServicesWrite,
+	ScopeFoldersRead, ScopeFoldersWrite,
+	ScopeMembersRead, ScopeMembersAdd, ScopeMembersRemove, ScopeMembersUpdateRole,
+	ScopeTeamsRead, ScopeTeamsCreate, ScopeTeamsEdit, ScopeTeamsDelete, ScopeTeamsAddMember, ScopeTeamsRemoveMember,
+	ScopeServiceAccountsRead, ScopeServiceAccountsCreate, ScopeServiceAccountsEdit, ScopeServiceAccountsDelete,
 	ScopeServiceAccountsCreateToken, ScopeServiceAccountsRevokeToken,
-	ScopeInvitationsView, ScopeInvitationsCreate, ScopeInvitationsRevoke, ScopeInvitationsResend,
+	ScopeInvitationsRead, ScopeInvitationsCreate, ScopeInvitationsRevoke, ScopeInvitationsResend,
 	ScopeOrgUpdate, ScopeOrgDelete,
 }
 
@@ -79,16 +71,13 @@ var AllScopes = []Scope{
 // The admin role uses per-resource wildcards, which are deterministic.
 var RoleScopes = map[Role][]Scope{
 	RoleViewer: {
-		ScopeDiagramsView, ScopeMapsView, ScopeServicesView, ScopeFoldersView,
-		ScopeMembersView, ScopeTeamsView, ScopeServiceAccountsView, ScopeInvitationsView,
+		ScopeDiagramsRead, ScopeMapsRead, ScopeServicesRead, ScopeFoldersRead,
+		ScopeMembersRead, ScopeTeamsRead, ScopeServiceAccountsRead, ScopeInvitationsRead,
 	},
 	RoleEditor: {
-		ScopeDiagramsView, ScopeMapsView, ScopeServicesView, ScopeFoldersView,
-		ScopeMembersView, ScopeTeamsView, ScopeServiceAccountsView, ScopeInvitationsView,
-		ScopeDiagramsCreate, ScopeDiagramsEdit,
-		ScopeMapsCreate, ScopeMapsEdit,
-		ScopeServicesCreate, ScopeServicesEdit,
-		ScopeFoldersCreate, ScopeFoldersEdit,
+		ScopeDiagramsRead, ScopeMapsRead, ScopeServicesRead, ScopeFoldersRead,
+		ScopeMembersRead, ScopeTeamsRead, ScopeServiceAccountsRead, ScopeInvitationsRead,
+		ScopeDiagramsWrite, ScopeMapsWrite, ScopeServicesWrite, ScopeFoldersWrite,
 	},
 	RoleAdmin: {
 		"diagrams:*", "maps:*", "services:*", "folders:*",

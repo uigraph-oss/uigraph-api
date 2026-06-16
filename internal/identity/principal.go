@@ -29,7 +29,7 @@ type Principal struct {
 	ServiceAccountID string
 
 	// Scopes are the permissions granted to a service account, e.g.
-	// "diagrams:create". Populated only when Kind == PrincipalServiceAccount.
+	// "diagrams:write". Populated only when Kind == PrincipalServiceAccount.
 	// User scopes are not stored here; they are resolved per-request from the
 	// user's org role (which depends on the {orgID} route path param).
 	Scopes []string

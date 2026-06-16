@@ -28,7 +28,7 @@ func NewServiceAccountHandler(s serviceAccountStore) *ServiceAccountHandler {
 type createServiceAccountRequest struct {
 	Name        string   `json:"name"`
 	Description string   `json:"description,omitempty"`
-	Scopes      []string `json:"scopes"` // e.g. ["diagrams:view", "diagrams:create"]
+	Scopes      []string `json:"scopes"` // e.g. ["diagrams:read", "diagrams:write"]
 }
 
 type updateServiceAccountRequest struct {
