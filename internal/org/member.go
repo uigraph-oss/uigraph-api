@@ -12,9 +12,10 @@ type OrgMember struct {
 	UpdatedAt time.Time
 }
 
-// OrgMembershipView pairs an org with the caller's role in it. Used to populate
-// the org switcher.
+// OrgMembershipView pairs an org with the caller's membership in it. Used to
+// populate the org switcher.
 type OrgMembershipView struct {
-	Org  Org
-	Role string
+	Org      Org
+	Role     string    // admin | editor | viewer
+	JoinedAt time.Time // when the membership was created
 }

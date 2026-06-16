@@ -77,15 +77,21 @@ type meResponse struct {
 	Name         string `json:"name"`
 	Login        string `json:"login"`
 	Kind         string `json:"kind"`         // user | service_account
-	IsAdmin      bool   `json:"isAdmin"`      // true when user has server_admin role
+	Role         string `json:"role"`         // global server role: 'user' | 'server_admin'
 	AuthProvider string `json:"authProvider"` // 'password' or OAuth provider instance name
 }
 
 type myOrg struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	Slug string `json:"slug"`
-	Role string `json:"role"`
+	ID         string     `json:"id"`
+	Name       string     `json:"name"`
+	Slug       string     `json:"slug"`
+	Membership membership `json:"membership"`
+}
+
+// membership is the caller's membership within an org.
+type membership struct {
+	Role     string    `json:"role"` // admin | editor | viewer
+	JoinedAt time.Time `json:"joinedAt"`
 }
 
 type providersResponse struct {
@@ -403,7 +409,7 @@ func (h *SessionHandler) Me(w http.ResponseWriter, r *http.Request) {
 		Name:         u.Name,
 		Login:        u.Login,
 		Kind:         "user",
-		IsAdmin:      u.Role == "server_admin",
+		Role:         u.Role,
 		AuthProvider: p.AuthProvider,
 	})
 }
@@ -428,7 +434,10 @@ func (h *SessionHandler) MyOrgs(w http.ResponseWriter, r *http.Request) {
 			ID:   m.Org.ID,
 			Name: m.Org.Name,
 			Slug: m.Org.Slug,
-			Role: m.Role,
+			Membership: membership{
+				Role:     m.Role,
+				JoinedAt: m.JoinedAt,
+			},
 		})
 	}
 	httputil.JSON(w, http.StatusOK, map[string]any{"orgs": orgs})

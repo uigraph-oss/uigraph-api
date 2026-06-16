@@ -2,8 +2,10 @@ package auth
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/uigraph/app/internal/authz"
 	"github.com/uigraph/app/internal/httputil"
 	"github.com/uigraph/app/internal/identity"
 	"github.com/uigraph/app/internal/store"
@@ -24,15 +26,27 @@ func NewServiceAccountHandler(s serviceAccountStore) *ServiceAccountHandler {
 // ── Request / Response types ─────────────────────────────────────────────────
 
 type createServiceAccountRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
-	Role        string `json:"role"` // admin | editor | viewer
+	Name        string   `json:"name"`
+	Description string   `json:"description,omitempty"`
+	Scopes      []string `json:"scopes"` // e.g. ["diagrams:view", "diagrams:create"]
 }
 
 type updateServiceAccountRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
-	Disabled    bool   `json:"disabled"`
+	Name        string   `json:"name"`
+	Description string   `json:"description,omitempty"`
+	Scopes      []string `json:"scopes"`
+	Disabled    bool     `json:"disabled"`
+}
+
+// invalidScope returns the first scope in the list that is not a known grantable
+// scope, or "" when every scope is valid.
+func invalidScope(scopes []string) string {
+	for _, s := range scopes {
+		if !authz.ValidScope(s) {
+			return s
+		}
+	}
+	return ""
 }
 
 type createTokenRequest struct {
@@ -70,8 +84,12 @@ func (h *ServiceAccountHandler) Create(w http.ResponseWriter, r *http.Request) {
 		httputil.BadRequest(w, "invalid JSON")
 		return
 	}
-	if req.Name == "" || req.Role == "" {
-		httputil.BadRequest(w, "name and role are required")
+	if req.Name == "" {
+		httputil.BadRequest(w, "name is required")
+		return
+	}
+	if bad := invalidScope(req.Scopes); bad != "" {
+		httputil.BadRequest(w, "unknown scope: "+bad)
 		return
 	}
 	sa := identity.ServiceAccount{
@@ -79,7 +97,7 @@ func (h *ServiceAccountHandler) Create(w http.ResponseWriter, r *http.Request) {
 		OrgID:       orgID,
 		Name:        req.Name,
 		Description: req.Description,
-		Role:        req.Role,
+		Scopes:      req.Scopes,
 	}
 	if err := h.store.CreateServiceAccount(r.Context(), sa); err != nil {
 		httputil.Error(w, r, err)
@@ -117,10 +135,15 @@ func (h *ServiceAccountHandler) Update(w http.ResponseWriter, r *http.Request) {
 		httputil.BadRequest(w, "name is required")
 		return
 	}
+	if bad := invalidScope(req.Scopes); bad != "" {
+		httputil.BadRequest(w, "unknown scope: "+bad)
+		return
+	}
 	sa := identity.ServiceAccount{
 		ID:          saID,
 		Name:        req.Name,
 		Description: req.Description,
+		Scopes:      req.Scopes,
 		Disabled:    req.Disabled,
 	}
 	if err := h.store.UpdateServiceAccount(r.Context(), sa); err != nil {
@@ -180,7 +203,14 @@ func (h *ServiceAccountHandler) CreateToken(w http.ResponseWriter, r *http.Reque
 		Prefix:           identity.Prefix(plaintext),
 		Hash:             hash,
 	}
-	// TODO: parse req.ExpiresAt into tok.ExpiresAt
+	if req.ExpiresAt != nil && *req.ExpiresAt != "" {
+		exp, perr := time.Parse(time.RFC3339, *req.ExpiresAt)
+		if perr != nil {
+			httputil.BadRequest(w, "expiresAt must be an RFC3339 timestamp")
+			return
+		}
+		tok.ExpiresAt = &exp
+	}
 
 	if err := h.store.CreateToken(r.Context(), tok); err != nil {
 		httputil.Error(w, r, err)
@@ -203,4 +233,11 @@ func (h *ServiceAccountHandler) RevokeToken(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// ListScopes returns the catalog of grantable scopes, shared by role and
+// service-account assignment.
+// GET /api/v1/orgs/{orgID}/scopes
+func (h *ServiceAccountHandler) ListScopes(w http.ResponseWriter, r *http.Request) {
+	httputil.JSON(w, http.StatusOK, map[string]any{"scopes": authz.AllScopes})
 }

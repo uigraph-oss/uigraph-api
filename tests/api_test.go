@@ -374,9 +374,9 @@ func TestTeams_CRUD(t *testing.T) {
 func TestServiceAccounts_CreateAndToken(t *testing.T) {
 	name := fmt.Sprintf("sa-%d", time.Now().UnixNano())
 
-	// create service account
+	// create service account with a single read-only scope
 	sa := mustDo(t, "POST", "/api/v1/orgs/"+orgID+"/service-accounts", adminToken, M{
-		"name": name, "role": "viewer",
+		"name": name, "scopes": []string{"diagrams:view"},
 	})
 	saID := str(sa, "id")
 	if saID == "" {
@@ -398,6 +398,23 @@ func TestServiceAccounts_CreateAndToken(t *testing.T) {
 	resp, _ := http.DefaultClient.Do(req)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("service account token auth: want 200, got %d", resp.StatusCode)
+	}
+
+	// granted scope (diagrams:view) allows listing diagrams
+	listReq, _ := http.NewRequest("GET", srv.URL+"/api/v1/orgs/"+orgID+"/diagrams", nil)
+	listReq.Header.Set("X-API-Key", plaintext)
+	listResp, _ := http.DefaultClient.Do(listReq)
+	if listResp.StatusCode != http.StatusOK {
+		t.Fatalf("scoped diagrams:view list: want 200, got %d", listResp.StatusCode)
+	}
+
+	// missing scope (diagrams:create) is denied with 403
+	createReq, _ := http.NewRequest("POST", srv.URL+"/api/v1/orgs/"+orgID+"/diagrams", bytes.NewReader([]byte(`{"name":"x","content":"{}"}`)))
+	createReq.Header.Set("X-API-Key", plaintext)
+	createReq.Header.Set("Content-Type", "application/json")
+	createResp, _ := http.DefaultClient.Do(createReq)
+	if createResp.StatusCode != http.StatusForbidden {
+		t.Fatalf("unscoped diagrams:create: want 403, got %d", createResp.StatusCode)
 	}
 
 	// revoke token

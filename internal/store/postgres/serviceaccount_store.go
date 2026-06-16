@@ -7,29 +7,31 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lib/pq"
 	"github.com/uigraph/app/internal/identity"
 )
 
-const saCols = `id, org_id, name, COALESCE(description,''), role, disabled,
+const saCols = `id, org_id, name, COALESCE(description,''), scopes, disabled,
 	COALESCE(created_by::text,''), created_at, updated_at`
 
 func scanSA(row interface{ Scan(...any) error }) (identity.ServiceAccount, error) {
 	var sa identity.ServiceAccount
-	return sa, row.Scan(
-		&sa.ID, &sa.OrgID, &sa.Name, &sa.Description, &sa.Role, &sa.Disabled,
+	err := row.Scan(
+		&sa.ID, &sa.OrgID, &sa.Name, &sa.Description, pq.Array(&sa.Scopes), &sa.Disabled,
 		&sa.CreatedBy, &sa.CreatedAt, &sa.UpdatedAt,
 	)
+	return sa, err
 }
 
 func (d *DB) CreateServiceAccount(ctx context.Context, sa identity.ServiceAccount) error {
 	const q = `
 		INSERT INTO service_accounts
-		    (id, org_id, name, description, role, disabled, created_by, created_at, updated_at)
+		    (id, org_id, name, description, scopes, disabled, created_by, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, '')::uuid, $8, $9)`
 
 	now := time.Now().UTC()
 	_, err := d.db.ExecContext(ctx, q,
-		sa.ID, sa.OrgID, sa.Name, sa.Description, sa.Role, sa.Disabled,
+		sa.ID, sa.OrgID, sa.Name, sa.Description, pq.Array(sa.Scopes), sa.Disabled,
 		sa.CreatedBy, now, now,
 	)
 	if err != nil {
@@ -74,11 +76,12 @@ func (d *DB) UpdateServiceAccount(ctx context.Context, sa identity.ServiceAccoun
 		UPDATE service_accounts
 		SET    name        = $1,
 		       description = $2,
-		       disabled    = $3,
+		       scopes      = $3,
+		       disabled    = $4,
 		       updated_at  = NOW()
-		WHERE  id = $4 AND deleted_at IS NULL`
+		WHERE  id = $5 AND deleted_at IS NULL`
 
-	if _, err := d.db.ExecContext(ctx, q, sa.Name, sa.Description, sa.Disabled, sa.ID); err != nil {
+	if _, err := d.db.ExecContext(ctx, q, sa.Name, sa.Description, pq.Array(sa.Scopes), sa.Disabled, sa.ID); err != nil {
 		return fmt.Errorf("postgres: UpdateServiceAccount: %w", err)
 	}
 	return nil
