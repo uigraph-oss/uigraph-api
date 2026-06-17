@@ -112,7 +112,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	protected("GET", "/api/v1/auth/orgs", sessionH.MyOrgs)
 
 	// Users (global — server-admin only)
-	userH := auth.NewUserHandler(s)
+	userH := auth.NewUserHandler(s, c)
 	serverAdmin("GET", "/api/v1/users", userH.List)
 	serverAdmin("POST", "/api/v1/users", userH.Create)
 	serverAdmin("GET", "/api/v1/users/{userID}", userH.Get)
@@ -128,7 +128,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	requireScope(authz.ScopeOrgDelete, "DELETE", "/api/v1/orgs/{orgID}", orgH.Delete)
 
 	// Scopes catalog — shared by role assignment and service-account assignment.
-	saH := auth.NewServiceAccountHandler(s)
+	saH := auth.NewServiceAccountHandler(s, c)
 	requireScope(authz.ScopeMembersRead, "GET", "/api/v1/orgs/{orgID}/scopes", saH.ListScopes)
 
 	// Members
@@ -190,6 +190,12 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	requireScope(authz.ScopeFoldersRead, "GET", "/api/v1/orgs/{orgID}/folders/{folderID}", folderH.Get)
 	requireScope(authz.ScopeFoldersWrite, "PUT", "/api/v1/orgs/{orgID}/folders/{folderID}", folderH.Update)
 	requireScope(authz.ScopeFoldersWrite, "DELETE", "/api/v1/orgs/{orgID}/folders/{folderID}", folderH.Delete)
+
+	// ── Actors ────────────────────────────────────────────────────────────
+	// Resolves created_by / updated_by / deleted_by ids to public user or
+	// service-account info. Available to any authenticated principal.
+	actorH := content.NewActorHandler(s, c)
+	protected("GET", "/api/v1/orgs/{orgID}/actors", actorH.Resolve)
 
 	// ── Diagrams ──────────────────────────────────────────────────────────
 	diagramH := content.NewDiagramHandler(s, st, c)

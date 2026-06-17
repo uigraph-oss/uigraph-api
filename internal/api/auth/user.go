@@ -6,6 +6,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/uigraph/app/internal/cache"
 	"github.com/uigraph/app/internal/httputil"
 	"github.com/uigraph/app/internal/org"
 	"github.com/uigraph/app/internal/store"
@@ -13,10 +14,11 @@ import (
 
 type UserHandler struct {
 	store org.UserStore
+	cache cache.Client // may be nil
 }
 
-func NewUserHandler(s org.UserStore) *UserHandler {
-	return &UserHandler{store: s}
+func NewUserHandler(s org.UserStore, c cache.Client) *UserHandler {
+	return &UserHandler{store: s, cache: c}
 }
 
 // ── Request / Response types ─────────────────────────────────────────────────
@@ -155,6 +157,9 @@ func (h *UserHandler) Update(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, r, err)
 		return
 	}
+	if h.cache != nil {
+		_ = h.cache.Del(r.Context(), cache.ActorKey(userID))
+	}
 	httputil.JSON(w, http.StatusOK, userToResponse(*u))
 }
 
@@ -165,6 +170,9 @@ func (h *UserHandler) Disable(w http.ResponseWriter, r *http.Request) {
 	if err := h.store.DisableUser(r.Context(), userID); err != nil {
 		httputil.Error(w, r, err)
 		return
+	}
+	if h.cache != nil {
+		_ = h.cache.Del(r.Context(), cache.ActorKey(userID))
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

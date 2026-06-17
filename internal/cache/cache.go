@@ -25,6 +25,11 @@ func DiagramContentKey(diagramID string) string {
 	return "diagram:content:" + diagramID
 }
 
+// ActorKey returns the cache key for a resolved actor (user or service account).
+func ActorKey(id string) string {
+	return "actor:" + id
+}
+
 type redisClient struct {
 	rc *redis.Client
 }
