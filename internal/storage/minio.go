@@ -25,6 +25,7 @@ type Config struct {
 	Bucket    string
 	AccessKey string
 	SecretKey string
+	Region    string
 }
 
 // New creates a storage client for the given backend.
@@ -45,6 +46,7 @@ func New(cfg Config) (Client, error) {
 	mc, err := minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""),
 		Secure: secure,
+		Region: cfg.Region,
 	})
 	if err != nil {
 		return nil, err

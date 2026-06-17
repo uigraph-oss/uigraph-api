@@ -21,6 +21,7 @@ type Config struct {
 	StorageAccessKey string
 	StorageSecretKey string
 	StorageEndpoint  string
+	StorageRegion    string
 
 	// Vector store
 	VectorBackend string // qdrant | s3vectors
@@ -62,6 +63,7 @@ func Load() (*Config, error) {
 		StorageAccessKey: env("STORAGE_ACCESS_KEY", ""),
 		StorageSecretKey: env("STORAGE_SECRET_KEY", ""),
 		StorageEndpoint:  env("STORAGE_ENDPOINT", ""),
+		StorageRegion:    env("STORAGE_REGION", "us-east-1"),
 		VectorBackend:    env("VECTOR_BACKEND", "qdrant"),
 		QdrantURL:        env("QDRANT_URL", "http://qdrant:6333"),
 		EmbeddingBackend: env("EMBEDDING_BACKEND", "ollama"),

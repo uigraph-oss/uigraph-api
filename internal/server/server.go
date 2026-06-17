@@ -49,6 +49,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 		Bucket:    cfg.StorageBucket,
 		AccessKey: cfg.StorageAccessKey,
 		SecretKey: cfg.StorageSecretKey,
+		Region:    cfg.StorageRegion,
 	})
 	if err != nil {
 		return fmt.Errorf("server: init storage: %w", err)
