@@ -16,24 +16,39 @@ const userCols = `
 	must_change_password,
 	disabled,
 	role,
+	avatar_asset_id,
 	last_seen_at, created_at, updated_at`
 
 func scanUser(row interface{ Scan(...any) error }) (org.User, error) {
 	var u org.User
 	var lastSeen sql.NullTime
+	var avatarAssetID sql.NullString
 	err := row.Scan(
 		&u.ID, &u.Email, &u.Name, &u.Login,
 		&u.PasswordHash, &u.MustChangePassword,
 		&u.Disabled, &u.Role,
+		&avatarAssetID,
 		&lastSeen, &u.CreatedAt, &u.UpdatedAt,
 	)
 	if err != nil {
 		return org.User{}, err
 	}
+	if avatarAssetID.Valid {
+		u.AvatarAssetID = &avatarAssetID.String
+	}
 	if lastSeen.Valid {
 		u.LastSeenAt = &lastSeen.Time
 	}
 	return u, nil
+}
+
+// SetUserAvatar sets or clears (assetID nil) a user's avatar asset id.
+func (d *DB) SetUserAvatar(ctx context.Context, userID string, assetID *string) error {
+	const q = `UPDATE users SET avatar_asset_id = $1, updated_at = NOW() WHERE id = $2`
+	if _, err := d.db.ExecContext(ctx, q, assetID, userID); err != nil {
+		return fmt.Errorf("postgres: SetUserAvatar: %w", err)
+	}
+	return nil
 }
 
 func (d *DB) CreateUser(ctx context.Context, u org.User) error {

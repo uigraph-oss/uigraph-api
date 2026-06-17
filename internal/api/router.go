@@ -8,6 +8,7 @@ import (
 	"github.com/uigraph/app/internal/api/auth"
 	"github.com/uigraph/app/internal/api/content"
 	"github.com/uigraph/app/internal/api/health"
+	"github.com/uigraph/app/internal/asset"
 	"github.com/uigraph/app/internal/authz"
 	"github.com/uigraph/app/internal/cache"
 	"github.com/uigraph/app/internal/config"
@@ -40,7 +41,8 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	componentIconH := content.NewComponentIconHandler(st)
 	mux.HandleFunc("GET /api/v1/component-icons/{slug}", componentIconH.Get)
 
-	sessionH := auth.NewSessionHandler(s, cfg.PublicURL, cfg.FrontendURL)
+	assetResolver := asset.New(st, c)
+	sessionH := auth.NewSessionHandler(s, assetResolver, cfg.PublicURL, cfg.FrontendURL)
 	mux.HandleFunc("POST /api/v1/auth/login", sessionH.Login)
 	mux.HandleFunc("GET /api/v1/auth/providers", sessionH.ListProviders)
 	mux.HandleFunc("GET /api/v1/auth/login/{provider}", sessionH.InitiateOAuth)
@@ -111,6 +113,11 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	protected("GET", "/api/v1/auth/me", sessionH.Me)
 	protected("GET", "/api/v1/auth/orgs", sessionH.MyOrgs)
 
+	// Avatars — a user sets their own; a service account's is set by an admin (below).
+	avatarH := content.NewAvatarHandler(s, st, c)
+	protected("PUT", "/api/v1/users/me/avatar", avatarH.PutUserAvatar)
+	protected("DELETE", "/api/v1/users/me/avatar", avatarH.DeleteUserAvatar)
+
 	// Users (global — server-admin only)
 	userH := auth.NewUserHandler(s, c)
 	serverAdmin("GET", "/api/v1/users", userH.List)
@@ -161,6 +168,8 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	requireScope(authz.ScopeServiceAccountsCreate, "POST", "/api/v1/orgs/{orgID}/service-accounts", saH.Create)
 	requireScope(authz.ScopeServiceAccountsRead, "GET", "/api/v1/orgs/{orgID}/service-accounts/{saID}", saH.Get)
 	requireScope(authz.ScopeServiceAccountsEdit, "PUT", "/api/v1/orgs/{orgID}/service-accounts/{saID}", saH.Update)
+	requireScope(authz.ScopeServiceAccountsEdit, "PUT", "/api/v1/orgs/{orgID}/service-accounts/{saID}/avatar", avatarH.PutServiceAccountAvatar)
+	requireScope(authz.ScopeServiceAccountsEdit, "DELETE", "/api/v1/orgs/{orgID}/service-accounts/{saID}/avatar", avatarH.DeleteServiceAccountAvatar)
 	requireScope(authz.ScopeServiceAccountsDelete, "DELETE", "/api/v1/orgs/{orgID}/service-accounts/{saID}", saH.Delete)
 	requireScope(authz.ScopeServiceAccountsRead, "GET", "/api/v1/orgs/{orgID}/service-accounts/{saID}/tokens", saH.ListTokens)
 	requireScope(authz.ScopeServiceAccountsCreateToken, "POST", "/api/v1/orgs/{orgID}/service-accounts/{saID}/tokens", saH.CreateToken)
@@ -194,7 +203,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	// ── Actors ────────────────────────────────────────────────────────────
 	// Resolves created_by / updated_by / deleted_by ids to public user or
 	// service-account info. Available to any authenticated principal.
-	actorH := content.NewActorHandler(s, c)
+	actorH := content.NewActorHandler(s, c, st)
 	protected("GET", "/api/v1/orgs/{orgID}/actors", actorH.Resolve)
 
 	// ── Assets ────────────────────────────────────────────────────────────

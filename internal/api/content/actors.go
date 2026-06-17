@@ -5,7 +5,9 @@ import (
 	"strings"
 
 	"github.com/uigraph/app/internal/actor"
+	"github.com/uigraph/app/internal/asset"
 	"github.com/uigraph/app/internal/cache"
+	"github.com/uigraph/app/internal/storage"
 	"github.com/uigraph/app/internal/store"
 )
 
@@ -16,8 +18,8 @@ type ActorHandler struct {
 	resolver *actor.Resolver
 }
 
-func NewActorHandler(s store.Store, c cache.Client) *ActorHandler {
-	return &ActorHandler{resolver: actor.New(s, c)}
+func NewActorHandler(s store.Store, c cache.Client, st storage.Client) *ActorHandler {
+	return &ActorHandler{resolver: actor.New(s, c, asset.New(st, c))}
 }
 
 // Resolve handles GET /api/v1/orgs/{orgID}/actors?ids=a,b,c and returns a map

@@ -74,6 +74,14 @@ func FrameScreenshotAssetID(frameID string) string {
 	return "frame_" + frameID
 }
 
+func UserAvatarAssetID(userID string) string {
+	return "user_" + userID
+}
+
+func ServiceAccountAvatarAssetID(saID string) string {
+	return "sa_" + saID
+}
+
 // ComponentIconKey returns the object key for a native component icon SVG.
 func ComponentIconKey(slug string) string {
 	return "system/components/icons/" + slug + ".svg"

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/uigraph/app/internal/asset"
 	"github.com/uigraph/app/internal/cache"
 	"github.com/uigraph/app/internal/store"
 )
@@ -42,21 +43,43 @@ type Actor struct {
 	Name     string `json:"name"`
 	Email    string `json:"email,omitempty"`
 	Disabled bool   `json:"disabled"`
+	// AvatarAssetID is the stable storage asset id of the avatar; it is cached.
+	AvatarAssetID string `json:"avatarAssetId,omitempty"`
+	// AvatarURL is a freshly presigned URL minted per response. It is never
+	// cached on the actor (the actor cache outlives a presigned URL), so it is
+	// always filled after the actor cache read/write via the asset resolver.
+	AvatarURL string `json:"avatarUrl,omitempty"`
 }
 
 // Resolver resolves actor ids against the store, cached in Redis.
 type Resolver struct {
-	store store.Store
-	cache cache.Client // may be nil
+	store  store.Store
+	cache  cache.Client   // may be nil
+	assets *asset.Resolver // presigns avatar URLs; may be nil
 }
 
-func New(s store.Store, c cache.Client) *Resolver {
-	return &Resolver{store: s, cache: c}
+func New(s store.Store, c cache.Client, assets *asset.Resolver) *Resolver {
+	return &Resolver{store: s, cache: c, assets: assets}
 }
 
 // Resolve returns the actor for id, or (nil, nil) if id matches no user or
-// service account.
+// service account. The presigned AvatarURL is filled here, outside the actor
+// cache, so it never goes stale relative to its presign expiry.
 func (r *Resolver) Resolve(ctx context.Context, id string) (*Actor, error) {
+	a, err := r.resolveCached(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if a != nil && a.AvatarAssetID != "" && r.assets != nil {
+		if u, uErr := r.assets.Resolve(ctx, a.AvatarAssetID); uErr == nil {
+			a.AvatarURL = u
+		}
+	}
+	return a, nil
+}
+
+// resolveCached returns the bare actor (no AvatarURL) from cache or store.
+func (r *Resolver) resolveCached(ctx context.Context, id string) (*Actor, error) {
 	if r.cache != nil {
 		v, err := r.cache.Get(ctx, cache.ActorKey(id))
 		if err == nil && v == nullSentinel {
@@ -115,13 +138,17 @@ func (r *Resolver) lookup(ctx context.Context, id string) (*Actor, error) {
 		return nil, err
 	}
 	if u != nil {
-		return &Actor{
+		a := &Actor{
 			ID:       u.ID,
 			Type:     KindUser,
 			Name:     u.Name,
 			Email:    u.Email,
 			Disabled: u.Disabled,
-		}, nil
+		}
+		if u.AvatarAssetID != nil {
+			a.AvatarAssetID = *u.AvatarAssetID
+		}
+		return a, nil
 	}
 
 	sa, err := r.store.GetServiceAccount(ctx, id)
@@ -129,12 +156,16 @@ func (r *Resolver) lookup(ctx context.Context, id string) (*Actor, error) {
 		return nil, err
 	}
 	if sa != nil {
-		return &Actor{
+		a := &Actor{
 			ID:       sa.ID,
 			Type:     KindServiceAccount,
 			Name:     sa.Name,
 			Disabled: sa.Disabled,
-		}, nil
+		}
+		if sa.AvatarAssetID != nil {
+			a.AvatarAssetID = *sa.AvatarAssetID
+		}
+		return a, nil
 	}
 
 	return nil, nil

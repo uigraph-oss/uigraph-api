@@ -9,6 +9,8 @@ type ServiceAccountStore interface {
 	ListServiceAccounts(ctx context.Context, orgID string) ([]ServiceAccount, error)
 	UpdateServiceAccount(ctx context.Context, sa ServiceAccount) error
 	DeleteServiceAccount(ctx context.Context, id string) error
+	// SetServiceAccountAvatar sets or clears (assetID nil) a service account's avatar asset id.
+	SetServiceAccountAvatar(ctx context.Context, saID string, assetID *string) error
 
 	CreateToken(ctx context.Context, t Token) error
 	// GetTokenByPrefix returns the token whose prefix matches, or (nil, nil) if not found.

@@ -14,6 +14,8 @@ type UserStore interface {
 	AnyUserExists(ctx context.Context) (bool, error)
 	UpdateUser(ctx context.Context, u User) error
 	DisableUser(ctx context.Context, id string) error
+	// SetUserAvatar sets or clears (assetID nil) a user's avatar asset id.
+	SetUserAvatar(ctx context.Context, userID string, assetID *string) error
 	// TouchUser updates last_seen_at to now.
 	TouchUser(ctx context.Context, id string) error
 }

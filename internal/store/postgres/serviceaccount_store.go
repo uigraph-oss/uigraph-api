@@ -12,15 +12,30 @@ import (
 )
 
 const saCols = `id, org_id, name, COALESCE(description,''), scopes, disabled,
+	avatar_asset_id,
 	COALESCE(created_by::text,''), created_at, updated_at`
 
 func scanSA(row interface{ Scan(...any) error }) (identity.ServiceAccount, error) {
 	var sa identity.ServiceAccount
+	var avatarAssetID sql.NullString
 	err := row.Scan(
 		&sa.ID, &sa.OrgID, &sa.Name, &sa.Description, pq.Array(&sa.Scopes), &sa.Disabled,
+		&avatarAssetID,
 		&sa.CreatedBy, &sa.CreatedAt, &sa.UpdatedAt,
 	)
+	if avatarAssetID.Valid {
+		sa.AvatarAssetID = &avatarAssetID.String
+	}
 	return sa, err
+}
+
+// SetServiceAccountAvatar sets or clears (assetID nil) a service account's avatar asset id.
+func (d *DB) SetServiceAccountAvatar(ctx context.Context, saID string, assetID *string) error {
+	const q = `UPDATE service_accounts SET avatar_asset_id = $1, updated_at = NOW() WHERE id = $2 AND deleted_at IS NULL`
+	if _, err := d.db.ExecContext(ctx, q, assetID, saID); err != nil {
+		return fmt.Errorf("postgres: SetServiceAccountAvatar: %w", err)
+	}
+	return nil
 }
 
 func (d *DB) CreateServiceAccount(ctx context.Context, sa identity.ServiceAccount) error {
