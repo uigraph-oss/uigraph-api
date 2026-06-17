@@ -197,6 +197,12 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	actorH := content.NewActorHandler(s, c)
 	protected("GET", "/api/v1/orgs/{orgID}/actors", actorH.Resolve)
 
+	// ── Assets ────────────────────────────────────────────────────────────
+	// Resolves an asset id (preview_asset_id / asset_id / screenshot_asset_id)
+	// to a presigned GET URL. Available to any authenticated principal.
+	assetH := content.NewAssetHandler(st, c)
+	protected("GET", "/api/v1/orgs/{orgID}/assets/urls", assetH.Resolve)
+
 	// ── Diagrams ──────────────────────────────────────────────────────────
 	diagramH := content.NewDiagramHandler(s, st, c)
 	requireScope(authz.ScopeDiagramsRead, "GET", "/api/v1/orgs/{orgID}/diagrams", diagramH.List)

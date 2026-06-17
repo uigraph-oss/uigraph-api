@@ -30,6 +30,11 @@ func ActorKey(id string) string {
 	return "actor:" + id
 }
 
+// AssetURLKey returns the cache key for a presigned URL of an asset id.
+func AssetURLKey(id string) string {
+	return "asset:url:" + id
+}
+
 type redisClient struct {
 	rc *redis.Client
 }

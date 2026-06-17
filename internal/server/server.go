@@ -44,12 +44,13 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	}
 
 	storageClient, err := storage.New(storage.Config{
-		Backend:   cfg.StorageBackend,
-		Endpoint:  cfg.StorageEndpoint,
-		Bucket:    cfg.StorageBucket,
-		AccessKey: cfg.StorageAccessKey,
-		SecretKey: cfg.StorageSecretKey,
-		Region:    cfg.StorageRegion,
+		Backend:        cfg.StorageBackend,
+		Endpoint:       cfg.StorageEndpoint,
+		PublicEndpoint: cfg.StoragePublicEndpoint,
+		Bucket:         cfg.StorageBucket,
+		AccessKey:      cfg.StorageAccessKey,
+		SecretKey:      cfg.StorageSecretKey,
+		Region:         cfg.StorageRegion,
 	})
 	if err != nil {
 		return fmt.Errorf("server: init storage: %w", err)
