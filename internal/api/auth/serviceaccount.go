@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/uigraph/app/internal/authz"
+	"github.com/uigraph/app/internal/cache"
 	"github.com/uigraph/app/internal/httputil"
 	"github.com/uigraph/app/internal/identity"
 	"github.com/uigraph/app/internal/store"
@@ -17,10 +18,11 @@ type serviceAccountStore interface {
 
 type ServiceAccountHandler struct {
 	store serviceAccountStore
+	cache cache.Client // may be nil
 }
 
-func NewServiceAccountHandler(s serviceAccountStore) *ServiceAccountHandler {
-	return &ServiceAccountHandler{store: s}
+func NewServiceAccountHandler(s serviceAccountStore, c cache.Client) *ServiceAccountHandler {
+	return &ServiceAccountHandler{store: s, cache: c}
 }
 
 // ── Request / Response types ─────────────────────────────────────────────────
@@ -150,6 +152,9 @@ func (h *ServiceAccountHandler) Update(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, r, err)
 		return
 	}
+	if h.cache != nil {
+		_ = h.cache.Del(r.Context(), cache.ActorKey(saID))
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -160,6 +165,9 @@ func (h *ServiceAccountHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	if err := h.store.DeleteServiceAccount(r.Context(), saID); err != nil {
 		httputil.Error(w, r, err)
 		return
+	}
+	if h.cache != nil {
+		_ = h.cache.Del(r.Context(), cache.ActorKey(saID))
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

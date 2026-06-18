@@ -12,6 +12,7 @@ type User struct {
 	MustChangePassword bool
 	Disabled           bool
 	Role               string // "user" | "server_admin"
+	AvatarAssetID      *string
 	LastSeenAt         *time.Time
 	CreatedAt          time.Time
 	UpdatedAt          time.Time

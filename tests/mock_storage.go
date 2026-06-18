@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"time"
 )
 
 // testStorage is a package-level in-memory storage instance shared across tests.
@@ -50,7 +51,7 @@ func (m *mockStorage) Delete(_ context.Context, key string) error {
 	return nil
 }
 
-func (m *mockStorage) PresignURL(_ context.Context, key string) (string, error) {
+func (m *mockStorage) PresignURL(_ context.Context, key string, _ time.Duration) (string, error) {
 	return "http://mock-storage/" + key, nil
 }
 

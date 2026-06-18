@@ -5,6 +5,7 @@ package storage
 import (
 	"context"
 	"io"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -21,8 +22,8 @@ type Client interface {
 	Download(ctx context.Context, key string) (io.ReadCloser, error)
 	// Delete removes key. Not found is not an error.
 	Delete(ctx context.Context, key string) error
-	// PresignURL returns a short-lived (15 min) GET URL for key.
-	PresignURL(ctx context.Context, key string) (string, error)
+	// PresignURL returns a presigned GET URL for key, valid for ttl.
+	PresignURL(ctx context.Context, key string, ttl time.Duration) (string, error)
 	// PresignPutURL returns a short-lived (15 min) PUT URL for uploading to key.
 	PresignPutURL(ctx context.Context, key string) (string, error)
 }
@@ -71,6 +72,14 @@ func DiagramThumbnailAssetID(diagramID string) string {
 
 func FrameScreenshotAssetID(frameID string) string {
 	return "frame_" + frameID
+}
+
+func UserAvatarAssetID(userID string) string {
+	return "user_" + userID
+}
+
+func ServiceAccountAvatarAssetID(saID string) string {
+	return "sa_" + saID
 }
 
 // ComponentIconKey returns the object key for a native component icon SVG.

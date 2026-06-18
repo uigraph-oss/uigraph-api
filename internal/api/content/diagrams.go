@@ -193,6 +193,10 @@ func (h *DiagramHandler) UpdateThumbnail(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	if h.cache != nil {
+		_ = h.cache.Del(r.Context(), cache.AssetURLKey(assetID))
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"assetId":            assetID,
 		"previewContentHash": hash,

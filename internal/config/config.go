@@ -21,6 +21,10 @@ type Config struct {
 	StorageAccessKey string
 	StorageSecretKey string
 	StorageEndpoint  string
+	// StoragePublicEndpoint is the browser-reachable host used to sign presigned
+	// asset URLs (e.g. http://localhost:9000). Empty falls back to StorageEndpoint.
+	StoragePublicEndpoint string
+	StorageRegion         string
 
 	// Vector store
 	VectorBackend string // qdrant | s3vectors
@@ -61,7 +65,9 @@ func Load() (*Config, error) {
 		StorageBucket:    env("STORAGE_BUCKET", "uigraph"),
 		StorageAccessKey: env("STORAGE_ACCESS_KEY", ""),
 		StorageSecretKey: env("STORAGE_SECRET_KEY", ""),
-		StorageEndpoint:  env("STORAGE_ENDPOINT", ""),
+		StorageEndpoint:       env("STORAGE_ENDPOINT", ""),
+		StoragePublicEndpoint: env("STORAGE_PUBLIC_ENDPOINT", ""),
+		StorageRegion:         env("STORAGE_REGION", "us-east-1"),
 		VectorBackend:    env("VECTOR_BACKEND", "qdrant"),
 		QdrantURL:        env("QDRANT_URL", "http://qdrant:6333"),
 		EmbeddingBackend: env("EMBEDDING_BACKEND", "ollama"),

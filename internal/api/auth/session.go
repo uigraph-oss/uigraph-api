@@ -11,6 +11,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/uigraph/app/internal/asset"
 	"github.com/uigraph/app/internal/httputil"
 	"github.com/uigraph/app/internal/identity"
 	authmw "github.com/uigraph/app/internal/middleware"
@@ -37,16 +38,31 @@ type sessionStore interface {
 
 type SessionHandler struct {
 	store       sessionStore
+	assets      *asset.Resolver // presigns the avatar URL on /auth/me; may be nil
 	publicURL   string // externally reachable base URL, e.g. https://uigraph.example.com
 	frontendURL string // SPA base URL; empty falls back to publicURL
 }
 
-func NewSessionHandler(s sessionStore, publicURL, frontendURL string) *SessionHandler {
+func NewSessionHandler(s sessionStore, assets *asset.Resolver, publicURL, frontendURL string) *SessionHandler {
 	return &SessionHandler{
 		store:       s,
+		assets:      assets,
 		publicURL:   strings.TrimRight(publicURL, "/"),
 		frontendURL: strings.TrimRight(frontendURL, "/"),
 	}
+}
+
+// avatarURL presigns the avatar asset id, returning "" when there is no avatar
+// or no resolver configured.
+func (h *SessionHandler) avatarURL(r *http.Request, assetID *string) string {
+	if assetID == nil || *assetID == "" || h.assets == nil {
+		return ""
+	}
+	u, err := h.assets.Resolve(r.Context(), *assetID)
+	if err != nil {
+		return ""
+	}
+	return u
 }
 
 // frontendBase returns the SPA base URL to redirect to after auth, falling back
@@ -79,6 +95,7 @@ type meResponse struct {
 	Kind         string `json:"kind"`         // user | service_account
 	IsAdmin      bool   `json:"isAdmin"`      // true when user has server_admin role
 	AuthProvider string `json:"authProvider"` // 'password' or OAuth provider instance name
+	AvatarURL    string `json:"avatarUrl,omitempty"`
 }
 
 type myOrg struct {
@@ -379,10 +396,11 @@ func (h *SessionHandler) Me(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		httputil.JSON(w, http.StatusOK, meResponse{
-			UserID: sa.ID,
-			OrgID:  sa.OrgID,
-			Name:   sa.Name,
-			Kind:   "service_account",
+			UserID:    sa.ID,
+			OrgID:     sa.OrgID,
+			Name:      sa.Name,
+			Kind:      "service_account",
+			AvatarURL: h.avatarURL(r, sa.AvatarAssetID),
 		})
 		return
 	}
@@ -405,6 +423,7 @@ func (h *SessionHandler) Me(w http.ResponseWriter, r *http.Request) {
 		Kind:         "user",
 		IsAdmin:      u.Role == "server_admin",
 		AuthProvider: p.AuthProvider,
+		AvatarURL:    h.avatarURL(r, u.AvatarAssetID),
 	})
 }
 
