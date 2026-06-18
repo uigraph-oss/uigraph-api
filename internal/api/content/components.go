@@ -3,7 +3,7 @@ package content
 import (
 	"net/http"
 
-	"github.com/uigraph/app/internal/componentcatalog"
+	"github.com/uigraph/app/internal/componentlib"
 	"github.com/uigraph/app/internal/store"
 )
 
@@ -18,24 +18,24 @@ func NewComponentHandler(s store.Store) *ComponentHandler {
 
 // List handles GET /api/v1/orgs/{orgID}/components
 func (h *ComponentHandler) List(w http.ResponseWriter, r *http.Request) {
-	comps, err := h.store.ListComponentsByKind(r.Context(), componentcatalog.KindFocalPoint)
+	comps, err := h.store.ListComponentsByKind(r.Context(), componentlib.KindFocalPoint)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "failed to list components")
 		return
 	}
 
-	out := make([]componentcatalog.FocalPointComponent, len(comps))
+	out := make([]componentlib.FocalPointComponent, len(comps))
 	for i, c := range comps {
-		out[i] = componentcatalog.ToFocalPointComponent(c, componentIconURL(r, c))
+		out[i] = componentlib.ToFocalPointComponent(c, componentIconURL(r, c))
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"components":       out,
-		"customComponents": []componentcatalog.FocalPointComponent{},
+		"customComponents": []componentlib.FocalPointComponent{},
 	})
 }
 
-func componentIconURL(r *http.Request, c componentcatalog.Component) string {
-	slug := componentcatalog.IconSlug(c)
+func componentIconURL(r *http.Request, c componentlib.Component) string {
+	slug := componentlib.IconSlug(c)
 	return "/api/v1/component-icons/" + slug
 }

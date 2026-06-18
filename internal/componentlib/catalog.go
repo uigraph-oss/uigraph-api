@@ -1,5 +1,5 @@
-// Package componentcatalog defines focal-point and flow-diagram component types.
-package componentcatalog
+// Package componentlib defines focal-point and flow-diagram component types.
+package componentlib
 
 import (
 	"context"

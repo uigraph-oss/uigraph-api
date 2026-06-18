@@ -1,4 +1,4 @@
-package componentcatalog
+package componentlib
 
 import (
 	_ "embed"

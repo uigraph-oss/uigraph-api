@@ -3,7 +3,7 @@ package content
 import (
 	"net/http"
 
-	"github.com/uigraph/app/internal/componentcatalog"
+	"github.com/uigraph/app/internal/componentlib"
 	"github.com/uigraph/app/internal/storage"
 	"github.com/uigraph/app/internal/store"
 )
@@ -19,20 +19,20 @@ func NewFlowComponentHandler(s store.Store) *FlowComponentHandler {
 
 // List handles GET /api/v1/orgs/{orgID}/flow-diagram-components
 func (h *FlowComponentHandler) List(w http.ResponseWriter, r *http.Request) {
-	comps, err := h.store.ListComponentsByKind(r.Context(), componentcatalog.KindFlowDiagram)
+	comps, err := h.store.ListComponentsByKind(r.Context(), componentlib.KindFlowDiagram)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "failed to list flow diagram components")
 		return
 	}
 
-	out := make([]componentcatalog.FlowDiagramComponent, len(comps))
+	out := make([]componentlib.FlowDiagramComponent, len(comps))
 	for i, c := range comps {
-		out[i] = componentcatalog.ToFlowDiagramComponent(c, componentIconURL(r, c))
+		out[i] = componentlib.ToFlowDiagramComponent(c, componentIconURL(r, c))
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"components":       out,
-		"customComponents": []componentcatalog.FlowDiagramComponent{},
+		"customComponents": []componentlib.FlowDiagramComponent{},
 	})
 }
 

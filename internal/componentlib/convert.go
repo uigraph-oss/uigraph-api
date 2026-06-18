@@ -1,4 +1,4 @@
-package componentcatalog
+package componentlib
 
 // ToFocalPointComponent converts a stored component to the focal-point API shape.
 func ToFocalPointComponent(c Component, iconURL string) FocalPointComponent {
