@@ -6,8 +6,14 @@ import (
 	authmw "github.com/uigraph/app/internal/middleware"
 
 	"github.com/uigraph/app/internal/api/auth"
-	"github.com/uigraph/app/internal/api/content"
+	"github.com/uigraph/app/internal/api/actor"
+	assetapi "github.com/uigraph/app/internal/api/asset"
+	catalogapi "github.com/uigraph/app/internal/api/catalog"
+	"github.com/uigraph/app/internal/api/component"
+	"github.com/uigraph/app/internal/api/diagram"
+	"github.com/uigraph/app/internal/api/folder"
 	"github.com/uigraph/app/internal/api/health"
+	mapspkg "github.com/uigraph/app/internal/api/maps"
 	"github.com/uigraph/app/internal/asset"
 	"github.com/uigraph/app/internal/authz"
 	"github.com/uigraph/app/internal/cache"
@@ -37,9 +43,6 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	healthHandler := &health.Handler{}
 	mux.HandleFunc("GET /healthz", healthHandler.Healthz)
 	mux.HandleFunc("GET /livez", healthHandler.Livez)
-
-	componentIconH := content.NewComponentIconHandler(st)
-	mux.HandleFunc("GET /api/v1/component-icons/{slug}", componentIconH.Get)
 
 	assetResolver := asset.New(st, c)
 	sessionH := auth.NewSessionHandler(s, assetResolver, cfg.PublicURL, cfg.FrontendURL)
@@ -89,6 +92,12 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 		mux.Handle(method+" "+pattern, mw.Handler(http.HandlerFunc(guarded)))
 	}
 
+	// scopeFn bridges the typed authz.Scope requireScope to the plain-string
+	// signature expected by the per-domain Register() functions.
+	scopeFn := func(scope, method, pattern string, h http.HandlerFunc) {
+		requireScope(authz.Scope(scope), method, pattern, h)
+	}
+
 	// serverAdmin requires the authenticated principal to hold the global
 	// server_admin role. Applied to global user management and SSO configuration.
 	serverAdmin := func(method, pattern string, h http.HandlerFunc) {
@@ -114,7 +123,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	protected("GET", "/api/v1/auth/orgs", sessionH.MyOrgs)
 
 	// Avatars — a user sets their own; a service account's is set by an admin (below).
-	avatarH := content.NewAvatarHandler(s, st, c)
+	avatarH := auth.NewAvatarHandler(s, st, c)
 	protected("PUT", "/api/v1/users/me/avatar", avatarH.PutUserAvatar)
 	protected("DELETE", "/api/v1/users/me/avatar", avatarH.DeleteUserAvatar)
 
@@ -193,148 +202,29 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	serverAdmin("POST", "/api/v1/sso/scim/rotate-token", ssoH.RotateSCIMToken)
 
 	// ── Folders ───────────────────────────────────────────────────────────
-	folderH := content.NewFolderHandler(s)
-	requireScope(authz.ScopeFoldersRead, "GET", "/api/v1/orgs/{orgID}/folders", folderH.List)
-	requireScope(authz.ScopeFoldersWrite, "POST", "/api/v1/orgs/{orgID}/folders", folderH.Create)
-	requireScope(authz.ScopeFoldersRead, "GET", "/api/v1/orgs/{orgID}/folders/{folderID}", folderH.Get)
-	requireScope(authz.ScopeFoldersWrite, "PUT", "/api/v1/orgs/{orgID}/folders/{folderID}", folderH.Update)
-	requireScope(authz.ScopeFoldersWrite, "DELETE", "/api/v1/orgs/{orgID}/folders/{folderID}", folderH.Delete)
+	folder.Register(mux, s, scopeFn)
 
 	// ── Actors ────────────────────────────────────────────────────────────
 	// Resolves created_by / updated_by / deleted_by ids to public user or
 	// service-account info. Available to any authenticated principal.
-	actorH := content.NewActorHandler(s, c, st)
-	protected("GET", "/api/v1/orgs/{orgID}/actors", actorH.Resolve)
+	actor.Register(mux, s, c, st, protected)
 
 	// ── Assets ────────────────────────────────────────────────────────────
 	// Resolves an asset id (preview_asset_id / asset_id / screenshot_asset_id)
 	// to a presigned GET URL. Available to any authenticated principal.
-	assetH := content.NewAssetHandler(st, c)
-	protected("GET", "/api/v1/orgs/{orgID}/assets/urls", assetH.Resolve)
+	assetapi.Register(mux, st, c, protected)
 
 	// ── Diagrams ──────────────────────────────────────────────────────────
-	diagramH := content.NewDiagramHandler(s, st, c)
-	requireScope(authz.ScopeDiagramsRead, "GET", "/api/v1/orgs/{orgID}/diagrams", diagramH.List)
-	requireScope(authz.ScopeDiagramsWrite, "POST", "/api/v1/orgs/{orgID}/diagrams", diagramH.Create)
-	requireScope(authz.ScopeDiagramsWrite, "POST", "/api/v1/orgs/{orgID}/diagrams/sync", diagramH.Sync)
-	requireScope(authz.ScopeDiagramsRead, "GET", "/api/v1/orgs/{orgID}/diagrams/{diagramID}", diagramH.Get)
-	requireScope(authz.ScopeDiagramsWrite, "PUT", "/api/v1/orgs/{orgID}/diagrams/{diagramID}", diagramH.Update)
-	requireScope(authz.ScopeDiagramsWrite, "DELETE", "/api/v1/orgs/{orgID}/diagrams/{diagramID}", diagramH.Delete)
-	requireScope(authz.ScopeDiagramsWrite, "POST", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/thumbnail", diagramH.UpdateThumbnail)
-	requireScope(authz.ScopeDiagramsRead, "GET", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/images", diagramH.ListImages)
-	requireScope(authz.ScopeDiagramsWrite, "POST", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/images", diagramH.CreateImage)
-	requireScope(authz.ScopeDiagramsRead, "GET", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/content", diagramH.GetContent)
-	requireScope(authz.ScopeDiagramsRead, "GET", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/versions", diagramH.ListVersions)
-	requireScope(authz.ScopeDiagramsWrite, "POST", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/versions", diagramH.CreateVersion)
-	requireScope(authz.ScopeDiagramsRead, "GET", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/versions/{versionID}/content", diagramH.GetVersionContent)
-	requireScope(authz.ScopeDiagramsWrite, "POST", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/versions/{versionID}/restore", diagramH.RestoreVersion)
+	diagram.Register(mux, s, st, c, scopeFn)
 
-	// ── Focal point component palette ─────────────────────────────────────
-	componentH := content.NewComponentHandler(s)
-	protected("GET", "/api/v1/orgs/{orgID}/components", componentH.List)
-
-	// ── Flow diagram component palette ────────────────────────────────────
-	flowCompH := content.NewFlowComponentHandler(s)
-	protected("GET", "/api/v1/orgs/{orgID}/flow-diagram-components", flowCompH.List)
+	// ── Component palettes + icons ────────────────────────────────────────
+	component.Register(mux, s, st, protected)
 
 	// ── Services + API Groups + API Endpoints ─────────────────────────────
-	svcH := content.NewServiceHandler(s, st)
-	requireScope(authz.ScopeServicesRead, "GET", "/api/v1/orgs/{orgID}/services", svcH.List)
-	requireScope(authz.ScopeServicesRead, "GET", "/api/v1/orgs/{orgID}/services/stats", svcH.ListStats)
-	requireScope(authz.ScopeServicesWrite, "POST", "/api/v1/orgs/{orgID}/services", svcH.Create)
-	requireScope(authz.ScopeServicesRead, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}", svcH.Get)
-	requireScope(authz.ScopeServicesWrite, "PUT", "/api/v1/orgs/{orgID}/services/{serviceID}", svcH.Update)
-	requireScope(authz.ScopeServicesWrite, "DELETE", "/api/v1/orgs/{orgID}/services/{serviceID}", svcH.Delete)
-	// API groups — /sync before /{apiGroupID}
-	requireScope(authz.ScopeServicesRead, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups", svcH.ListAPIGroups)
-	requireScope(authz.ScopeServicesWrite, "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups", svcH.CreateAPIGroup)
-	requireScope(authz.ScopeServicesWrite, "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/sync", svcH.SyncAPIGroup)
-	requireScope(authz.ScopeServicesRead, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}", svcH.GetAPIGroup)
-	requireScope(authz.ScopeServicesWrite, "PUT", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}", svcH.UpdateAPIGroup)
-	requireScope(authz.ScopeServicesWrite, "DELETE", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}", svcH.DeleteAPIGroup)
-	requireScope(authz.ScopeServicesRead, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/versions", svcH.ListAPIGroupVersions)
-	// API endpoints
-	requireScope(authz.ScopeServicesRead, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/endpoints", svcH.ListAPIEndpoints)
-	requireScope(authz.ScopeServicesWrite, "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/endpoints", svcH.CreateAPIEndpoint)
-	requireScope(authz.ScopeServicesRead, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/endpoints/{endpointID}", svcH.GetAPIEndpoint)
-	requireScope(authz.ScopeServicesWrite, "PUT", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/endpoints/{endpointID}", svcH.UpdateAPIEndpoint)
-	requireScope(authz.ScopeServicesWrite, "DELETE", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/endpoints/{endpointID}", svcH.DeleteAPIEndpoint)
-	// Service docs
-	requireScope(authz.ScopeServicesRead, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/docs", svcH.ListDocs)
-	requireScope(authz.ScopeServicesWrite, "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/docs", svcH.CreateDoc)
-	requireScope(authz.ScopeServicesRead, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/docs/{docID}", svcH.GetDoc)
-	requireScope(authz.ScopeServicesWrite, "PUT", "/api/v1/orgs/{orgID}/services/{serviceID}/docs/{docID}", svcH.UpdateDoc)
-	requireScope(authz.ScopeServicesWrite, "DELETE", "/api/v1/orgs/{orgID}/services/{serviceID}/docs/{docID}", svcH.DeleteDoc)
-	// Service diagrams
-	requireScope(authz.ScopeServicesRead, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/diagrams", svcH.ListDiagrams)
-	requireScope(authz.ScopeServicesWrite, "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/diagrams", svcH.CreateDiagram)
-	requireScope(authz.ScopeServicesWrite, "DELETE", "/api/v1/orgs/{orgID}/services/{serviceID}/diagrams/{diagramID}", svcH.DeleteDiagram)
-	// Service DBs
-	requireScope(authz.ScopeServicesRead, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs", svcH.ListDBs)
-	requireScope(authz.ScopeServicesWrite, "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs", svcH.CreateDB)
-	requireScope(authz.ScopeServicesRead, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs/{dbID}", svcH.GetDB)
-	requireScope(authz.ScopeServicesWrite, "PUT", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs/{dbID}", svcH.UpdateDB)
-	requireScope(authz.ScopeServicesWrite, "DELETE", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs/{dbID}", svcH.DeleteDB)
-	requireScope(authz.ScopeServicesRead, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs/{dbID}/versions", svcH.ListDBVersions)
-	requireScope(authz.ScopeServicesWrite, "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs/{dbID}/versions", svcH.CreateDBVersion)
-	requireScope(authz.ScopeServicesWrite, "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs/{dbID}/versions/{versionID}/restore", svcH.RestoreDBVersion)
-	// Service tests
-	requireScope(authz.ScopeServicesWrite, "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/test-pack", svcH.CreateTestPack)
-	requireScope(authz.ScopeServicesRead, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/test-packs", svcH.ListTestPacks)
-	requireScope(authz.ScopeServicesWrite, "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/test-pack/{testPackID}", svcH.UpdateTestPack)
-	requireScope(authz.ScopeServicesWrite, "DELETE", "/api/v1/orgs/{orgID}/services/{serviceID}/test-pack/{testPackID}", svcH.DeleteTestPack)
-	requireScope(authz.ScopeServicesWrite, "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/test-case", svcH.CreateTestCase)
-	requireScope(authz.ScopeServicesRead, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/test-cases", svcH.ListTestCases)
-	requireScope(authz.ScopeServicesWrite, "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/test-case/{testCaseID}", svcH.UpdateTestCase)
-	requireScope(authz.ScopeServicesWrite, "DELETE", "/api/v1/orgs/{orgID}/services/{serviceID}/test-case/{testCaseID}", svcH.DeleteTestCase)
-	requireScope(authz.ScopeServicesWrite, "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/test-run", svcH.CreateTestRun)
-	requireScope(authz.ScopeServicesRead, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/test-runs", svcH.ListTestRuns)
-	requireScope(authz.ScopeServicesRead, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/test-runs-summary", svcH.ListTestRunsSummary)
-	requireScope(authz.ScopeServicesRead, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/test-run/{testRunID}", svcH.GetTestRun)
-	requireScope(authz.ScopeServicesWrite, "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/test-run/{testRunID}", svcH.UpdateTestRun)
-	requireScope(authz.ScopeServicesWrite, "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/test-run-result", svcH.CreateTestRunResult)
-	requireScope(authz.ScopeServicesRead, "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/test-run-results", svcH.ListTestRunResults)
-	requireScope(authz.ScopeServicesWrite, "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/test-run-result/{testRunResultID}", svcH.UpdateTestRunResult)
+	catalogapi.Register(mux, s, st, scopeFn)
 
-	// ── Maps ──────────────────────────────────────────────────────────────
-	mapH := content.NewMapHandler(s)
-	requireScope(authz.ScopeMapsRead, "GET", "/api/v1/orgs/{orgID}/maps", mapH.List)
-	requireScope(authz.ScopeMapsWrite, "POST", "/api/v1/orgs/{orgID}/maps", mapH.Create)
-	requireScope(authz.ScopeMapsRead, "GET", "/api/v1/orgs/{orgID}/maps/{mapID}", mapH.Get)
-	requireScope(authz.ScopeMapsWrite, "PUT", "/api/v1/orgs/{orgID}/maps/{mapID}", mapH.Update)
-	requireScope(authz.ScopeMapsWrite, "DELETE", "/api/v1/orgs/{orgID}/maps/{mapID}", mapH.Delete)
-
-	// ── Frames (+ focal points + canvas) ──────────────────────────────────
-	frameH := content.NewFrameHandler(s, st)
-	requireScope(authz.ScopeMapsRead, "GET", "/api/v1/orgs/{orgID}/maps/{mapID}/frames", frameH.List)
-	requireScope(authz.ScopeMapsWrite, "POST", "/api/v1/orgs/{orgID}/maps/{mapID}/frames", frameH.Create)
-	requireScope(authz.ScopeMapsWrite, "POST", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/sync", frameH.Sync)
-	requireScope(authz.ScopeMapsRead, "GET", "/api/v1/orgs/{orgID}/frames/{frameID}", frameH.Get)
-	requireScope(authz.ScopeMapsRead, "GET", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}", frameH.Get)
-	requireScope(authz.ScopeMapsWrite, "PUT", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}", frameH.Update)
-	requireScope(authz.ScopeMapsWrite, "DELETE", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}", frameH.Delete)
-	requireScope(authz.ScopeMapsRead, "GET", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points", frameH.ListFocalPoints)
-	requireScope(authz.ScopeMapsWrite, "POST", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points", frameH.CreateFocalPoint)
-	requireScope(authz.ScopeMapsRead, "GET", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}", frameH.GetFocalPoint)
-	requireScope(authz.ScopeMapsWrite, "PUT", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}", frameH.UpdateFocalPoint)
-	requireScope(authz.ScopeMapsWrite, "DELETE", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}", frameH.DeleteFocalPoint)
-	requireScope(authz.ScopeMapsRead, "GET", "/api/v1/orgs/{orgID}/maps/{mapID}/canvas", frameH.GetCanvas)
-	requireScope(authz.ScopeMapsWrite, "PUT", "/api/v1/orgs/{orgID}/maps/{mapID}/canvas", frameH.UpsertCanvas)
-
-	requireScope(authz.ScopeMapsRead, "GET", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/groups", frameH.ListGroups)
-	requireScope(authz.ScopeMapsWrite, "POST", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/groups", frameH.CreateGroup)
-	requireScope(authz.ScopeMapsWrite, "PUT", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/groups/{groupID}", frameH.UpdateGroup)
-	requireScope(authz.ScopeMapsWrite, "DELETE", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/groups/{groupID}", frameH.DeleteGroup)
-
-	requireScope(authz.ScopeMapsRead, "GET", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/links", frameH.ListLinks)
-	requireScope(authz.ScopeMapsWrite, "POST", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/links", frameH.CreateLink)
-	requireScope(authz.ScopeMapsWrite, "PUT", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/links/{linkID}", frameH.UpdateLink)
-	requireScope(authz.ScopeMapsWrite, "DELETE", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/links/{linkID}", frameH.DeleteLink)
-
-	requireScope(authz.ScopeMapsRead, "GET", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta", frameH.ListMeta)
-	requireScope(authz.ScopeMapsWrite, "POST", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta", frameH.CreateMeta)
-	requireScope(authz.ScopeMapsWrite, "PUT", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta/{metaID}", frameH.UpdateMeta)
-	requireScope(authz.ScopeMapsWrite, "DELETE", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta/{metaID}", frameH.DeleteMeta)
+	// ── Maps + Frames + Focal Points + Canvas ─────────────────────────────
+	mapspkg.Register(mux, s, st, scopeFn)
 
 	return mux
 }

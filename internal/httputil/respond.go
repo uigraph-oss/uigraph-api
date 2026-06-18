@@ -2,8 +2,10 @@
 package httputil
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 
@@ -56,3 +58,43 @@ type errorBody struct {
 func apiError(code, msg string) errorBody {
 	return errorBody{Code: code, Message: msg}
 }
+
+// StreamObject proxies an object from object storage to an HTTP response.
+// It calls download(r.Context(), key) to retrieve the object, detects the content type
+// by sniffing the first 512 bytes, and streams the complete object to the response with
+// appropriate caching headers.
+func StreamObject(w http.ResponseWriter, r *http.Request, download func(context.Context, string) (io.ReadCloser, error), key string) {
+	// Download the object from storage
+	rc, err := download(r.Context(), key)
+	if err != nil {
+		Error(w, r, store.ErrNotFound)
+		return
+	}
+	defer rc.Close()
+
+	// Read up to 512 bytes to sniff the content type
+	head := make([]byte, 512)
+	n, err := rc.Read(head)
+	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+		slog.ErrorContext(r.Context(), "failed to read object head", "err", err, "key", key)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// Detect content type from the bytes read
+	contentType := http.DetectContentType(head[:n])
+
+	// Set response headers
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	w.WriteHeader(http.StatusOK)
+
+	// Write the sniffed bytes first
+	if n > 0 {
+		_, _ = w.Write(head[:n])
+	}
+
+	// Copy the rest of the body
+	_, _ = io.Copy(w, rc)
+}
+
