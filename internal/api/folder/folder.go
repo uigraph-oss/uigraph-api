@@ -125,6 +125,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, r, err)
 		return
 	}
+	existing.UpdatedAt = time.Now().UTC()
 	httputil.JSON(w, http.StatusOK, existing)
 }
 
