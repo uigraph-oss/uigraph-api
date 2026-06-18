@@ -256,6 +256,7 @@ func (h *Handler) SyncAPIGroup(w http.ResponseWriter, r *http.Request) {
 			httputil.JSON(w, http.StatusOK, map[string]any{"apiGroupId": g.ID, "versionCreated": false})
 			return
 		}
+		versionCreated := false
 		if body.Spec != "" && h.storage != nil {
 			key := storage.APIGroupSpecKey(orgID, serviceID, g.ID)
 			if err := h.uploadSpec(r.Context(), key, body.Spec); err != nil {
@@ -268,11 +269,13 @@ func (h *Handler) SyncAPIGroup(w http.ResponseWriter, r *http.Request) {
 			versionID := uuid.NewString()
 			vKey := storage.APIGroupVersionSpecKey(orgID, serviceID, g.ID, versionID)
 			if err := h.uploadSpec(r.Context(), vKey, body.Spec); err == nil {
-				_ = h.store.CreateAPIGroupVersion(r.Context(), catalogpkg.APIGroupVersion{
+				if err := h.store.CreateAPIGroupVersion(r.Context(), catalogpkg.APIGroupVersion{
 					ID: versionID, APIGroupID: g.ID, VersionNumber: latestVer + 1,
 					SpecKey: vKey, SpecHash: newHash, IsAutoVersion: true,
 					CreatedBy: p.UserID, CreatedAt: time.Now().UTC(),
-				})
+				}); err == nil {
+					versionCreated = true
+				}
 			}
 		}
 		g.Name = body.Name
@@ -283,7 +286,7 @@ func (h *Handler) SyncAPIGroup(w http.ResponseWriter, r *http.Request) {
 			httputil.Error(w, r, err)
 			return
 		}
-		httputil.JSON(w, http.StatusOK, map[string]any{"apiGroupId": g.ID, "versionCreated": true})
+		httputil.JSON(w, http.StatusOK, map[string]any{"apiGroupId": g.ID, "versionCreated": versionCreated})
 		return
 	}
 
