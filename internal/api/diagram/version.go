@@ -33,7 +33,11 @@ func (h *Handler) CreateVersion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	dg, err := h.store.GetDiagram(r.Context(), id)
-	if err != nil || dg == nil || dg.DeletedAt != nil {
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if dg == nil || dg.DeletedAt != nil {
 		httputil.Error(w, r, storepkg.ErrNotFound)
 		return
 	}
@@ -104,12 +108,20 @@ func (h *Handler) RestoreVersion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	dg, err := h.store.GetDiagram(r.Context(), id)
-	if err != nil || dg == nil || dg.DeletedAt != nil {
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if dg == nil || dg.DeletedAt != nil {
 		httputil.Error(w, r, storepkg.ErrNotFound)
 		return
 	}
 	v, err := h.store.GetDiagramVersion(r.Context(), r.PathValue("versionID"))
-	if err != nil || v == nil {
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if v == nil {
 		httputil.Error(w, r, storepkg.ErrNotFound)
 		return
 	}
