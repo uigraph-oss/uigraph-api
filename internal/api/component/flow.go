@@ -16,7 +16,7 @@ func (h *Handler) ListFlow(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]componentlib.FlowDiagramComponent, len(comps))
 	for i, c := range comps {
-		out[i] = componentlib.ToFlowDiagramComponent(c, iconURL(r, c))
+		out[i] = componentlib.ToFlowDiagramComponent(c, iconURL(c))
 	}
 	httputil.JSON(w, http.StatusOK, map[string]any{
 		"components":       out,

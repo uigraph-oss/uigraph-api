@@ -16,7 +16,7 @@ func (h *Handler) ListFocal(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]componentlib.FocalPointComponent, len(comps))
 	for i, c := range comps {
-		out[i] = componentlib.ToFocalPointComponent(c, iconURL(r, c))
+		out[i] = componentlib.ToFocalPointComponent(c, iconURL(c))
 	}
 	httputil.JSON(w, http.StatusOK, map[string]any{
 		"components":       out,
@@ -24,6 +24,6 @@ func (h *Handler) ListFocal(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func iconURL(r *http.Request, c componentlib.Component) string {
+func iconURL(c componentlib.Component) string {
 	return "/api/v1/component-icons/" + componentlib.IconSlug(c)
 }

@@ -3,6 +3,7 @@ package component
 
 import (
 	"context"
+	"io"
 	"net/http"
 
 	"github.com/uigraph/app/internal/componentlib"
@@ -14,14 +15,19 @@ type store interface {
 	ListComponentsByKind(ctx context.Context, kind string) ([]componentlib.Component, error)
 }
 
+// objectStore is the minimal storage interface this package needs.
+type objectStore interface {
+	Download(ctx context.Context, key string) (io.ReadCloser, error)
+}
+
 // Handler serves component palette and icon endpoints.
 type Handler struct {
 	store   store
-	storage storage.Client
+	storage objectStore
 }
 
 // New constructs a Handler.
-func New(s store, st storage.Client) *Handler {
+func New(s store, st objectStore) *Handler {
 	return &Handler{store: s, storage: st}
 }
 
