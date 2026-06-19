@@ -1,7 +1,5 @@
 package storage
 
-import "fmt"
-
 // Config is the minimal configuration needed to create a storage client.
 type Config struct {
 	Backend   string // "minio" | "s3"
@@ -19,7 +17,7 @@ type Config struct {
 func New(cfg Config) (Client, error) {
 	switch cfg.Backend {
 	case "s3":
-		return nil, fmt.Errorf("storage: s3 backend not yet implemented")
+		return newS3Client(cfg)
 	default: // "minio" and anything else falls through to MinIO
 		return newMinioClient(cfg)
 	}
