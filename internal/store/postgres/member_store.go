@@ -42,12 +42,41 @@ func (d *DB) GetMember(ctx context.Context, userID, orgID string) (*org.OrgMembe
 	return &m, nil
 }
 
+func scanMemberEnriched(row interface{ Scan(...any) error }) (org.OrgMember, error) {
+	var m org.OrgMember
+	var teamID, teamName sql.NullString
+	if err := row.Scan(
+		&m.UserID, &m.OrgID, &m.Role, &m.Source, &m.Email, &m.Name,
+		&teamID, &teamName, &m.CreatedAt, &m.UpdatedAt,
+	); err != nil {
+		return m, err
+	}
+	if teamID.Valid {
+		m.TeamID = &teamID.String
+	}
+	if teamName.Valid {
+		m.TeamName = &teamName.String
+	}
+	return m, nil
+}
+
 func (d *DB) ListMembers(ctx context.Context, orgID string) ([]org.OrgMember, error) {
 	const q = `
-		SELECT user_id, org_id, role, source, created_at, updated_at
-		FROM   org_members
-		WHERE  org_id = $1
-		ORDER  BY created_at`
+		SELECT m.user_id, m.org_id, m.role, m.source,
+		       u.email, u.name,
+		       tm.team_id, t.name,
+		       m.created_at, m.updated_at
+		FROM   org_members m
+		JOIN   users u ON u.id = m.user_id
+		LEFT JOIN LATERAL (
+			SELECT team_id FROM team_members
+			WHERE  user_id = m.user_id AND org_id = m.org_id
+			ORDER  BY created_at ASC
+			LIMIT  1
+		) tm ON true
+		LEFT JOIN teams t ON t.id = tm.team_id
+		WHERE  m.org_id = $1
+		ORDER  BY m.created_at`
 
 	rows, err := d.db.QueryContext(ctx, q, orgID)
 	if err != nil {
@@ -57,7 +86,7 @@ func (d *DB) ListMembers(ctx context.Context, orgID string) ([]org.OrgMember, er
 
 	var out []org.OrgMember
 	for rows.Next() {
-		m, err := scanMember(rows)
+		m, err := scanMemberEnriched(rows)
 		if err != nil {
 			return nil, fmt.Errorf("postgres: ListMembers scan: %w", err)
 		}

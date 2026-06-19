@@ -23,6 +23,10 @@ type memberResponse struct {
 	OrgID     string    `json:"orgId"`
 	Role      string    `json:"role"`
 	Source    string    `json:"source"`
+	Email     string    `json:"email"`
+	Name      string    `json:"name"`
+	TeamID    *string   `json:"teamId,omitempty"`
+	TeamName  *string   `json:"teamName,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
@@ -30,6 +34,7 @@ type memberResponse struct {
 func memberToResponse(m org.OrgMember) memberResponse {
 	return memberResponse{
 		UserID: m.UserID, OrgID: m.OrgID, Role: m.Role, Source: m.Source,
+		Email: m.Email, Name: m.Name, TeamID: m.TeamID, TeamName: m.TeamName,
 		CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
 	}
 }

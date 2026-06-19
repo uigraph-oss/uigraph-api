@@ -21,19 +21,21 @@ func NewTeamHandler(s org.TeamStore) *TeamHandler {
 // ── Request / Response types ─────────────────────────────────────────────────
 
 type teamResponse struct {
-	ID         string    `json:"id"`
-	OrgID      string    `json:"orgId"`
-	Name       string    `json:"name"`
-	Email      string    `json:"email,omitempty"`
-	ExternalID string    `json:"externalId,omitempty"`
-	CreatedAt  time.Time `json:"createdAt"`
-	UpdatedAt  time.Time `json:"updatedAt"`
+	ID          string    `json:"id"`
+	OrgID       string    `json:"orgId"`
+	Name        string    `json:"name"`
+	Email       string    `json:"email,omitempty"`
+	ExternalID  string    `json:"externalId,omitempty"`
+	MemberCount int       `json:"memberCount"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
 }
 
 func teamToResponse(t org.Team) teamResponse {
 	return teamResponse{
 		ID: t.ID, OrgID: t.OrgID, Name: t.Name, Email: t.Email,
-		ExternalID: t.ExternalID, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
+		ExternalID: t.ExternalID, MemberCount: t.MemberCount,
+		CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
 	}
 }
 

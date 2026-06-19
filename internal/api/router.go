@@ -211,6 +211,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	// to a presigned GET URL. Available to any authenticated principal.
 	assetH := content.NewAssetHandler(st, c)
 	protected("GET", "/api/v1/orgs/{orgID}/assets/urls", assetH.Resolve)
+	protected("POST", "/api/v1/orgs/{orgID}/assets", assetH.CreateUpload)
 
 	// ── Diagrams ──────────────────────────────────────────────────────────
 	diagramH := content.NewDiagramHandler(s, st, c)
@@ -232,6 +233,9 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	// ── Focal point component palette ─────────────────────────────────────
 	componentH := content.NewComponentHandler(s)
 	protected("GET", "/api/v1/orgs/{orgID}/components", componentH.List)
+	requireScope(authz.ScopeMapsWrite, "POST", "/api/v1/orgs/{orgID}/components", componentH.Create)
+	requireScope(authz.ScopeMapsWrite, "PUT", "/api/v1/orgs/{orgID}/components/{componentID}", componentH.Update)
+	requireScope(authz.ScopeMapsWrite, "DELETE", "/api/v1/orgs/{orgID}/components/{componentID}", componentH.Delete)
 
 	// ── Flow diagram component palette ────────────────────────────────────
 	flowCompH := content.NewFlowComponentHandler(s)
@@ -335,6 +339,15 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	requireScope(authz.ScopeMapsWrite, "POST", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta", frameH.CreateMeta)
 	requireScope(authz.ScopeMapsWrite, "PUT", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta/{metaID}", frameH.UpdateMeta)
 	requireScope(authz.ScopeMapsWrite, "DELETE", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta/{metaID}", frameH.DeleteMeta)
+
+	// ── Comments ──────────────────────────────────────────────────────────
+	// Org-scoped annotations on a resource (resource_id passed as a query param
+	// on list). Reuses the maps scope since comments live on map/diagram nodes.
+	commentH := content.NewCommentHandler(s)
+	requireScope(authz.ScopeMapsRead, "GET", "/api/v1/orgs/{orgID}/comments", commentH.List)
+	requireScope(authz.ScopeMapsWrite, "POST", "/api/v1/orgs/{orgID}/comments", commentH.Create)
+	requireScope(authz.ScopeMapsWrite, "PUT", "/api/v1/orgs/{orgID}/comments/{commentID}", commentH.Update)
+	requireScope(authz.ScopeMapsWrite, "DELETE", "/api/v1/orgs/{orgID}/comments/{commentID}", commentH.Delete)
 
 	return mux
 }

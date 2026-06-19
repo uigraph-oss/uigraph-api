@@ -14,10 +14,27 @@ const maxAssetIDs = 200
 
 type AssetHandler struct {
 	resolver *asset.Resolver
+	storage  storage.Client
 }
 
 func NewAssetHandler(st storage.Client, c cache.Client) *AssetHandler {
-	return &AssetHandler{resolver: asset.New(st, c)}
+	return &AssetHandler{resolver: asset.New(st, c), storage: st}
+}
+
+// CreateUpload handles POST /api/v1/orgs/{orgID}/assets. It allocates a new
+// asset id and returns a short-lived presigned PUT URL the client uploads to
+// directly. The stored object is later served via the asset resolver.
+func (h *AssetHandler) CreateUpload(w http.ResponseWriter, r *http.Request) {
+	assetID := storage.NewFileAssetID()
+	url, err := h.storage.PresignPutURL(r.Context(), storage.AssetKey(assetID))
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"assetId":   assetID,
+		"uploadUrl": url,
+	})
 }
 
 // Resolve handles GET /api/v1/orgs/{orgID}/assets/urls?ids=a,b,c and returns a
