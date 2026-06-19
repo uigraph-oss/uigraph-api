@@ -288,6 +288,20 @@ func (h *FrameHandler) ListMeta(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"meta": metas})
 }
 
+func (h *FrameHandler) ListMetaByComponentLink(w http.ResponseWriter, r *http.Request) {
+	componentLinkID := r.URL.Query().Get("componentLinkId")
+	if componentLinkID == "" {
+		writeErr(w, http.StatusBadRequest, "componentLinkId is required")
+		return
+	}
+	metas, err := h.store.ListFocalPointMetaByComponentLink(r.Context(), r.PathValue("orgID"), componentLinkID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"meta": metas})
+}
+
 func (h *FrameHandler) CreateMeta(w http.ResponseWriter, r *http.Request) {
 	fpID := r.PathValue("fpID")
 	frameID := r.PathValue("frameID")

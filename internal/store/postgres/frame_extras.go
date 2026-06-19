@@ -286,6 +286,31 @@ func (d *DB) ListFocalPointMeta(ctx context.Context, focalPointID string) ([]uim
 	return out, rows.Err()
 }
 
+func (d *DB) ListFocalPointMetaByComponentLink(ctx context.Context, orgID, componentLinkID string) ([]uimap.FocalPointMeta, error) {
+	const q = `
+		SELECT id, focal_point_id, org_id, frame_id, component_id, component_link_id,
+		       component_images, component_flow_diagram, component_modal_fields,
+		       created_by, updated_by, created_at, updated_at, deleted_at, deleted_by
+		FROM focal_point_meta
+		WHERE org_id = $1 AND component_link_id = $2 AND deleted_at IS NULL
+		ORDER BY created_at ASC`
+	rows, err := d.db.QueryContext(ctx, q, orgID, componentLinkID)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: ListFocalPointMetaByComponentLink: %w", err)
+	}
+	defer rows.Close()
+
+	var out []uimap.FocalPointMeta
+	for rows.Next() {
+		m, err := scanFocalPointMeta(rows)
+		if err != nil {
+			return nil, fmt.Errorf("postgres: ListFocalPointMetaByComponentLink scan: %w", err)
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
 func (d *DB) UpdateFocalPointMeta(ctx context.Context, m uimap.FocalPointMeta) error {
 	const q = `
 		UPDATE focal_point_meta

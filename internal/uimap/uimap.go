@@ -172,6 +172,7 @@ type Store interface {
 	CreateFocalPointMeta(ctx context.Context, m FocalPointMeta) error
 	GetFocalPointMeta(ctx context.Context, id string) (*FocalPointMeta, error)
 	ListFocalPointMeta(ctx context.Context, focalPointID string) ([]FocalPointMeta, error)
+	ListFocalPointMetaByComponentLink(ctx context.Context, orgID, componentLinkID string) ([]FocalPointMeta, error)
 	UpdateFocalPointMeta(ctx context.Context, m FocalPointMeta) error
 	SoftDeleteFocalPointMeta(ctx context.Context, id, deletedBy string) error
 

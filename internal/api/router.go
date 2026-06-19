@@ -335,6 +335,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	requireScope(authz.ScopeMapsWrite, "PUT", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/links/{linkID}", frameH.UpdateLink)
 	requireScope(authz.ScopeMapsWrite, "DELETE", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/links/{linkID}", frameH.DeleteLink)
 
+	requireScope(authz.ScopeMapsRead, "GET", "/api/v1/orgs/{orgID}/focal-point-meta", frameH.ListMetaByComponentLink)
 	requireScope(authz.ScopeMapsRead, "GET", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta", frameH.ListMeta)
 	requireScope(authz.ScopeMapsWrite, "POST", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta", frameH.CreateMeta)
 	requireScope(authz.ScopeMapsWrite, "PUT", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta/{metaID}", frameH.UpdateMeta)
