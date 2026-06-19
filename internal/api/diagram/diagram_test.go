@@ -71,15 +71,28 @@ func (f *fakeDiagramStore) CreateDiagramImage(ctx context.Context, img diagrampk
 
 // fakeObjectStore implements the unexported objectStore interface.
 type fakeObjectStore struct {
-	uploadFn   func(ctx context.Context, key, contentType string, body io.Reader, size int64) error
-	downloadFn func(ctx context.Context, key string) (io.ReadCloser, error)
+	uploadFn        func(ctx context.Context, key, contentType string, body io.Reader, size int64) error
+	downloadFn      func(ctx context.Context, key string) (io.ReadCloser, error)
+	presignPutURLFn func(ctx context.Context, key string) (string, error)
 }
 
 func (f *fakeObjectStore) Upload(ctx context.Context, key, contentType string, body io.Reader, size int64) error {
-	return f.uploadFn(ctx, key, contentType, body, size)
+	if f.uploadFn != nil {
+		return f.uploadFn(ctx, key, contentType, body, size)
+	}
+	return nil
 }
 func (f *fakeObjectStore) Download(ctx context.Context, key string) (io.ReadCloser, error) {
-	return f.downloadFn(ctx, key)
+	if f.downloadFn != nil {
+		return f.downloadFn(ctx, key)
+	}
+	return nil, nil
+}
+func (f *fakeObjectStore) PresignPutURL(ctx context.Context, key string) (string, error) {
+	if f.presignPutURLFn != nil {
+		return f.presignPutURLFn(ctx, key)
+	}
+	return "https://presigned.example.com/" + key, nil
 }
 
 // withAuth injects a user principal into the request context.
@@ -362,6 +375,146 @@ func TestDelete_unauthenticated_returns401(t *testing.T) {
 	r.SetPathValue("diagramID", "d1")
 	w := httptest.NewRecorder()
 	h.Delete(w, r)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", w.Code)
+	}
+}
+
+// ── PrepareThumbnailUpload ────────────────────────────────────────────────────
+
+func TestPrepareThumbnailUpload_success(t *testing.T) {
+	dg := &diagrampkg.Diagram{ID: "d1", OrgID: "org-1", Name: "Flow"}
+	s := &fakeDiagramStore{
+		getDiagramFn: func(_ context.Context, id string) (*diagrampkg.Diagram, error) {
+			if id == "d1" {
+				return dg, nil
+			}
+			return nil, nil
+		},
+	}
+	st := &fakeObjectStore{
+		presignPutURLFn: func(_ context.Context, key string) (string, error) {
+			return "https://storage.example.com/put/" + key, nil
+		},
+	}
+	h := New(s, st, nil)
+
+	r := withAuth(newReq(http.MethodPost, "/api/v1/orgs/org-1/diagrams/d1/thumbnail/prepare", nil))
+	r.SetPathValue("diagramID", "d1")
+	w := httptest.NewRecorder()
+	h.PrepareThumbnailUpload(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var got map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got["uploadUrl"] == "" {
+		t.Fatal("expected uploadUrl in response")
+	}
+	if got["assetId"] == "" {
+		t.Fatal("expected assetId in response")
+	}
+}
+
+func TestPrepareThumbnailUpload_unauthenticated_returns401(t *testing.T) {
+	h := New(&fakeDiagramStore{}, &fakeObjectStore{}, nil)
+
+	r := newReq(http.MethodPost, "/api/v1/orgs/org-1/diagrams/d1/thumbnail/prepare", nil)
+	r.SetPathValue("diagramID", "d1")
+	w := httptest.NewRecorder()
+	h.PrepareThumbnailUpload(w, r)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", w.Code)
+	}
+}
+
+func TestPrepareThumbnailUpload_notFound_returns404(t *testing.T) {
+	s := &fakeDiagramStore{
+		getDiagramFn: func(_ context.Context, _ string) (*diagrampkg.Diagram, error) {
+			return nil, nil
+		},
+	}
+	h := New(s, &fakeObjectStore{}, nil)
+
+	r := withAuth(newReq(http.MethodPost, "/api/v1/orgs/org-1/diagrams/missing/thumbnail/prepare", nil))
+	r.SetPathValue("diagramID", "missing")
+	w := httptest.NewRecorder()
+	h.PrepareThumbnailUpload(w, r)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", w.Code)
+	}
+}
+
+// ── ConfirmThumbnailUpload ────────────────────────────────────────────────────
+
+func TestConfirmThumbnailUpload_success(t *testing.T) {
+	dg := &diagrampkg.Diagram{ID: "d1", OrgID: "org-1", Name: "Flow"}
+	var updatedDiagram diagrampkg.Diagram
+	s := &fakeDiagramStore{
+		getDiagramFn: func(_ context.Context, id string) (*diagrampkg.Diagram, error) {
+			if id == "d1" {
+				return dg, nil
+			}
+			return nil, nil
+		},
+		updateDiagramFn: func(_ context.Context, d diagrampkg.Diagram) error {
+			updatedDiagram = d
+			return nil
+		},
+	}
+	h := New(s, &fakeObjectStore{}, nil)
+
+	body, _ := json.Marshal(map[string]any{"contentHash": "abc123"})
+	r := withAuth(newReq(http.MethodPost, "/api/v1/orgs/org-1/diagrams/d1/thumbnail/confirm", body))
+	r.SetPathValue("diagramID", "d1")
+	w := httptest.NewRecorder()
+	h.ConfirmThumbnailUpload(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if updatedDiagram.PreviewContentHash == nil || *updatedDiagram.PreviewContentHash != "abc123" {
+		t.Fatalf("expected PreviewContentHash=abc123, got %v", updatedDiagram.PreviewContentHash)
+	}
+	if updatedDiagram.PreviewAssetID == nil {
+		t.Fatal("expected PreviewAssetID to be set")
+	}
+}
+
+func TestConfirmThumbnailUpload_missingHash_returns400(t *testing.T) {
+	dg := &diagrampkg.Diagram{ID: "d1", OrgID: "org-1"}
+	s := &fakeDiagramStore{
+		getDiagramFn: func(_ context.Context, _ string) (*diagrampkg.Diagram, error) {
+			return dg, nil
+		},
+	}
+	h := New(s, &fakeObjectStore{}, nil)
+
+	body, _ := json.Marshal(map[string]any{"contentHash": ""})
+	r := withAuth(newReq(http.MethodPost, "/api/v1/orgs/org-1/diagrams/d1/thumbnail/confirm", body))
+	r.SetPathValue("diagramID", "d1")
+	w := httptest.NewRecorder()
+	h.ConfirmThumbnailUpload(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestConfirmThumbnailUpload_unauthenticated_returns401(t *testing.T) {
+	h := New(&fakeDiagramStore{}, &fakeObjectStore{}, nil)
+
+	body, _ := json.Marshal(map[string]any{"contentHash": "abc"})
+	r := newReq(http.MethodPost, "/api/v1/orgs/org-1/diagrams/d1/thumbnail/confirm", body)
+	r.SetPathValue("diagramID", "d1")
+	w := httptest.NewRecorder()
+	h.ConfirmThumbnailUpload(w, r)
 
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d", w.Code)
