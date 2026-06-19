@@ -2,13 +2,16 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"io"
+	"net/http"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	awshttp "github.com/aws/smithy-go/transport/http"
 )
 
 type s3Client struct {
@@ -46,6 +49,10 @@ func (c *s3Client) EnsureBucket(ctx context.Context) error {
 	_, err := c.client.HeadBucket(ctx, &s3.HeadBucketInput{Bucket: aws.String(c.bucket)})
 	if err == nil {
 		return nil // already exists
+	}
+	var re *awshttp.ResponseError
+	if !errors.As(err, &re) || re.HTTPStatusCode() != http.StatusNotFound {
+		return err // real error (auth failure, network error, etc.) — surface it
 	}
 	input := &s3.CreateBucketInput{Bucket: aws.String(c.bucket)}
 	// us-east-1 is the S3 default region; specifying it in CreateBucketConfiguration is an error.
