@@ -42,12 +42,37 @@ func (d *DB) GetMember(ctx context.Context, userID, orgID string) (*org.OrgMembe
 	return &m, nil
 }
 
+func scanMemberEnriched(row interface{ Scan(...any) error }) (org.OrgMember, error) {
+	var m org.OrgMember
+	var teamID sql.NullString
+	if err := row.Scan(
+		&m.UserID, &m.OrgID, &m.Role, &m.Source, &m.Email, &m.Name,
+		&teamID, &m.CreatedAt, &m.UpdatedAt,
+	); err != nil {
+		return m, err
+	}
+	if teamID.Valid {
+		m.TeamID = &teamID.String
+	}
+	return m, nil
+}
+
 func (d *DB) ListMembers(ctx context.Context, orgID string) ([]org.OrgMember, error) {
 	const q = `
-		SELECT user_id, org_id, role, source, created_at, updated_at
-		FROM   org_members
-		WHERE  org_id = $1
-		ORDER  BY created_at`
+		SELECT m.user_id, m.org_id, m.role, m.source,
+		       u.email, u.name,
+		       tm.team_id,
+		       m.created_at, m.updated_at
+		FROM   org_members m
+		JOIN   users u ON u.id = m.user_id
+		LEFT JOIN LATERAL (
+			SELECT team_id FROM team_members
+			WHERE  user_id = m.user_id AND org_id = m.org_id
+			ORDER  BY created_at ASC
+			LIMIT  1
+		) tm ON true
+		WHERE  m.org_id = $1
+		ORDER  BY m.created_at`
 
 	rows, err := d.db.QueryContext(ctx, q, orgID)
 	if err != nil {
@@ -57,7 +82,7 @@ func (d *DB) ListMembers(ctx context.Context, orgID string) ([]org.OrgMember, er
 
 	var out []org.OrgMember
 	for rows.Next() {
-		m, err := scanMember(rows)
+		m, err := scanMemberEnriched(rows)
 		if err != nil {
 			return nil, fmt.Errorf("postgres: ListMembers scan: %w", err)
 		}
@@ -80,7 +105,7 @@ func (d *DB) UpdateMemberRole(ctx context.Context, userID, orgID, role, source s
 
 func (d *DB) ListOrgsForUser(ctx context.Context, userID string) ([]org.OrgMembershipView, error) {
 	const q = `
-		SELECT o.id, o.name, o.slug, o.disabled, o.created_at, o.updated_at, m.role
+		SELECT o.id, o.name, o.logo_asset_id, o.disabled, o.created_at, o.updated_at, m.role
 		FROM   org_members m
 		JOIN   orgs o ON o.id = m.org_id
 		WHERE  m.user_id = $1
@@ -95,11 +120,15 @@ func (d *DB) ListOrgsForUser(ctx context.Context, userID string) ([]org.OrgMembe
 	var out []org.OrgMembershipView
 	for rows.Next() {
 		var v org.OrgMembershipView
+		var logoAssetID sql.NullString
 		if err := rows.Scan(
-			&v.Org.ID, &v.Org.Name, &v.Org.Slug, &v.Org.Disabled,
+			&v.Org.ID, &v.Org.Name, &logoAssetID, &v.Org.Disabled,
 			&v.Org.CreatedAt, &v.Org.UpdatedAt, &v.Role,
 		); err != nil {
 			return nil, fmt.Errorf("postgres: ListOrgsForUser scan: %w", err)
+		}
+		if logoAssetID.Valid {
+			v.Org.LogoAssetID = &logoAssetID.String
 		}
 		out = append(out, v)
 	}

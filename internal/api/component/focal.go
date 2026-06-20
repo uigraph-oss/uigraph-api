@@ -18,9 +18,20 @@ func (h *Handler) ListFocal(w http.ResponseWriter, r *http.Request) {
 	for i, c := range comps {
 		out[i] = componentlib.ToFocalPointComponent(c, iconURL(c))
 	}
+
+	custom, err := h.store.ListCustomComponents(r.Context(), r.PathValue("orgID"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	customOut := make([]componentlib.FocalPointComponent, len(custom))
+	for i, c := range custom {
+		customOut[i] = componentlib.ToFocalPointComponent(c, "")
+	}
+
 	httputil.JSON(w, http.StatusOK, map[string]any{
 		"components":       out,
-		"customComponents": []componentlib.FocalPointComponent{},
+		"customComponents": customOut,
 	})
 }
 

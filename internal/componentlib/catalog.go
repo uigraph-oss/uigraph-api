@@ -72,6 +72,8 @@ type FocalPointComponent struct {
 	IsActive        bool              `json:"isActive"`
 	Order           int               `json:"order"`
 	ComponentFields []FocalPointField `json:"componentFields"`
+	CreatedAt       time.Time         `json:"createdAt"`
+	UpdatedAt       time.Time         `json:"updatedAt"`
 }
 
 // FocalPointField mirrors enterprise component field JSON.
@@ -120,6 +122,11 @@ type Store interface {
 	ListComponentsByKind(ctx context.Context, kind string) ([]Component, error)
 	UpdateComponentIconKey(ctx context.Context, id, iconKey string) error
 	CountComponents(ctx context.Context) (int, error)
+
+	ListCustomComponents(ctx context.Context, orgID string) ([]Component, error)
+	GetComponent(ctx context.Context, id string) (*Component, error)
+	SaveCustomComponent(ctx context.Context, c Component) error
+	DeleteComponent(ctx context.Context, id string) error
 }
 
 // CategoryID returns a stable ID for a system category.

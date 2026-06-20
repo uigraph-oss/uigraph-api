@@ -26,6 +26,8 @@ func ToFocalPointComponent(c Component, iconURL string) FocalPointComponent {
 		IsActive:        c.IsActive,
 		Order:           c.Order,
 		ComponentFields: fields,
+		CreatedAt:       c.CreatedAt,
+		UpdatedAt:       c.UpdatedAt,
 	}
 }
 

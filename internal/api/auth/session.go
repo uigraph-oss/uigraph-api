@@ -33,7 +33,6 @@ type sessionStore interface {
 	org.OrgStore
 	org.UserStore
 	org.MemberStore
-	org.InvitationStore
 }
 
 type SessionHandler struct {
@@ -93,16 +92,16 @@ type meResponse struct {
 	Name         string `json:"name"`
 	Login        string `json:"login"`
 	Kind         string `json:"kind"`         // user | service_account
-	IsAdmin      bool   `json:"isAdmin"`      // true when user has server_admin role
+	Role         string `json:"role"`         // global user role (e.g. user | server_admin)
 	AuthProvider string `json:"authProvider"` // 'password' or OAuth provider instance name
 	AvatarURL    string `json:"avatarUrl,omitempty"`
 }
 
 type myOrg struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	Slug string `json:"slug"`
-	Role string `json:"role"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	LogoURL string `json:"logoUrl,omitempty"`
+	Role    string `json:"role"`
 }
 
 type providersResponse struct {
@@ -345,13 +344,6 @@ func (h *SessionHandler) SAMLCallback(w http.ResponseWriter, r *http.Request) {
 	httputil.NotImplemented(w)
 }
 
-// AcceptInvitation validates the one-time code, creates the user if needed,
-// adds them to the org, and issues a session.
-// POST /api/v1/auth/invitations/{code}/accept
-func (h *SessionHandler) AcceptInvitation(w http.ResponseWriter, r *http.Request) {
-	httputil.NotImplemented(w)
-}
-
 // Logout deletes the current session.
 // POST /api/v1/auth/logout
 func (h *SessionHandler) Logout(w http.ResponseWriter, r *http.Request) {
@@ -421,7 +413,7 @@ func (h *SessionHandler) Me(w http.ResponseWriter, r *http.Request) {
 		Name:         u.Name,
 		Login:        u.Login,
 		Kind:         "user",
-		IsAdmin:      u.Role == "server_admin",
+		Role:         u.Role,
 		AuthProvider: p.AuthProvider,
 		AvatarURL:    h.avatarURL(r, u.AvatarAssetID),
 	})
@@ -444,10 +436,10 @@ func (h *SessionHandler) MyOrgs(w http.ResponseWriter, r *http.Request) {
 	orgs := make([]myOrg, 0, len(memberships))
 	for _, m := range memberships {
 		orgs = append(orgs, myOrg{
-			ID:   m.Org.ID,
-			Name: m.Org.Name,
-			Slug: m.Org.Slug,
-			Role: m.Role,
+			ID:      m.Org.ID,
+			Name:    m.Org.Name,
+			LogoURL: h.avatarURL(r, m.Org.LogoAssetID),
+			Role:    m.Role,
 		})
 	}
 	httputil.JSON(w, http.StatusOK, map[string]any{"orgs": orgs})

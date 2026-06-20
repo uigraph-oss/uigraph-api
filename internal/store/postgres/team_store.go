@@ -13,7 +13,7 @@ import (
 func scanTeam(row interface{ Scan(...any) error }) (org.Team, error) {
 	var t org.Team
 	var email, extID sql.NullString
-	err := row.Scan(&t.ID, &t.OrgID, &t.Name, &email, &extID, &t.CreatedAt, &t.UpdatedAt)
+	err := row.Scan(&t.ID, &t.OrgID, &t.Name, &email, &extID, &t.MemberCount, &t.CreatedAt, &t.UpdatedAt)
 	t.Email = email.String
 	t.ExternalID = extID.String
 	return t, err
@@ -40,7 +40,9 @@ func (d *DB) CreateTeam(ctx context.Context, t org.Team) error {
 
 func (d *DB) GetTeam(ctx context.Context, id string) (*org.Team, error) {
 	const q = `
-		SELECT id, org_id, name, email, external_id, created_at, updated_at
+		SELECT id, org_id, name, email, external_id,
+		       (SELECT COUNT(*) FROM team_members WHERE team_id = teams.id),
+		       created_at, updated_at
 		FROM   teams WHERE id = $1`
 
 	t, err := scanTeam(d.db.QueryRowContext(ctx, q, id))
@@ -55,7 +57,9 @@ func (d *DB) GetTeam(ctx context.Context, id string) (*org.Team, error) {
 
 func (d *DB) ListTeams(ctx context.Context, orgID string) ([]org.Team, error) {
 	const q = `
-		SELECT id, org_id, name, email, external_id, created_at, updated_at
+		SELECT id, org_id, name, email, external_id,
+		       (SELECT COUNT(*) FROM team_members WHERE team_id = teams.id),
+		       created_at, updated_at
 		FROM   teams
 		WHERE  org_id = $1
 		ORDER  BY name`
@@ -143,6 +147,14 @@ func (d *DB) RemoveTeamMember(ctx context.Context, teamID, userID string) error 
 	const q = `DELETE FROM team_members WHERE team_id = $1 AND user_id = $2`
 	if _, err := d.db.ExecContext(ctx, q, teamID, userID); err != nil {
 		return fmt.Errorf("postgres: RemoveTeamMember: %w", err)
+	}
+	return nil
+}
+
+func (d *DB) RemoveUserFromOrgTeams(ctx context.Context, orgID, userID string) error {
+	const q = `DELETE FROM team_members WHERE org_id = $1 AND user_id = $2`
+	if _, err := d.db.ExecContext(ctx, q, orgID, userID); err != nil {
+		return fmt.Errorf("postgres: RemoveUserFromOrgTeams: %w", err)
 	}
 	return nil
 }

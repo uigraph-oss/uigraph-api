@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/uigraph/app/internal/asset"
 	"github.com/uigraph/app/internal/httputil"
 	"github.com/uigraph/app/internal/identity"
 	authmw "github.com/uigraph/app/internal/middleware"
@@ -15,10 +16,24 @@ import (
 type OrgHandler struct {
 	store   org.OrgStore
 	members org.MemberStore
+	assets  *asset.Resolver // presigns the logo URL; may be nil
 }
 
-func NewOrgHandler(s org.OrgStore, m org.MemberStore) *OrgHandler {
-	return &OrgHandler{store: s, members: m}
+func NewOrgHandler(s org.OrgStore, m org.MemberStore, assets *asset.Resolver) *OrgHandler {
+	return &OrgHandler{store: s, members: m, assets: assets}
+}
+
+// logoURL presigns the logo asset id, returning "" when there is no logo or no
+// resolver configured.
+func (h *OrgHandler) logoURL(r *http.Request, assetID *string) string {
+	if assetID == nil || *assetID == "" || h.assets == nil {
+		return ""
+	}
+	u, err := h.assets.Resolve(r.Context(), *assetID)
+	if err != nil {
+		return ""
+	}
+	return u
 }
 
 // ── Request / Response types ─────────────────────────────────────────────────
@@ -26,22 +41,21 @@ func NewOrgHandler(s org.OrgStore, m org.MemberStore) *OrgHandler {
 type orgResponse struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
-	Slug      string    `json:"slug"`
+	LogoURL   string    `json:"logoUrl,omitempty"`
 	Disabled  bool      `json:"disabled"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
-func orgToResponse(o org.Org) orgResponse {
+func (h *OrgHandler) orgToResponse(r *http.Request, o org.Org) orgResponse {
 	return orgResponse{
-		ID: o.ID, Name: o.Name, Slug: o.Slug,
+		ID: o.ID, Name: o.Name, LogoURL: h.logoURL(r, o.LogoAssetID),
 		Disabled: o.Disabled, CreatedAt: o.CreatedAt, UpdatedAt: o.UpdatedAt,
 	}
 }
 
 type createOrgRequest struct {
 	Name string `json:"name"`
-	Slug string `json:"slug"`
 }
 
 type updateOrgRequest struct {
@@ -61,7 +75,7 @@ func (h *OrgHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]orgResponse, len(orgs))
 	for i, o := range orgs {
-		out[i] = orgToResponse(o)
+		out[i] = h.orgToResponse(r, o)
 	}
 	httputil.JSON(w, http.StatusOK, map[string]any{"orgs": out})
 }
@@ -80,14 +94,13 @@ func (h *OrgHandler) Create(w http.ResponseWriter, r *http.Request) {
 		httputil.BadRequest(w, "invalid JSON")
 		return
 	}
-	if req.Name == "" || req.Slug == "" {
-		httputil.BadRequest(w, "name and slug are required")
+	if req.Name == "" {
+		httputil.BadRequest(w, "name is required")
 		return
 	}
 	o := org.Org{
 		ID:   newUUID(),
 		Name: req.Name,
-		Slug: req.Slug,
 	}
 	if err := h.store.CreateOrg(r.Context(), o); err != nil {
 		httputil.Error(w, r, err)
@@ -102,7 +115,7 @@ func (h *OrgHandler) Create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	httputil.JSON(w, http.StatusCreated, orgToResponse(o))
+	httputil.JSON(w, http.StatusCreated, h.orgToResponse(r, o))
 }
 
 // Get returns a single org by ID.
@@ -118,7 +131,7 @@ func (h *OrgHandler) Get(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, r, store.ErrNotFound)
 		return
 	}
-	httputil.JSON(w, http.StatusOK, orgToResponse(*o))
+	httputil.JSON(w, http.StatusOK, h.orgToResponse(r, *o))
 }
 
 // Update changes an org's name or disabled state.
@@ -149,7 +162,7 @@ func (h *OrgHandler) Update(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, r, err)
 		return
 	}
-	httputil.JSON(w, http.StatusOK, orgToResponse(*o))
+	httputil.JSON(w, http.StatusOK, h.orgToResponse(r, *o))
 }
 
 // Delete removes an org and all its data.

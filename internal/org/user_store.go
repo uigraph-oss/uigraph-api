@@ -11,6 +11,8 @@ type UserStore interface {
 	GetUserByLogin(ctx context.Context, login string) (*User, error)
 	ListUsers(ctx context.Context, orgID string) ([]User, error)
 	ListAllUsers(ctx context.Context) ([]User, error)
+	CountAllUsers(ctx context.Context) (int, error)
+	CountActiveUsers(ctx context.Context) (int, error)
 	AnyUserExists(ctx context.Context) (bool, error)
 	UpdateUser(ctx context.Context, u User) error
 	DisableUser(ctx context.Context, id string) error

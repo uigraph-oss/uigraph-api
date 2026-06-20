@@ -8,6 +8,7 @@ import (
 
 	"github.com/uigraph/app/internal/authz"
 	"github.com/uigraph/app/internal/catalog"
+	"github.com/uigraph/app/internal/comment"
 	"github.com/uigraph/app/internal/componentlib"
 	"github.com/uigraph/app/internal/diagram"
 	"github.com/uigraph/app/internal/folder"
@@ -30,10 +31,10 @@ type Store interface {
 	org.OrgStore
 	org.MemberStore
 	org.TeamStore
-	org.InvitationStore
 	folder.Store
 	diagram.Store
 	uimap.Store
 	catalog.Store
 	componentlib.Store
+	comment.Store
 }

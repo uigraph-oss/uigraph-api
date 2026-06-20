@@ -4,16 +4,21 @@ import (
 	"net/http"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
+
 	"github.com/uigraph/app/internal/httputil"
 	"github.com/uigraph/app/internal/org"
+	"github.com/uigraph/app/internal/store"
 )
 
 type MemberHandler struct {
-	store org.MemberStore
+	members org.MemberStore
+	users   org.UserStore
+	teams   org.TeamStore
 }
 
-func NewMemberHandler(s org.MemberStore) *MemberHandler {
-	return &MemberHandler{store: s}
+func NewMemberHandler(m org.MemberStore, u org.UserStore, t org.TeamStore) *MemberHandler {
+	return &MemberHandler{members: m, users: u, teams: t}
 }
 
 // ── Request / Response types ─────────────────────────────────────────────────
@@ -23,6 +28,9 @@ type memberResponse struct {
 	OrgID     string    `json:"orgId"`
 	Role      string    `json:"role"`
 	Source    string    `json:"source"`
+	Email     string    `json:"email"`
+	Name      string    `json:"name"`
+	TeamID    *string   `json:"teamId,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
@@ -30,17 +38,23 @@ type memberResponse struct {
 func memberToResponse(m org.OrgMember) memberResponse {
 	return memberResponse{
 		UserID: m.UserID, OrgID: m.OrgID, Role: m.Role, Source: m.Source,
+		Email: m.Email, Name: m.Name, TeamID: m.TeamID,
 		CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
 	}
 }
 
 type addMemberRequest struct {
-	UserID string `json:"userId"`
-	Role   string `json:"role"` // admin | editor | viewer
+	Name     string `json:"name"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	Role     string `json:"role"` // admin | editor | viewer
 }
 
-type updateMemberRoleRequest struct {
-	Role string `json:"role"`
+type updateMemberRequest struct {
+	Name   string `json:"name"`
+	Email  string `json:"email"`
+	Role   string `json:"role"` // admin | editor | viewer
+	TeamID string `json:"teamId"`
 }
 
 // ── Handlers ─────────────────────────────────────────────────────────────────
@@ -49,7 +63,7 @@ type updateMemberRoleRequest struct {
 // GET /api/v1/orgs/{orgID}/members
 func (h *MemberHandler) List(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
-	members, err := h.store.ListMembers(r.Context(), orgID)
+	members, err := h.members.ListMembers(r.Context(), orgID)
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
@@ -61,7 +75,7 @@ func (h *MemberHandler) List(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"members": out})
 }
 
-// Add grants an existing user membership in an org.
+// Add creates a new user and grants them membership in an org.
 // POST /api/v1/orgs/{orgID}/members
 func (h *MemberHandler) Add(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
@@ -70,39 +84,111 @@ func (h *MemberHandler) Add(w http.ResponseWriter, r *http.Request) {
 		httputil.BadRequest(w, "invalid JSON")
 		return
 	}
-	if req.UserID == "" || req.Role == "" {
-		httputil.BadRequest(w, "userId and role are required")
+	if req.Name == "" || req.Email == "" || req.Password == "" || req.Role == "" {
+		httputil.BadRequest(w, "name, email, password, and role are required")
 		return
 	}
-	err := h.store.AddMember(r.Context(), org.OrgMember{
-		UserID: req.UserID, OrgID: orgID, Role: req.Role, Source: "manual",
-	})
+	existing, err := h.users.GetUserByEmail(r.Context(), req.Email)
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
 	}
-	w.WriteHeader(http.StatusCreated)
+	if existing != nil {
+		httputil.Error(w, r, store.ErrConflict)
+		return
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	u := org.User{
+		ID:           newID(),
+		Email:        req.Email,
+		Name:         req.Name,
+		Login:        req.Email,
+		PasswordHash: string(hash),
+		Role:         "user",
+	}
+	if err := h.users.CreateUser(r.Context(), u); err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	m := org.OrgMember{UserID: u.ID, OrgID: orgID, Role: req.Role, Source: "manual"}
+	if err := h.members.AddMember(r.Context(), m); err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	m.Email = u.Email
+	m.Name = u.Name
+	httputil.JSON(w, http.StatusCreated, memberToResponse(m))
 }
 
-// UpdateRole changes a member's org-level role.
+// UpdateMember updates a member's name, email, org role, and team assignment.
 // PUT /api/v1/orgs/{orgID}/members/{userID}
-func (h *MemberHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
+func (h *MemberHandler) UpdateMember(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	userID := r.PathValue("userID")
-	var req updateMemberRoleRequest
+	var req updateMemberRequest
 	if err := httputil.Decode(r, &req); err != nil {
 		httputil.BadRequest(w, "invalid JSON")
 		return
 	}
-	if req.Role == "" {
-		httputil.BadRequest(w, "role is required")
+	if req.Name == "" || req.Email == "" || req.Role == "" {
+		httputil.BadRequest(w, "name, email, and role are required")
 		return
 	}
-	if err := h.store.UpdateMemberRole(r.Context(), userID, orgID, req.Role, "manual"); err != nil {
+	u, err := h.users.GetUser(r.Context(), userID)
+	if err != nil {
 		httputil.Error(w, r, err)
 		return
 	}
-	w.WriteHeader(http.StatusNoContent)
+	if u == nil {
+		httputil.Error(w, r, store.ErrNotFound)
+		return
+	}
+	if req.Email != u.Email {
+		clash, err := h.users.GetUserByEmail(r.Context(), req.Email)
+		if err != nil {
+			httputil.Error(w, r, err)
+			return
+		}
+		if clash != nil && clash.ID != userID {
+			httputil.Error(w, r, store.ErrConflict)
+			return
+		}
+	}
+	u.Name = req.Name
+	u.Email = req.Email
+	u.Login = req.Email
+	if err := h.users.UpdateUser(r.Context(), *u); err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if err := h.members.UpdateMemberRole(r.Context(), userID, orgID, req.Role, "manual"); err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if err := h.teams.RemoveUserFromOrgTeams(r.Context(), orgID, userID); err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if req.TeamID != "" {
+		if err := h.teams.AddTeamMember(r.Context(), org.TeamMember{
+			TeamID: req.TeamID, UserID: userID, OrgID: orgID, Permission: "member",
+		}); err != nil {
+			httputil.Error(w, r, err)
+			return
+		}
+	}
+	m := org.OrgMember{
+		UserID: userID, OrgID: orgID, Role: req.Role, Source: "manual",
+		Email: u.Email, Name: u.Name,
+	}
+	if req.TeamID != "" {
+		m.TeamID = &req.TeamID
+	}
+	httputil.JSON(w, http.StatusOK, memberToResponse(m))
 }
 
 // Remove revokes a user's membership.
@@ -110,7 +196,7 @@ func (h *MemberHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 func (h *MemberHandler) Remove(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	userID := r.PathValue("userID")
-	if err := h.store.RemoveMember(r.Context(), userID, orgID); err != nil {
+	if err := h.members.RemoveMember(r.Context(), userID, orgID); err != nil {
 		httputil.Error(w, r, err)
 		return
 	}

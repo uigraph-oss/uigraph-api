@@ -5,10 +5,12 @@ import (
 
 	authmw "github.com/uigraph/app/internal/middleware"
 
+	"github.com/uigraph/app/internal/api/admin"
 	"github.com/uigraph/app/internal/api/auth"
 	"github.com/uigraph/app/internal/api/actor"
 	assetapi "github.com/uigraph/app/internal/api/asset"
 	catalogapi "github.com/uigraph/app/internal/api/catalog"
+	commentapi "github.com/uigraph/app/internal/api/comment"
 	"github.com/uigraph/app/internal/api/component"
 	"github.com/uigraph/app/internal/api/diagram"
 	"github.com/uigraph/app/internal/api/folder"
@@ -28,7 +30,7 @@ import (
 //
 //	/healthz                                  — liveness + readiness probes (unauthenticated)
 //	/livez                                    — liveness probe
-//	/api/v1/auth/*                            — session, OAuth callbacks, invitation acceptance
+//	/api/v1/auth/*                            — session, OAuth callbacks
 //	/api/v1/users/*                           — user management  (requires auth)
 //	/api/v1/orgs/*                            — org + nested resources (requires auth)
 //	/api/v1/orgs/{orgID}/folders/*            — folder hierarchy
@@ -51,7 +53,6 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	mux.HandleFunc("GET /api/v1/auth/login/{provider}", sessionH.InitiateOAuth)
 	mux.HandleFunc("GET /api/v1/auth/callback/{provider}", sessionH.OAuthCallback)
 	mux.HandleFunc("POST /api/v1/auth/saml/acs", sessionH.SAMLCallback)
-	mux.HandleFunc("POST /api/v1/auth/invitations/{code}/accept", sessionH.AcceptInvitation)
 
 	// ── Authenticated ─────────────────────────────────────────────────────
 	protected := func(method, pattern string, h http.HandlerFunc) {
@@ -136,11 +137,13 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	serverAdmin("DELETE", "/api/v1/users/{userID}", userH.Disable)
 
 	// Orgs
-	orgH := auth.NewOrgHandler(s, s)
+	orgH := auth.NewOrgHandler(s, s, assetResolver)
 	protected("GET", "/api/v1/orgs", orgH.List)
 	protected("POST", "/api/v1/orgs", orgH.Create)
 	protected("GET", "/api/v1/orgs/{orgID}", orgH.Get)
 	requireScope(authz.ScopeOrgUpdate, "PUT", "/api/v1/orgs/{orgID}", orgH.Update)
+	requireScope(authz.ScopeOrgUpdate, "PUT", "/api/v1/orgs/{orgID}/logo", avatarH.PutOrgLogo)
+	requireScope(authz.ScopeOrgUpdate, "DELETE", "/api/v1/orgs/{orgID}/logo", avatarH.DeleteOrgLogo)
 	requireScope(authz.ScopeOrgDelete, "DELETE", "/api/v1/orgs/{orgID}", orgH.Delete)
 
 	// Scopes catalog — shared by role assignment and service-account assignment.
@@ -148,10 +151,10 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	requireScope(authz.ScopeMembersRead, "GET", "/api/v1/orgs/{orgID}/scopes", saH.ListScopes)
 
 	// Members
-	memberH := auth.NewMemberHandler(s)
+	memberH := auth.NewMemberHandler(s, s, s)
 	requireScope(authz.ScopeMembersRead, "GET", "/api/v1/orgs/{orgID}/members", memberH.List)
 	requireScope(authz.ScopeMembersAdd, "POST", "/api/v1/orgs/{orgID}/members", memberH.Add)
-	requireScope(authz.ScopeMembersUpdateRole, "PUT", "/api/v1/orgs/{orgID}/members/{userID}", memberH.UpdateRole)
+	requireScope(authz.ScopeMembersUpdateRole, "PUT", "/api/v1/orgs/{orgID}/members/{userID}", memberH.UpdateMember)
 	requireScope(authz.ScopeMembersRemove, "DELETE", "/api/v1/orgs/{orgID}/members/{userID}", memberH.Remove)
 
 	// Teams
@@ -165,13 +168,6 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	requireScope(authz.ScopeTeamsAddMember, "POST", "/api/v1/orgs/{orgID}/teams/{teamID}/members", teamH.AddMember)
 	requireScope(authz.ScopeTeamsRemoveMember, "DELETE", "/api/v1/orgs/{orgID}/teams/{teamID}/members/{userID}", teamH.RemoveMember)
 
-	// Invitations
-	inviteH := auth.NewInvitationHandler(s)
-	requireScope(authz.ScopeInvitationsRead, "GET", "/api/v1/orgs/{orgID}/invitations", inviteH.List)
-	requireScope(authz.ScopeInvitationsCreate, "POST", "/api/v1/orgs/{orgID}/invitations", inviteH.Create)
-	requireScope(authz.ScopeInvitationsRevoke, "DELETE", "/api/v1/orgs/{orgID}/invitations/{inviteID}", inviteH.Revoke)
-	requireScope(authz.ScopeInvitationsResend, "POST", "/api/v1/orgs/{orgID}/invitations/{inviteID}/resend", inviteH.Resend)
-
 	// Service accounts
 	requireScope(authz.ScopeServiceAccountsRead, "GET", "/api/v1/orgs/{orgID}/service-accounts", saH.List)
 	requireScope(authz.ScopeServiceAccountsCreate, "POST", "/api/v1/orgs/{orgID}/service-accounts", saH.Create)
@@ -183,6 +179,10 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	requireScope(authz.ScopeServiceAccountsRead, "GET", "/api/v1/orgs/{orgID}/service-accounts/{saID}/tokens", saH.ListTokens)
 	requireScope(authz.ScopeServiceAccountsCreateToken, "POST", "/api/v1/orgs/{orgID}/service-accounts/{saID}/tokens", saH.CreateToken)
 	requireScope(authz.ScopeServiceAccountsRevokeToken, "DELETE", "/api/v1/orgs/{orgID}/service-accounts/{saID}/tokens/{tokenID}", saH.RevokeToken)
+
+	// Server overview (global — server-admin only)
+	adminH := admin.New(s)
+	serverAdmin("GET", "/api/v1/server/overview", adminH.Overview)
 
 	// SSO (global — server-admin only)
 	ssoH := auth.NewSSOHandler(s)
@@ -218,13 +218,16 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	diagram.Register(mux, s, st, c, scopeFn)
 
 	// ── Component palettes + icons ────────────────────────────────────────
-	component.Register(mux, s, st, protected)
+	component.Register(mux, s, st, protected, scopeFn)
 
 	// ── Services + API Groups + API Endpoints ─────────────────────────────
 	catalogapi.Register(mux, s, st, scopeFn)
 
 	// ── Maps + Frames + Focal Points + Canvas ─────────────────────────────
 	mapspkg.Register(mux, s, st, scopeFn)
+
+	// ── Comments ──────────────────────────────────────────────────────────
+	commentapi.Register(mux, s, scopeFn)
 
 	return mux
 }

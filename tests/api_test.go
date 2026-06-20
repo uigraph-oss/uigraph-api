@@ -94,7 +94,7 @@ func TestMain(m *testing.M) {
 		_ = db.UpdateUser(ctx, *u)
 	}
 
-	org := mustDo(t_("TestMain"), "POST", "/api/v1/orgs", adminToken, M{"name": "Test Org", "slug": fmt.Sprintf("test-org-%d", time.Now().UnixNano())})
+	org := mustDo(t_("TestMain"), "POST", "/api/v1/orgs", adminToken, M{"name": "Test Org"})
 	orgID = str(org, "id")
 
 	if err := db.UpsertOrgMember(ctx, u.ID, orgID, authz.RoleAdmin, "test"); err != nil {
@@ -282,10 +282,8 @@ func TestOrgs_List(t *testing.T) {
 }
 
 func TestOrgs_CRUD(t *testing.T) {
-	slug := fmt.Sprintf("test-org-%d", time.Now().UnixNano())
-
 	// create
-	created := mustDo(t, "POST", "/api/v1/orgs", adminToken, M{"name": "Test Org", "slug": slug})
+	created := mustDo(t, "POST", "/api/v1/orgs", adminToken, M{"name": "Test Org"})
 	id := str(created, "id")
 	if id == "" {
 		t.Fatal("expected id in response")
@@ -293,8 +291,8 @@ func TestOrgs_CRUD(t *testing.T) {
 
 	// get
 	got := mustDo(t, "GET", "/api/v1/orgs/"+id, adminToken, nil)
-	if got["slug"] != slug {
-		t.Fatalf("want slug %q, got %v", slug, got["slug"])
+	if got["name"] != "Test Org" {
+		t.Fatalf("want name %q, got %v", "Test Org", got["name"])
 	}
 
 	// update

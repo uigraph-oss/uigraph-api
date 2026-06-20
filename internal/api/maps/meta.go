@@ -23,6 +23,21 @@ func (h *Handler) ListMeta(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"meta": metas})
 }
 
+// ListMetaByComponentLink handles GET /api/v1/orgs/{orgID}/focal-point-meta?componentLinkId=...
+func (h *Handler) ListMetaByComponentLink(w http.ResponseWriter, r *http.Request) {
+	componentLinkID := r.URL.Query().Get("componentLinkId")
+	if componentLinkID == "" {
+		httputil.BadRequest(w, "componentLinkId is required")
+		return
+	}
+	metas, err := h.store.ListFocalPointMetaByComponentLink(r.Context(), r.PathValue("orgID"), componentLinkID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{"meta": metas})
+}
+
 // CreateMeta handles POST /api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta
 func (h *Handler) CreateMeta(w http.ResponseWriter, r *http.Request) {
 	fpID := r.PathValue("fpID")

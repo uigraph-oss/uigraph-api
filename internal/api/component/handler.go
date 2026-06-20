@@ -13,6 +13,10 @@ import (
 // store is the minimal persistence interface this package needs.
 type store interface {
 	ListComponentsByKind(ctx context.Context, kind string) ([]componentlib.Component, error)
+	ListCustomComponents(ctx context.Context, orgID string) ([]componentlib.Component, error)
+	SaveCustomComponent(ctx context.Context, c componentlib.Component) error
+	GetComponent(ctx context.Context, id string) (*componentlib.Component, error)
+	DeleteComponent(ctx context.Context, id string) error
 }
 
 // objectStore is the minimal storage interface this package needs.
@@ -38,6 +42,7 @@ func Register(
 	s store,
 	st storage.Client,
 	protected func(method, pattern string, h http.HandlerFunc),
+	requireScope func(scope, method, pattern string, h http.HandlerFunc),
 ) {
 	h := New(s, st)
 	// Unauthenticated — icon assets are public.
@@ -45,4 +50,7 @@ func Register(
 	// Authenticated.
 	protected("GET", "/api/v1/orgs/{orgID}/components", h.ListFocal)
 	protected("GET", "/api/v1/orgs/{orgID}/flow-diagram-components", h.ListFlow)
+	requireScope("maps:write", "POST", "/api/v1/orgs/{orgID}/components", h.Create)
+	requireScope("maps:write", "PUT", "/api/v1/orgs/{orgID}/components/{componentID}", h.Update)
+	requireScope("maps:write", "DELETE", "/api/v1/orgs/{orgID}/components/{componentID}", h.Delete)
 }

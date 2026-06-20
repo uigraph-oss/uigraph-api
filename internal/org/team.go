@@ -4,13 +4,14 @@ import "time"
 
 // Team is a named group within an org, optionally synced from an IdP.
 type Team struct {
-	ID         string
-	OrgID      string
-	Name       string
-	Email      string
-	ExternalID string
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	ID          string
+	OrgID       string
+	Name        string
+	Email       string
+	ExternalID  string
+	MemberCount int
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 // TeamMember is a user's membership in a team with a team-level permission.

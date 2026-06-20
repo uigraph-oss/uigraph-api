@@ -16,11 +16,12 @@ const maxAssetIDs = 200
 // Handler wraps asset.Resolver for HTTP.
 type Handler struct {
 	resolver *assetpkg.Resolver
+	storage  storage.Client
 }
 
 // New constructs a Handler.
 func New(st storage.Client, c cache.Client) *Handler {
-	return &Handler{resolver: assetpkg.New(st, c)}
+	return &Handler{resolver: assetpkg.New(st, c), storage: st}
 }
 
 // Register wires the asset URL route into mux.
@@ -32,6 +33,20 @@ func Register(
 ) {
 	h := New(st, c)
 	protected("GET", "/api/v1/orgs/{orgID}/assets/urls", h.Resolve)
+	protected("POST", "/api/v1/orgs/{orgID}/assets", h.CreateUpload)
+}
+
+func (h *Handler) CreateUpload(w http.ResponseWriter, r *http.Request) {
+	assetID := storage.NewFileAssetID()
+	url, err := h.storage.PresignPutURL(r.Context(), storage.AssetKey(assetID))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusCreated, map[string]any{
+		"assetId":   assetID,
+		"uploadUrl": url,
+	})
 }
 
 // Resolve handles GET /api/v1/orgs/{orgID}/assets/urls?ids=a,b,c

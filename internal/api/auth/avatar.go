@@ -8,6 +8,7 @@ import (
 	"github.com/uigraph/app/internal/httputil"
 	"github.com/uigraph/app/internal/identity"
 	authmw "github.com/uigraph/app/internal/middleware"
+	"github.com/uigraph/app/internal/org"
 	"github.com/uigraph/app/internal/storage"
 	"github.com/uigraph/app/internal/store"
 )
@@ -19,6 +20,8 @@ type avatarStore interface {
 	SetUserAvatar(ctx context.Context, userID string, assetID *string) error
 	GetServiceAccount(ctx context.Context, id string) (*identity.ServiceAccount, error)
 	SetServiceAccountAvatar(ctx context.Context, saID string, assetID *string) error
+	GetOrg(ctx context.Context, id string) (*org.Org, error)
+	SetOrgLogo(ctx context.Context, id string, assetID *string) error
 }
 
 type AvatarHandler struct {
@@ -128,6 +131,57 @@ func (h *AvatarHandler) DeleteServiceAccountAvatar(w http.ResponseWriter, r *htt
 		return
 	}
 	h.bust(r, saID, assetID)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// PutOrgLogo handles PUT /api/v1/orgs/{orgID}/logo — an admin sets the org's
+// logo (multipart field "file").
+func (h *AvatarHandler) PutOrgLogo(w http.ResponseWriter, r *http.Request) {
+	orgID := r.PathValue("orgID")
+
+	o, err := h.store.GetOrg(r.Context(), orgID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if o == nil {
+		httputil.Error(w, r, store.ErrNotFound)
+		return
+	}
+
+	assetID := storage.OrgLogoAssetID(orgID)
+	if !h.uploadAvatar(w, r, assetID) {
+		return
+	}
+	if err := h.store.SetOrgLogo(r.Context(), orgID, &assetID); err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	h.bust(r, orgID, assetID)
+	httputil.JSON(w, http.StatusOK, map[string]any{"assetId": assetID})
+}
+
+// DeleteOrgLogo handles DELETE /api/v1/orgs/{orgID}/logo.
+func (h *AvatarHandler) DeleteOrgLogo(w http.ResponseWriter, r *http.Request) {
+	orgID := r.PathValue("orgID")
+
+	o, err := h.store.GetOrg(r.Context(), orgID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if o == nil {
+		httputil.Error(w, r, store.ErrNotFound)
+		return
+	}
+
+	assetID := storage.OrgLogoAssetID(orgID)
+	_ = h.storage.Delete(r.Context(), storage.AssetKey(assetID))
+	if err := h.store.SetOrgLogo(r.Context(), orgID, nil); err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	h.bust(r, orgID, assetID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
