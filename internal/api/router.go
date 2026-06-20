@@ -30,7 +30,7 @@ import (
 //
 //	/healthz                                  — liveness + readiness probes (unauthenticated)
 //	/livez                                    — liveness probe
-//	/api/v1/auth/*                            — session, OAuth callbacks, invitation acceptance
+//	/api/v1/auth/*                            — session, OAuth callbacks
 //	/api/v1/users/*                           — user management  (requires auth)
 //	/api/v1/orgs/*                            — org + nested resources (requires auth)
 //	/api/v1/orgs/{orgID}/folders/*            — folder hierarchy
@@ -53,7 +53,6 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	mux.HandleFunc("GET /api/v1/auth/login/{provider}", sessionH.InitiateOAuth)
 	mux.HandleFunc("GET /api/v1/auth/callback/{provider}", sessionH.OAuthCallback)
 	mux.HandleFunc("POST /api/v1/auth/saml/acs", sessionH.SAMLCallback)
-	mux.HandleFunc("POST /api/v1/auth/invitations/{code}/accept", sessionH.AcceptInvitation)
 
 	// ── Authenticated ─────────────────────────────────────────────────────
 	protected := func(method, pattern string, h http.HandlerFunc) {
@@ -150,7 +149,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	requireScope(authz.ScopeMembersRead, "GET", "/api/v1/orgs/{orgID}/scopes", saH.ListScopes)
 
 	// Members
-	memberH := auth.NewMemberHandler(s)
+	memberH := auth.NewMemberHandler(s, s)
 	requireScope(authz.ScopeMembersRead, "GET", "/api/v1/orgs/{orgID}/members", memberH.List)
 	requireScope(authz.ScopeMembersAdd, "POST", "/api/v1/orgs/{orgID}/members", memberH.Add)
 	requireScope(authz.ScopeMembersUpdateRole, "PUT", "/api/v1/orgs/{orgID}/members/{userID}", memberH.UpdateRole)
@@ -166,13 +165,6 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	requireScope(authz.ScopeTeamsRead, "GET", "/api/v1/orgs/{orgID}/teams/{teamID}/members", teamH.ListMembers)
 	requireScope(authz.ScopeTeamsAddMember, "POST", "/api/v1/orgs/{orgID}/teams/{teamID}/members", teamH.AddMember)
 	requireScope(authz.ScopeTeamsRemoveMember, "DELETE", "/api/v1/orgs/{orgID}/teams/{teamID}/members/{userID}", teamH.RemoveMember)
-
-	// Invitations
-	inviteH := auth.NewInvitationHandler(s)
-	requireScope(authz.ScopeInvitationsRead, "GET", "/api/v1/orgs/{orgID}/invitations", inviteH.List)
-	requireScope(authz.ScopeInvitationsCreate, "POST", "/api/v1/orgs/{orgID}/invitations", inviteH.Create)
-	requireScope(authz.ScopeInvitationsRevoke, "DELETE", "/api/v1/orgs/{orgID}/invitations/{inviteID}", inviteH.Revoke)
-	requireScope(authz.ScopeInvitationsResend, "POST", "/api/v1/orgs/{orgID}/invitations/{inviteID}/resend", inviteH.Resend)
 
 	// Service accounts
 	requireScope(authz.ScopeServiceAccountsRead, "GET", "/api/v1/orgs/{orgID}/service-accounts", saH.List)

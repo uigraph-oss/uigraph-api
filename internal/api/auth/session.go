@@ -33,7 +33,6 @@ type sessionStore interface {
 	org.OrgStore
 	org.UserStore
 	org.MemberStore
-	org.InvitationStore
 }
 
 type SessionHandler struct {
@@ -342,13 +341,6 @@ func (h *SessionHandler) OAuthCallback(w http.ResponseWriter, r *http.Request) {
 // SAMLCallback handles the IdP POST to the ACS endpoint.
 // POST /api/v1/auth/saml/acs
 func (h *SessionHandler) SAMLCallback(w http.ResponseWriter, r *http.Request) {
-	httputil.NotImplemented(w)
-}
-
-// AcceptInvitation validates the one-time code, creates the user if needed,
-// adds them to the org, and issues a session.
-// POST /api/v1/auth/invitations/{code}/accept
-func (h *SessionHandler) AcceptInvitation(w http.ResponseWriter, r *http.Request) {
 	httputil.NotImplemented(w)
 }
 

@@ -31,7 +31,6 @@ type Store interface {
 	org.OrgStore
 	org.MemberStore
 	org.TeamStore
-	org.InvitationStore
 	folder.Store
 	diagram.Store
 	uimap.Store
