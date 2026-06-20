@@ -13,43 +13,23 @@ import (
 )
 
 type minioClient struct {
-	// mc is the internal client the server uses for uploads/downloads.
-	mc *minio.Client
-	// presignMC signs presigned URLs against the browser-reachable host.
-	// Equals mc when no public endpoint is configured.
+	mc        *minio.Client
 	presignMC *minio.Client
 	bucket    string
 	backend   string
 }
 
-// Config is the minimal configuration needed to create a storage client.
-type Config struct {
-	Backend   string // "minio" | "s3"
-	Endpoint  string
-	Bucket    string
-	AccessKey string
-	SecretKey string
-	Region    string
-	// PublicEndpoint is the browser-reachable host used to sign presigned URLs.
-	// Endpoint is the internal host the server uses for uploads/downloads (e.g.
-	// "http://minio:9000"); a presigned URL signed against it is unusable from a
-	// browser because the host is part of the V4 signature. When set, presigning
-	// is done against PublicEndpoint (e.g. "http://localhost:9000"). When empty,
-	// presigning falls back to Endpoint.
-	PublicEndpoint string
-}
-
-// New creates a storage client for the given backend.
-// Both "minio" and "s3" backends use the MinIO SDK (S3-compatible).
-func New(cfg Config) (Client, error) {
-	mc, err := newMinio(cfg.Endpoint, cfg)
+// newMinioClient builds a Client backed by MinIO (or any S3-compatible endpoint
+// that the MinIO SDK supports). Called by New() when Backend != "s3".
+func newMinioClient(cfg Config) (Client, error) {
+	mc, err := buildMinio(cfg.Endpoint, cfg)
 	if err != nil {
 		return nil, err
 	}
 
 	presignMC := mc
 	if cfg.PublicEndpoint != "" {
-		presignMC, err = newMinio(cfg.PublicEndpoint, cfg)
+		presignMC, err = buildMinio(cfg.PublicEndpoint, cfg)
 		if err != nil {
 			return nil, err
 		}
@@ -58,15 +38,13 @@ func New(cfg Config) (Client, error) {
 	return &minioClient{mc: mc, presignMC: presignMC, bucket: cfg.Bucket, backend: cfg.Backend}, nil
 }
 
-// newMinio builds a minio client for endpoint using cfg's credentials/region.
-func newMinio(endpoint string, cfg Config) (*minio.Client, error) {
+// buildMinio creates a raw minio.Client for the given endpoint.
+func buildMinio(endpoint string, cfg Config) (*minio.Client, error) {
 	secure := !strings.Contains(endpoint, "http://")
-	// Strip scheme — the minio client wants host[:port] only.
 	host := strings.TrimPrefix(endpoint, "https://")
 	host = strings.TrimPrefix(host, "http://")
 
 	if cfg.Backend == "s3" && endpoint == "" {
-		// AWS S3: use virtual-hosted-style; endpoint is inferred from bucket/region.
 		host = "s3.amazonaws.com"
 		secure = true
 	}
@@ -88,9 +66,6 @@ func (c *minioClient) EnsureBucket(ctx context.Context) error {
 			return err
 		}
 	}
-
-	// Keep the bucket private: assets are reachable only via presigned URLs.
-	// Clear any public policy a previous version may have set on assets/*.
 	if c.backend == "minio" {
 		if err := c.mc.SetBucketPolicy(ctx, c.bucket, ""); err != nil {
 			return fmt.Errorf("storage: clear bucket policy: %w", err)
@@ -123,7 +98,7 @@ func (c *minioClient) PresignURL(ctx context.Context, key string, ttl time.Durat
 }
 
 func (c *minioClient) PresignPutURL(ctx context.Context, key string) (string, error) {
-	u, err := c.mc.PresignedPutObject(ctx, c.bucket, key, 15*time.Minute)
+	u, err := c.presignMC.PresignedPutObject(ctx, c.bucket, key, 15*time.Minute)
 	if err != nil {
 		return "", err
 	}

@@ -491,6 +491,93 @@ func (h *Handler) cacheDel(ctx context.Context, id string) {
 	_ = h.cache.Del(ctx, cache.DiagramContentKey(id))
 }
 
+func (h *Handler) PrepareThumbnailUpload(w http.ResponseWriter, r *http.Request) {
+	orgID := r.PathValue("orgID")
+	diagramID := r.PathValue("diagramID")
+	_, ok := authmw.PrincipalFromCtx(r.Context())
+	if !ok {
+		httputil.Unauthorized(w)
+		return
+	}
+
+	dg, err := h.store.GetDiagram(r.Context(), diagramID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if dg == nil || dg.DeletedAt != nil {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+	if dg.OrgID != orgID {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+
+	assetID := storage.DiagramThumbnailAssetID(diagramID)
+	uploadURL, err := h.storage.PresignPutURL(r.Context(), storage.AssetKey(assetID))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+
+	httputil.JSON(w, http.StatusOK, map[string]any{
+		"uploadUrl": uploadURL,
+		"assetId":   assetID,
+	})
+}
+
+func (h *Handler) ConfirmThumbnailUpload(w http.ResponseWriter, r *http.Request) {
+	orgID := r.PathValue("orgID")
+	diagramID := r.PathValue("diagramID")
+	p, ok := authmw.PrincipalFromCtx(r.Context())
+	if !ok {
+		httputil.Unauthorized(w)
+		return
+	}
+
+	dg, err := h.store.GetDiagram(r.Context(), diagramID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if dg == nil || dg.DeletedAt != nil {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+	if dg.OrgID != orgID {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+
+	var body struct {
+		ContentHash string `json:"contentHash"`
+	}
+	if err := httputil.Decode(r, &body); err != nil {
+		httputil.BadRequest(w, "invalid request body")
+		return
+	}
+	if body.ContentHash == "" {
+		httputil.BadRequest(w, "contentHash is required")
+		return
+	}
+
+	assetID := storage.DiagramThumbnailAssetID(diagramID)
+	dg.PreviewAssetID = &assetID
+	dg.PreviewContentHash = &body.ContentHash
+	dg.UpdatedBy = &p.UserID
+	if err := h.store.UpdateDiagram(r.Context(), *dg); err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+
+	if h.cache != nil {
+		_ = h.cache.Del(r.Context(), cache.AssetURLKey(assetID))
+	}
+
+	httputil.JSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
 func sha256Hex(s string) string {
 	sum := sha256.Sum256([]byte(s))
 	return fmt.Sprintf("%x", sum)
