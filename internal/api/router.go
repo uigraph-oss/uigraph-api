@@ -5,6 +5,7 @@ import (
 
 	authmw "github.com/uigraph/app/internal/middleware"
 
+	"github.com/uigraph/app/internal/api/admin"
 	"github.com/uigraph/app/internal/api/auth"
 	"github.com/uigraph/app/internal/api/actor"
 	assetapi "github.com/uigraph/app/internal/api/asset"
@@ -184,6 +185,10 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	requireScope(authz.ScopeServiceAccountsRead, "GET", "/api/v1/orgs/{orgID}/service-accounts/{saID}/tokens", saH.ListTokens)
 	requireScope(authz.ScopeServiceAccountsCreateToken, "POST", "/api/v1/orgs/{orgID}/service-accounts/{saID}/tokens", saH.CreateToken)
 	requireScope(authz.ScopeServiceAccountsRevokeToken, "DELETE", "/api/v1/orgs/{orgID}/service-accounts/{saID}/tokens/{tokenID}", saH.RevokeToken)
+
+	// Server overview (global — server-admin only)
+	adminH := admin.New(s)
+	serverAdmin("GET", "/api/v1/server/overview", adminH.Overview)
 
 	// SSO (global — server-admin only)
 	ssoH := auth.NewSSOHandler(s)

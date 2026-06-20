@@ -77,6 +77,14 @@ func (d *DB) ListOrgs(ctx context.Context) ([]org.Org, error) {
 	return out, rows.Err()
 }
 
+func (d *DB) CountAllOrgs(ctx context.Context) (int, error) {
+	var n int
+	if err := d.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM orgs`).Scan(&n); err != nil {
+		return 0, fmt.Errorf("postgres: CountAllOrgs: %w", err)
+	}
+	return n, nil
+}
+
 func (d *DB) UpdateOrg(ctx context.Context, o org.Org) error {
 	const q = `
 		UPDATE orgs

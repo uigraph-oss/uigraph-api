@@ -187,6 +187,22 @@ func (d *DB) ListAllUsers(ctx context.Context) ([]org.User, error) {
 	return out, rows.Err()
 }
 
+func (d *DB) CountAllUsers(ctx context.Context) (int, error) {
+	var n int
+	if err := d.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users`).Scan(&n); err != nil {
+		return 0, fmt.Errorf("postgres: CountAllUsers: %w", err)
+	}
+	return n, nil
+}
+
+func (d *DB) CountActiveUsers(ctx context.Context) (int, error) {
+	var n int
+	if err := d.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE disabled = FALSE`).Scan(&n); err != nil {
+		return 0, fmt.Errorf("postgres: CountActiveUsers: %w", err)
+	}
+	return n, nil
+}
+
 func (d *DB) AnyUserExists(ctx context.Context) (bool, error) {
 	var n int
 	if err := d.db.QueryRowContext(ctx, `SELECT 1 FROM users LIMIT 1`).Scan(&n); err != nil {
