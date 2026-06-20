@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/uigraph/app/internal/componentcatalog"
+	"github.com/uigraph/app/internal/componentlib"
 )
 
 // SaveCustomComponent upserts an org-scoped custom component and replaces its
 // field set. Custom components carry a free-text category (category_text) and a
 // NULL category_id.
-func (d *DB) SaveCustomComponent(ctx context.Context, c componentcatalog.Component) error {
+func (d *DB) SaveCustomComponent(ctx context.Context, c componentlib.Component) error {
 	const q = `
 		INSERT INTO components
 			(id, org_id, kind, type, name, slug, description, category_id, category_text,
@@ -36,7 +36,7 @@ func (d *DB) SaveCustomComponent(ctx context.Context, c componentcatalog.Compone
 	c.UpdatedAt = now
 	_, err := d.db.ExecContext(ctx, q,
 		c.ID, c.OrgID, c.Kind, c.Type, c.Name, c.Slug, c.Description, c.CategoryName,
-		componentcatalog.TagsJSON(c.Tags), c.IconKey, c.IsActive, c.Order,
+		componentlib.TagsJSON(c.Tags), c.IconKey, c.IsActive, c.Order,
 		c.CreatedAt, c.UpdatedAt,
 	)
 	if err != nil {
@@ -45,7 +45,7 @@ func (d *DB) SaveCustomComponent(ctx context.Context, c componentcatalog.Compone
 	return d.replaceComponentFields(ctx, c.ID, c.Fields)
 }
 
-func (d *DB) replaceComponentFields(ctx context.Context, componentID string, fields []componentcatalog.ComponentField) error {
+func (d *DB) replaceComponentFields(ctx context.Context, componentID string, fields []componentlib.ComponentField) error {
 	if _, err := d.db.ExecContext(ctx, `DELETE FROM component_fields WHERE component_id = $1`, componentID); err != nil {
 		return fmt.Errorf("postgres: replaceComponentFields delete: %w", err)
 	}
@@ -56,7 +56,7 @@ func (d *DB) replaceComponentFields(ctx context.Context, componentID string, fie
 	for _, f := range fields {
 		_, err := d.db.ExecContext(ctx, q,
 			f.ID, componentID, f.Label, f.Type, f.Required, f.Readonly,
-			componentcatalog.OptionsJSON(f.Options), f.Order,
+			componentlib.OptionsJSON(f.Options), f.Order,
 		)
 		if err != nil {
 			return fmt.Errorf("postgres: replaceComponentFields insert: %w", err)
@@ -65,7 +65,7 @@ func (d *DB) replaceComponentFields(ctx context.Context, componentID string, fie
 	return nil
 }
 
-func (d *DB) GetComponent(ctx context.Context, id string) (*componentcatalog.Component, error) {
+func (d *DB) GetComponent(ctx context.Context, id string) (*componentlib.Component, error) {
 	const q = `
 		SELECT c.id, c.org_id, c.kind, c.type, c.name, c.slug, c.description,
 		       COALESCE(c.category_id, ''), COALESCE(cat.name, c.category_text, ''),
@@ -88,7 +88,7 @@ func (d *DB) GetComponent(ctx context.Context, id string) (*componentcatalog.Com
 	return &c, nil
 }
 
-func (d *DB) ListCustomComponents(ctx context.Context, orgID string) ([]componentcatalog.Component, error) {
+func (d *DB) ListCustomComponents(ctx context.Context, orgID string) ([]componentlib.Component, error) {
 	const q = `
 		SELECT c.id, c.org_id, c.kind, c.type, c.name, c.slug, c.description,
 		       COALESCE(c.category_id, ''), COALESCE(cat.name, c.category_text, ''),
@@ -103,7 +103,7 @@ func (d *DB) ListCustomComponents(ctx context.Context, orgID string) ([]componen
 	}
 	defer rows.Close()
 
-	var comps []componentcatalog.Component
+	var comps []componentlib.Component
 	for rows.Next() {
 		c, err := scanComponent(rows)
 		if err != nil {

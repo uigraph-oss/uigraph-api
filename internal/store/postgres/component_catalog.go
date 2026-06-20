@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/uigraph/app/internal/componentcatalog"
+	"github.com/uigraph/app/internal/componentlib"
 )
 
-func (d *DB) UpsertComponentCategory(ctx context.Context, cat componentcatalog.Category) error {
+func (d *DB) UpsertComponentCategory(ctx context.Context, cat componentlib.Category) error {
 	const q = `
 		INSERT INTO component_categories
 			(id, org_id, kind, name, slug, sort_order, is_active, created_at, updated_at)
@@ -36,7 +36,7 @@ func (d *DB) UpsertComponentCategory(ctx context.Context, cat componentcatalog.C
 	return nil
 }
 
-func (d *DB) UpsertComponent(ctx context.Context, c componentcatalog.Component) error {
+func (d *DB) UpsertComponent(ctx context.Context, c componentlib.Component) error {
 	const q = `
 		INSERT INTO components
 			(id, org_id, kind, type, name, slug, description, category_id, tags,
@@ -60,7 +60,7 @@ func (d *DB) UpsertComponent(ctx context.Context, c componentcatalog.Component) 
 	c.UpdatedAt = now
 	_, err := d.db.ExecContext(ctx, q,
 		c.ID, c.OrgID, c.Kind, c.Type, c.Name, c.Slug, c.Description, c.CategoryID,
-		componentcatalog.TagsJSON(c.Tags), c.IconKey, c.IsActive, c.Order,
+		componentlib.TagsJSON(c.Tags), c.IconKey, c.IsActive, c.Order,
 		c.CreatedAt, c.UpdatedAt,
 	)
 	if err != nil {
@@ -69,7 +69,7 @@ func (d *DB) UpsertComponent(ctx context.Context, c componentcatalog.Component) 
 	return nil
 }
 
-func (d *DB) UpsertComponentField(ctx context.Context, f componentcatalog.ComponentField) error {
+func (d *DB) UpsertComponentField(ctx context.Context, f componentlib.ComponentField) error {
 	const q = `
 		INSERT INTO component_fields
 			(id, component_id, label, type, required, readonly, options, sort_order)
@@ -84,7 +84,7 @@ func (d *DB) UpsertComponentField(ctx context.Context, f componentcatalog.Compon
 			sort_order = EXCLUDED.sort_order`
 	_, err := d.db.ExecContext(ctx, q,
 		f.ID, f.ComponentID, f.Label, f.Type, f.Required, f.Readonly,
-		componentcatalog.OptionsJSON(f.Options), f.Order,
+		componentlib.OptionsJSON(f.Options), f.Order,
 	)
 	if err != nil {
 		return fmt.Errorf("postgres: UpsertComponentField: %w", err)
@@ -92,7 +92,7 @@ func (d *DB) UpsertComponentField(ctx context.Context, f componentcatalog.Compon
 	return nil
 }
 
-func (d *DB) ListComponentsByKind(ctx context.Context, kind string) ([]componentcatalog.Component, error) {
+func (d *DB) ListComponentsByKind(ctx context.Context, kind string) ([]componentlib.Component, error) {
 	const q = `
 		SELECT c.id, c.org_id, c.kind, c.type, c.name, c.slug, c.description,
 		       c.category_id, cat.name, c.tags, c.icon_key, c.is_active, c.sort_order,
@@ -107,7 +107,7 @@ func (d *DB) ListComponentsByKind(ctx context.Context, kind string) ([]component
 	}
 	defer rows.Close()
 
-	var comps []componentcatalog.Component
+	var comps []componentlib.Component
 	for rows.Next() {
 		c, err := scanComponent(rows)
 		if err != nil {
@@ -129,7 +129,7 @@ func (d *DB) ListComponentsByKind(ctx context.Context, kind string) ([]component
 	return comps, nil
 }
 
-func (d *DB) listComponentFields(ctx context.Context, componentID string) ([]componentcatalog.ComponentField, error) {
+func (d *DB) listComponentFields(ctx context.Context, componentID string) ([]componentlib.ComponentField, error) {
 	const q = `
 		SELECT id, component_id, label, type, required, readonly, options, sort_order
 		FROM component_fields
@@ -141,9 +141,9 @@ func (d *DB) listComponentFields(ctx context.Context, componentID string) ([]com
 	}
 	defer rows.Close()
 
-	var out []componentcatalog.ComponentField
+	var out []componentlib.ComponentField
 	for rows.Next() {
-		var f componentcatalog.ComponentField
+		var f componentlib.ComponentField
 		var opts []byte
 		var readonly sql.NullBool
 		if err := rows.Scan(&f.ID, &f.ComponentID, &f.Label, &f.Type, &f.Required, &readonly, &opts, &f.Order); err != nil {
@@ -183,8 +183,8 @@ type componentScanner interface {
 	Scan(dest ...any) error
 }
 
-func scanComponent(row componentScanner) (componentcatalog.Component, error) {
-	var c componentcatalog.Component
+func scanComponent(row componentScanner) (componentlib.Component, error) {
+	var c componentlib.Component
 	var tags []byte
 	var iconKey sql.NullString
 	var orgID sql.NullString
