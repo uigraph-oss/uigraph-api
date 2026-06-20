@@ -492,6 +492,7 @@ func (h *Handler) cacheDel(ctx context.Context, id string) {
 }
 
 func (h *Handler) PrepareThumbnailUpload(w http.ResponseWriter, r *http.Request) {
+	orgID := r.PathValue("orgID")
 	diagramID := r.PathValue("diagramID")
 	_, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {
@@ -505,6 +506,10 @@ func (h *Handler) PrepareThumbnailUpload(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if dg == nil || dg.DeletedAt != nil {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+	if dg.OrgID != orgID {
 		httputil.Error(w, r, storepkg.ErrNotFound)
 		return
 	}
@@ -523,6 +528,7 @@ func (h *Handler) PrepareThumbnailUpload(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *Handler) ConfirmThumbnailUpload(w http.ResponseWriter, r *http.Request) {
+	orgID := r.PathValue("orgID")
 	diagramID := r.PathValue("diagramID")
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {
@@ -536,6 +542,10 @@ func (h *Handler) ConfirmThumbnailUpload(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if dg == nil || dg.DeletedAt != nil {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+	if dg.OrgID != orgID {
 		httputil.Error(w, r, storepkg.ErrNotFound)
 		return
 	}
