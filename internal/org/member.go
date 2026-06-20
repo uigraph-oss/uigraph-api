@@ -3,8 +3,8 @@ package org
 import "time"
 
 // OrgMember is a user's membership record within an org. Email/Name and the
-// first-team association (TeamID/TeamName) are populated by ListMembers via a
-// join on users + team_members; they are empty/nil on GetMember.
+// first-team association (TeamID) are populated by ListMembers via a join on
+// users + team_members; they are empty/nil on GetMember.
 type OrgMember struct {
 	UserID    string
 	OrgID     string
@@ -13,7 +13,6 @@ type OrgMember struct {
 	Email     string
 	Name      string
 	TeamID    *string
-	TeamName  *string
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }

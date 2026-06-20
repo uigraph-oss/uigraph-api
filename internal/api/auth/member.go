@@ -14,10 +14,11 @@ import (
 type MemberHandler struct {
 	members org.MemberStore
 	users   org.UserStore
+	teams   org.TeamStore
 }
 
-func NewMemberHandler(m org.MemberStore, u org.UserStore) *MemberHandler {
-	return &MemberHandler{members: m, users: u}
+func NewMemberHandler(m org.MemberStore, u org.UserStore, t org.TeamStore) *MemberHandler {
+	return &MemberHandler{members: m, users: u, teams: t}
 }
 
 // ── Request / Response types ─────────────────────────────────────────────────
@@ -30,7 +31,6 @@ type memberResponse struct {
 	Email     string    `json:"email"`
 	Name      string    `json:"name"`
 	TeamID    *string   `json:"teamId,omitempty"`
-	TeamName  *string   `json:"teamName,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
@@ -38,7 +38,7 @@ type memberResponse struct {
 func memberToResponse(m org.OrgMember) memberResponse {
 	return memberResponse{
 		UserID: m.UserID, OrgID: m.OrgID, Role: m.Role, Source: m.Source,
-		Email: m.Email, Name: m.Name, TeamID: m.TeamID, TeamName: m.TeamName,
+		Email: m.Email, Name: m.Name, TeamID: m.TeamID,
 		CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
 	}
 }
@@ -50,8 +50,11 @@ type addMemberRequest struct {
 	Role     string `json:"role"` // admin | editor | viewer
 }
 
-type updateMemberRoleRequest struct {
-	Role string `json:"role"`
+type updateMemberRequest struct {
+	Name   string `json:"name"`
+	Email  string `json:"email"`
+	Role   string `json:"role"` // admin | editor | viewer
+	TeamID string `json:"teamId"`
 }
 
 // ── Handlers ─────────────────────────────────────────────────────────────────
@@ -121,25 +124,71 @@ func (h *MemberHandler) Add(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusCreated, memberToResponse(m))
 }
 
-// UpdateRole changes a member's org-level role.
+// UpdateMember updates a member's name, email, org role, and team assignment.
 // PUT /api/v1/orgs/{orgID}/members/{userID}
-func (h *MemberHandler) UpdateRole(w http.ResponseWriter, r *http.Request) {
+func (h *MemberHandler) UpdateMember(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	userID := r.PathValue("userID")
-	var req updateMemberRoleRequest
+	var req updateMemberRequest
 	if err := httputil.Decode(r, &req); err != nil {
 		httputil.BadRequest(w, "invalid JSON")
 		return
 	}
-	if req.Role == "" {
-		httputil.BadRequest(w, "role is required")
+	if req.Name == "" || req.Email == "" || req.Role == "" {
+		httputil.BadRequest(w, "name, email, and role are required")
+		return
+	}
+	u, err := h.users.GetUser(r.Context(), userID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if u == nil {
+		httputil.Error(w, r, store.ErrNotFound)
+		return
+	}
+	if req.Email != u.Email {
+		clash, err := h.users.GetUserByEmail(r.Context(), req.Email)
+		if err != nil {
+			httputil.Error(w, r, err)
+			return
+		}
+		if clash != nil && clash.ID != userID {
+			httputil.Error(w, r, store.ErrConflict)
+			return
+		}
+	}
+	u.Name = req.Name
+	u.Email = req.Email
+	u.Login = req.Email
+	if err := h.users.UpdateUser(r.Context(), *u); err != nil {
+		httputil.Error(w, r, err)
 		return
 	}
 	if err := h.members.UpdateMemberRole(r.Context(), userID, orgID, req.Role, "manual"); err != nil {
 		httputil.Error(w, r, err)
 		return
 	}
-	w.WriteHeader(http.StatusNoContent)
+	if err := h.teams.RemoveUserFromOrgTeams(r.Context(), orgID, userID); err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if req.TeamID != "" {
+		if err := h.teams.AddTeamMember(r.Context(), org.TeamMember{
+			TeamID: req.TeamID, UserID: userID, OrgID: orgID, Permission: "member",
+		}); err != nil {
+			httputil.Error(w, r, err)
+			return
+		}
+	}
+	m := org.OrgMember{
+		UserID: userID, OrgID: orgID, Role: req.Role, Source: "manual",
+		Email: u.Email, Name: u.Name,
+	}
+	if req.TeamID != "" {
+		m.TeamID = &req.TeamID
+	}
+	httputil.JSON(w, http.StatusOK, memberToResponse(m))
 }
 
 // Remove revokes a user's membership.

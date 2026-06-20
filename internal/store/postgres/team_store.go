@@ -150,3 +150,11 @@ func (d *DB) RemoveTeamMember(ctx context.Context, teamID, userID string) error 
 	}
 	return nil
 }
+
+func (d *DB) RemoveUserFromOrgTeams(ctx context.Context, orgID, userID string) error {
+	const q = `DELETE FROM team_members WHERE org_id = $1 AND user_id = $2`
+	if _, err := d.db.ExecContext(ctx, q, orgID, userID); err != nil {
+		return fmt.Errorf("postgres: RemoveUserFromOrgTeams: %w", err)
+	}
+	return nil
+}

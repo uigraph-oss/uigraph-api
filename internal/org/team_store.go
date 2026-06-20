@@ -13,4 +13,5 @@ type TeamStore interface {
 	AddTeamMember(ctx context.Context, m TeamMember) error
 	ListTeamMembers(ctx context.Context, teamID string) ([]TeamMember, error)
 	RemoveTeamMember(ctx context.Context, teamID, userID string) error
+	RemoveUserFromOrgTeams(ctx context.Context, orgID, userID string) error
 }
