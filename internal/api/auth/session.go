@@ -98,10 +98,10 @@ type meResponse struct {
 }
 
 type myOrg struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	Slug string `json:"slug"`
-	Role string `json:"role"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	LogoURL string `json:"logoUrl,omitempty"`
+	Role    string `json:"role"`
 }
 
 type providersResponse struct {
@@ -436,10 +436,10 @@ func (h *SessionHandler) MyOrgs(w http.ResponseWriter, r *http.Request) {
 	orgs := make([]myOrg, 0, len(memberships))
 	for _, m := range memberships {
 		orgs = append(orgs, myOrg{
-			ID:   m.Org.ID,
-			Name: m.Org.Name,
-			Slug: m.Org.Slug,
-			Role: m.Role,
+			ID:      m.Org.ID,
+			Name:    m.Org.Name,
+			LogoURL: h.avatarURL(r, m.Org.LogoAssetID),
+			Role:    m.Role,
 		})
 	}
 	httputil.JSON(w, http.StatusOK, map[string]any{"orgs": orgs})

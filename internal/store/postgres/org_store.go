@@ -12,12 +12,19 @@ import (
 
 func scanOrg(row interface{ Scan(...any) error }) (org.Org, error) {
 	var o org.Org
-	return o, row.Scan(&o.ID, &o.Name, &o.Slug, &o.Disabled, &o.CreatedAt, &o.UpdatedAt)
+	var logoAssetID sql.NullString
+	if err := row.Scan(&o.ID, &o.Name, &logoAssetID, &o.Disabled, &o.CreatedAt, &o.UpdatedAt); err != nil {
+		return o, err
+	}
+	if logoAssetID.Valid {
+		o.LogoAssetID = &logoAssetID.String
+	}
+	return o, nil
 }
 
 func (d *DB) CreateOrg(ctx context.Context, o org.Org) error {
 	const q = `
-		INSERT INTO orgs (id, name, slug, disabled, created_at, updated_at)
+		INSERT INTO orgs (id, name, logo_asset_id, disabled, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6)`
 
 	now := time.Now().UTC()
@@ -27,7 +34,7 @@ func (d *DB) CreateOrg(ctx context.Context, o org.Org) error {
 	if o.UpdatedAt.IsZero() {
 		o.UpdatedAt = now
 	}
-	_, err := d.db.ExecContext(ctx, q, o.ID, o.Name, o.Slug, o.Disabled, o.CreatedAt, o.UpdatedAt)
+	_, err := d.db.ExecContext(ctx, q, o.ID, o.Name, o.LogoAssetID, o.Disabled, o.CreatedAt, o.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("postgres: CreateOrg: %w", err)
 	}
@@ -35,7 +42,7 @@ func (d *DB) CreateOrg(ctx context.Context, o org.Org) error {
 }
 
 func (d *DB) GetOrg(ctx context.Context, id string) (*org.Org, error) {
-	const q = `SELECT id, name, slug, disabled, created_at, updated_at FROM orgs WHERE id = $1`
+	const q = `SELECT id, name, logo_asset_id, disabled, created_at, updated_at FROM orgs WHERE id = $1`
 	o, err := scanOrg(d.db.QueryRowContext(ctx, q, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -46,20 +53,8 @@ func (d *DB) GetOrg(ctx context.Context, id string) (*org.Org, error) {
 	return &o, nil
 }
 
-func (d *DB) GetOrgBySlug(ctx context.Context, slug string) (*org.Org, error) {
-	const q = `SELECT id, name, slug, disabled, created_at, updated_at FROM orgs WHERE slug = $1`
-	o, err := scanOrg(d.db.QueryRowContext(ctx, q, slug))
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("postgres: GetOrgBySlug: %w", err)
-	}
-	return &o, nil
-}
-
 func (d *DB) ListOrgs(ctx context.Context) ([]org.Org, error) {
-	const q = `SELECT id, name, slug, disabled, created_at, updated_at FROM orgs ORDER BY name`
+	const q = `SELECT id, name, logo_asset_id, disabled, created_at, updated_at FROM orgs ORDER BY name`
 	rows, err := d.db.QueryContext(ctx, q)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListOrgs: %w", err)
@@ -89,13 +84,20 @@ func (d *DB) UpdateOrg(ctx context.Context, o org.Org) error {
 	const q = `
 		UPDATE orgs
 		SET    name       = $1,
-		       slug       = $2,
-		       disabled   = $3,
+		       disabled   = $2,
 		       updated_at = NOW()
-		WHERE  id = $4`
+		WHERE  id = $3`
 
-	if _, err := d.db.ExecContext(ctx, q, o.Name, o.Slug, o.Disabled, o.ID); err != nil {
+	if _, err := d.db.ExecContext(ctx, q, o.Name, o.Disabled, o.ID); err != nil {
 		return fmt.Errorf("postgres: UpdateOrg: %w", err)
+	}
+	return nil
+}
+
+func (d *DB) SetOrgLogo(ctx context.Context, id string, assetID *string) error {
+	const q = `UPDATE orgs SET logo_asset_id = $1, updated_at = NOW() WHERE id = $2`
+	if _, err := d.db.ExecContext(ctx, q, assetID, id); err != nil {
+		return fmt.Errorf("postgres: SetOrgLogo: %w", err)
 	}
 	return nil
 }

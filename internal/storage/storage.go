@@ -82,6 +82,10 @@ func ServiceAccountAvatarAssetID(saID string) string {
 	return "sa_" + saID
 }
 
+func OrgLogoAssetID(orgID string) string {
+	return "org_" + orgID
+}
+
 // ComponentIconKey returns the object key for a native component icon SVG.
 func ComponentIconKey(slug string) string {
 	return "system/components/icons/" + slug + ".svg"
