@@ -40,15 +40,16 @@ type updateServiceAccountRequest struct {
 	Disabled    bool     `json:"disabled"`
 }
 
-// invalidScope returns the first scope in the list that is not a known grantable
-// scope, or "" when every scope is valid.
-func invalidScope(scopes []string) string {
+// knownScopes drops any scope that is not a known grantable scope, so stale
+// scopes from older clients are silently ignored rather than rejected.
+func knownScopes(scopes []string) []string {
+	kept := make([]string, 0, len(scopes))
 	for _, s := range scopes {
-		if !authz.ValidScope(s) {
-			return s
+		if authz.ValidScope(s) {
+			kept = append(kept, s)
 		}
 	}
-	return ""
+	return kept
 }
 
 type createTokenRequest struct {
@@ -90,16 +91,12 @@ func (h *ServiceAccountHandler) Create(w http.ResponseWriter, r *http.Request) {
 		httputil.BadRequest(w, "name is required")
 		return
 	}
-	if bad := invalidScope(req.Scopes); bad != "" {
-		httputil.BadRequest(w, "unknown scope: "+bad)
-		return
-	}
 	sa := identity.ServiceAccount{
 		ID:          uuid.NewString(),
 		OrgID:       orgID,
 		Name:        req.Name,
 		Description: req.Description,
-		Scopes:      req.Scopes,
+		Scopes:      knownScopes(req.Scopes),
 	}
 	if err := h.store.CreateServiceAccount(r.Context(), sa); err != nil {
 		httputil.Error(w, r, err)
@@ -137,15 +134,11 @@ func (h *ServiceAccountHandler) Update(w http.ResponseWriter, r *http.Request) {
 		httputil.BadRequest(w, "name is required")
 		return
 	}
-	if bad := invalidScope(req.Scopes); bad != "" {
-		httputil.BadRequest(w, "unknown scope: "+bad)
-		return
-	}
 	sa := identity.ServiceAccount{
 		ID:          saID,
 		Name:        req.Name,
 		Description: req.Description,
-		Scopes:      req.Scopes,
+		Scopes:      knownScopes(req.Scopes),
 		Disabled:    req.Disabled,
 	}
 	if err := h.store.UpdateServiceAccount(r.Context(), sa); err != nil {
