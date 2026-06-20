@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"time"
 
@@ -117,6 +118,53 @@ func (h *Handler) GetAPIGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httputil.JSON(w, http.StatusOK, g)
+}
+
+// GetAPIGroupSpec handles GET /api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/spec
+func (h *Handler) GetAPIGroupSpec(w http.ResponseWriter, r *http.Request) {
+	orgID := r.PathValue("orgID")
+	serviceID := r.PathValue("serviceID")
+
+	g, err := h.store.GetAPIGroup(r.Context(), r.PathValue("apiGroupID"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if g == nil || g.DeletedAt != nil {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+
+	var key string
+	if versionID := r.URL.Query().Get("versionId"); versionID != "" {
+		key = storage.APIGroupVersionSpecKey(orgID, serviceID, g.ID, versionID)
+	}
+	if key == "" && g.SpecKey != nil {
+		key = *g.SpecKey
+	}
+	if key == "" {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+
+	rc, err := h.storage.Download(r.Context(), key)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	defer rc.Close()
+
+	content, err := io.ReadAll(rc)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+
+	httputil.JSON(w, http.StatusOK, map[string]any{
+		"apiGroupId": g.ID,
+		"fileName":   g.Name,
+		"content":    string(content),
+	})
 }
 
 func (h *Handler) UpdateAPIGroup(w http.ResponseWriter, r *http.Request) {

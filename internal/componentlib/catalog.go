@@ -72,6 +72,8 @@ type FocalPointComponent struct {
 	IsActive        bool              `json:"isActive"`
 	Order           int               `json:"order"`
 	ComponentFields []FocalPointField `json:"componentFields"`
+	CreatedAt       time.Time         `json:"createdAt"`
+	UpdatedAt       time.Time         `json:"updatedAt"`
 }
 
 // FocalPointField mirrors enterprise component field JSON.

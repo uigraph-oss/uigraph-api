@@ -134,6 +134,7 @@ func Register(
 	requireScope("services:write", "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups", h.CreateAPIGroup)
 	requireScope("services:write", "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/sync", h.SyncAPIGroup)
 	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}", h.GetAPIGroup)
+	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/spec", h.GetAPIGroupSpec)
 	requireScope("services:write", "PUT", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}", h.UpdateAPIGroup)
 	requireScope("services:write", "DELETE", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}", h.DeleteAPIGroup)
 	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/versions", h.ListAPIGroupVersions)
