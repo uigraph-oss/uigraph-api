@@ -31,6 +31,7 @@ type store interface {
 type objectStore interface {
 	Upload(ctx context.Context, key, contentType string, body io.Reader, size int64) error
 	Download(ctx context.Context, key string) (io.ReadCloser, error)
+	PresignPutURL(ctx context.Context, key string) (string, error)
 }
 
 // Handler serves diagram endpoints.
@@ -61,6 +62,8 @@ func Register(
 	requireScope("diagrams:write", "PUT", "/api/v1/orgs/{orgID}/diagrams/{diagramID}", h.Update)
 	requireScope("diagrams:write", "DELETE", "/api/v1/orgs/{orgID}/diagrams/{diagramID}", h.Delete)
 	requireScope("diagrams:write", "POST", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/thumbnail", h.UpdateThumbnail)
+	requireScope("diagrams:write", "POST", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/thumbnail/prepare", h.PrepareThumbnailUpload)
+	requireScope("diagrams:write", "POST", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/thumbnail/confirm", h.ConfirmThumbnailUpload)
 	requireScope("diagrams:read", "GET", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/content", h.GetContent)
 	requireScope("diagrams:read", "GET", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/images", h.ListImages)
 	requireScope("diagrams:write", "POST", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/images", h.CreateImage)
