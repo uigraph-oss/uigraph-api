@@ -7,6 +7,7 @@ type OrgStore interface {
 	CreateOrg(ctx context.Context, o Org) error
 	GetOrg(ctx context.Context, id string) (*Org, error)
 	ListOrgs(ctx context.Context) ([]Org, error)
+	ListAutoJoinOrgs(ctx context.Context) ([]Org, error)
 	CountAllOrgs(ctx context.Context) (int, error)
 	UpdateOrg(ctx context.Context, o Org) error
 	SetOrgLogo(ctx context.Context, id string, assetID *string) error

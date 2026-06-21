@@ -306,6 +306,20 @@ func (h *SessionHandler) OAuthCallback(w http.ResponseWriter, r *http.Request) {
 			httputil.Error(w, r, err)
 			return
 		}
+		autoJoinOrgs, err := h.store.ListAutoJoinOrgs(r.Context())
+		if err != nil {
+			httputil.Error(w, r, err)
+			return
+		}
+		for _, o := range autoJoinOrgs {
+			err := h.store.AddMember(r.Context(), org.OrgMember{
+				UserID: u.ID, OrgID: o.ID, Role: "viewer", Source: "sso",
+			})
+			if err != nil {
+				httputil.Error(w, r, err)
+				return
+			}
+		}
 	}
 	if u.Disabled {
 		httputil.Forbidden(w)

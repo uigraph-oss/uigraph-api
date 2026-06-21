@@ -184,6 +184,15 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	adminH := admin.New(s)
 	serverAdmin("GET", "/api/v1/server/overview", adminH.Overview)
 
+	// Server org management (global — server-admin only)
+	serverAdmin("GET", "/api/v1/server/orgs", orgH.List)
+	serverAdmin("POST", "/api/v1/server/orgs", orgH.Create)
+	serverAdmin("GET", "/api/v1/server/orgs/{orgID}", orgH.Get)
+	serverAdmin("PUT", "/api/v1/server/orgs/{orgID}", orgH.Update)
+	serverAdmin("DELETE", "/api/v1/server/orgs/{orgID}", orgH.Delete)
+	serverAdmin("PUT", "/api/v1/server/orgs/{orgID}/logo", avatarH.PutOrgLogo)
+	serverAdmin("DELETE", "/api/v1/server/orgs/{orgID}/logo", avatarH.DeleteOrgLogo)
+
 	// SSO (global — server-admin only)
 	ssoH := auth.NewSSOHandler(s)
 	serverAdmin("GET", "/api/v1/sso/oauth", ssoH.ListOAuthProviders)
