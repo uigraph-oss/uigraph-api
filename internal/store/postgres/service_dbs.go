@@ -15,8 +15,8 @@ func (d *DB) CreateServiceDB(ctx context.Context, sd catalog.ServiceDB) error {
 	const q = `
 		INSERT INTO service_dbs
 			(id, service_id, org_id, db_name, db_type, dialect, schema_json,
-			 source, source_ts, created_by, updated_by, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`
+			 source, source_ts, schema_token_count, created_by, updated_by, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`
 	now := time.Now().UTC()
 	if sd.CreatedAt.IsZero() {
 		sd.CreatedAt = now
@@ -30,7 +30,7 @@ func (d *DB) CreateServiceDB(ctx context.Context, sd catalog.ServiceDB) error {
 	}
 	_, err := d.db.ExecContext(ctx, q,
 		sd.ID, sd.ServiceID, sd.OrgID, sd.DBName, sd.DBType, sd.Dialect, schema,
-		sd.Source, sd.SourceTS, sd.CreatedBy, sd.UpdatedBy, sd.CreatedAt, sd.UpdatedAt,
+		sd.Source, sd.SourceTS, sd.SchemaTokenCount, sd.CreatedBy, sd.UpdatedBy, sd.CreatedAt, sd.UpdatedAt,
 	)
 	return wrapErr("CreateServiceDB", err)
 }
@@ -38,7 +38,7 @@ func (d *DB) CreateServiceDB(ctx context.Context, sd catalog.ServiceDB) error {
 func (d *DB) GetServiceDB(ctx context.Context, id string) (*catalog.ServiceDB, error) {
 	const q = `
 		SELECT id, service_id, org_id, db_name, db_type, dialect, schema_json,
-		       source, source_ts, created_by, updated_by, created_at, updated_at, deleted_at, deleted_by
+		       source, source_ts, schema_token_count, created_by, updated_by, created_at, updated_at, deleted_at, deleted_by
 		FROM service_dbs
 		WHERE id = $1`
 	sd, err := scanServiceDB(d.db.QueryRowContext(ctx, q, id))
@@ -54,7 +54,7 @@ func (d *DB) GetServiceDB(ctx context.Context, id string) (*catalog.ServiceDB, e
 func (d *DB) ListServiceDBs(ctx context.Context, serviceID string) ([]catalog.ServiceDB, error) {
 	const q = `
 		SELECT id, service_id, org_id, db_name, db_type, dialect, schema_json,
-		       source, source_ts, created_by, updated_by, created_at, updated_at, deleted_at, deleted_by
+		       source, source_ts, schema_token_count, created_by, updated_by, created_at, updated_at, deleted_at, deleted_by
 		FROM service_dbs
 		WHERE service_id = $1 AND deleted_at IS NULL
 		ORDER BY created_at DESC`
@@ -79,16 +79,16 @@ func (d *DB) UpdateServiceDB(ctx context.Context, sd catalog.ServiceDB) error {
 	const q = `
 		UPDATE service_dbs
 		SET db_name=$1, db_type=$2, dialect=$3, schema_json=$4,
-		    source=$5, source_ts=$6,
-		    updated_by=$7, updated_at=$8
-		WHERE id=$9 AND deleted_at IS NULL`
+		    source=$5, source_ts=$6, schema_token_count=$7,
+		    updated_by=$8, updated_at=$9
+		WHERE id=$10 AND deleted_at IS NULL`
 	schema := sd.SchemaJSON
 	if schema == nil {
 		schema = json.RawMessage("{}")
 	}
 	_, err := d.db.ExecContext(ctx, q,
 		sd.DBName, sd.DBType, sd.Dialect, schema,
-		sd.Source, sd.SourceTS,
+		sd.Source, sd.SourceTS, sd.SchemaTokenCount,
 		sd.UpdatedBy, time.Now().UTC(), sd.ID,
 	)
 	return wrapErr("UpdateServiceDB", err)
@@ -105,7 +105,7 @@ func scanServiceDB(row interface{ Scan(...any) error }) (catalog.ServiceDB, erro
 	var schema []byte
 	err := row.Scan(
 		&sd.ID, &sd.ServiceID, &sd.OrgID, &sd.DBName, &sd.DBType, &sd.Dialect, &schema,
-		&sd.Source, &sd.SourceTS, &sd.CreatedBy, &sd.UpdatedBy, &sd.CreatedAt, &sd.UpdatedAt, &sd.DeletedAt, &sd.DeletedBy,
+		&sd.Source, &sd.SourceTS, &sd.SchemaTokenCount, &sd.CreatedBy, &sd.UpdatedBy, &sd.CreatedAt, &sd.UpdatedAt, &sd.DeletedAt, &sd.DeletedBy,
 	)
 	if err != nil {
 		return sd, err

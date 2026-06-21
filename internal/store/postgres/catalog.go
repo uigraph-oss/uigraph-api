@@ -574,9 +574,9 @@ func (d *DB) CreateAPIEndpoint(ctx context.Context, e catalog.APIEndpoint) error
 		INSERT INTO api_endpoints
 			(id, api_group_id, service_id, org_id,
 			 operation_id, method, path, summary, description,
-			 tags, parameters, request_body, responses, ord,
+			 tags, token_count, parameters, request_body, responses, ord,
 			 created_by, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`
 	now := time.Now().UTC()
 	if e.CreatedAt.IsZero() {
 		e.CreatedAt = now
@@ -603,7 +603,7 @@ func (d *DB) CreateAPIEndpoint(ctx context.Context, e catalog.APIEndpoint) error
 	_, err := d.db.ExecContext(ctx, q,
 		e.ID, e.APIGroupID, e.ServiceID, e.OrgID,
 		e.OperationID, e.Method, e.Path, e.Summary, e.Description,
-		pq.Array(tags), params, reqBody, resps, e.Order,
+		pq.Array(tags), e.TokenCount, params, reqBody, resps, e.Order,
 		e.CreatedBy, e.CreatedAt, e.UpdatedAt,
 	)
 	return wrapErr("CreateAPIEndpoint", err)
@@ -613,7 +613,7 @@ func (d *DB) GetAPIEndpoint(ctx context.Context, id string) (*catalog.APIEndpoin
 	const q = `
 		SELECT id, api_group_id, service_id, org_id,
 		       operation_id, method, path, summary, description,
-		       tags, parameters, request_body, responses, ord,
+		       tags, token_count, parameters, request_body, responses, ord,
 		       created_by, updated_by, created_at, updated_at, deleted_at, deleted_by
 		FROM api_endpoints WHERE id = $1`
 	e, err := scanAPIEndpoint(d.db.QueryRowContext(ctx, q, id))
@@ -630,7 +630,7 @@ func (d *DB) ListAPIEndpoints(ctx context.Context, apiGroupID string) ([]catalog
 	const q = `
 		SELECT id, api_group_id, service_id, org_id,
 		       operation_id, method, path, summary, description,
-		       tags, parameters, request_body, responses, ord,
+		       tags, token_count, parameters, request_body, responses, ord,
 		       created_by, updated_by, created_at, updated_at, deleted_at, deleted_by
 		FROM api_endpoints
 		WHERE api_group_id = $1 AND deleted_at IS NULL
@@ -655,16 +655,16 @@ func (d *DB) UpdateAPIEndpoint(ctx context.Context, e catalog.APIEndpoint) error
 	const q = `
 		UPDATE api_endpoints
 		SET operation_id=$1, method=$2, path=$3, summary=$4, description=$5,
-		    tags=$6, parameters=$7, request_body=$8, responses=$9, ord=$10,
-		    updated_by=$11, updated_at=$12
-		WHERE id=$13 AND deleted_at IS NULL`
+		    tags=$6, token_count=$7, parameters=$8, request_body=$9, responses=$10, ord=$11,
+		    updated_by=$12, updated_at=$13
+		WHERE id=$14 AND deleted_at IS NULL`
 	tags := e.Tags
 	if tags == nil {
 		tags = []string{}
 	}
 	_, err := d.db.ExecContext(ctx, q,
 		e.OperationID, e.Method, e.Path, e.Summary, e.Description,
-		pq.Array(tags), e.Parameters, e.RequestBody, e.Responses, e.Order,
+		pq.Array(tags), e.TokenCount, e.Parameters, e.RequestBody, e.Responses, e.Order,
 		e.UpdatedBy, time.Now().UTC(), e.ID,
 	)
 	return wrapErr("UpdateAPIEndpoint", err)
@@ -683,7 +683,7 @@ func scanAPIEndpoint(row interface{ Scan(...any) error }) (catalog.APIEndpoint, 
 	err := row.Scan(
 		&e.ID, &e.APIGroupID, &e.ServiceID, &e.OrgID,
 		&e.OperationID, &e.Method, &e.Path, &e.Summary, &e.Description,
-		&tags, &params, &reqBody, &resps, &e.Order,
+		&tags, &e.TokenCount, &params, &reqBody, &resps, &e.Order,
 		&e.CreatedBy, &e.UpdatedBy,
 		&e.CreatedAt, &e.UpdatedAt, &e.DeletedAt, &e.DeletedBy,
 	)
@@ -705,9 +705,9 @@ func scanAPIEndpoint(row interface{ Scan(...any) error }) (catalog.APIEndpoint, 
 func (d *DB) CreateServiceDoc(ctx context.Context, sd catalog.ServiceDoc) error {
 	const q = `
 		INSERT INTO service_docs
-			(id, service_id, org_id, file_key, file_name, file_type, description, content_hash,
+			(id, service_id, org_id, file_key, file_name, file_type, description, content_hash, doc_token_count,
 			 created_by, updated_by, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`
 	now := time.Now().UTC()
 	if sd.CreatedAt.IsZero() {
 		sd.CreatedAt = now
@@ -716,7 +716,7 @@ func (d *DB) CreateServiceDoc(ctx context.Context, sd catalog.ServiceDoc) error 
 		sd.UpdatedAt = now
 	}
 	_, err := d.db.ExecContext(ctx, q,
-		sd.ID, sd.ServiceID, sd.OrgID, sd.FileKey, sd.FileName, sd.FileType, sd.Description, sd.ContentHash,
+		sd.ID, sd.ServiceID, sd.OrgID, sd.FileKey, sd.FileName, sd.FileType, sd.Description, sd.ContentHash, sd.DocTokenCount,
 		sd.CreatedBy, sd.UpdatedBy, sd.CreatedAt, sd.UpdatedAt,
 	)
 	return wrapErr("CreateServiceDoc", err)
@@ -724,7 +724,7 @@ func (d *DB) CreateServiceDoc(ctx context.Context, sd catalog.ServiceDoc) error 
 
 func (d *DB) GetServiceDoc(ctx context.Context, id string) (*catalog.ServiceDoc, error) {
 	const q = `
-		SELECT id, service_id, org_id, file_key, file_name, file_type, description, content_hash,
+		SELECT id, service_id, org_id, file_key, file_name, file_type, description, content_hash, doc_token_count,
 		       created_by, updated_by, created_at, updated_at, deleted_at
 		FROM service_docs WHERE id = $1`
 	sd, err := scanServiceDoc(d.db.QueryRowContext(ctx, q, id))
@@ -739,7 +739,7 @@ func (d *DB) GetServiceDoc(ctx context.Context, id string) (*catalog.ServiceDoc,
 
 func (d *DB) ListServiceDocs(ctx context.Context, serviceID string) ([]catalog.ServiceDoc, error) {
 	const q = `
-		SELECT id, service_id, org_id, file_key, file_name, file_type, description, content_hash,
+		SELECT id, service_id, org_id, file_key, file_name, file_type, description, content_hash, doc_token_count,
 		       created_by, updated_by, created_at, updated_at, deleted_at
 		FROM service_docs
 		WHERE service_id = $1 AND deleted_at IS NULL
@@ -763,11 +763,11 @@ func (d *DB) ListServiceDocs(ctx context.Context, serviceID string) ([]catalog.S
 func (d *DB) UpdateServiceDoc(ctx context.Context, sd catalog.ServiceDoc) error {
 	const q = `
 		UPDATE service_docs
-		SET file_key=$1, file_name=$2, file_type=$3, description=$4, content_hash=$5,
-		    updated_by=$6, updated_at=$7
-		WHERE id=$8 AND deleted_at IS NULL`
+		SET file_key=$1, file_name=$2, file_type=$3, description=$4, content_hash=$5, doc_token_count=$6,
+		    updated_by=$7, updated_at=$8
+		WHERE id=$9 AND deleted_at IS NULL`
 	_, err := d.db.ExecContext(ctx, q,
-		sd.FileKey, sd.FileName, sd.FileType, sd.Description, sd.ContentHash,
+		sd.FileKey, sd.FileName, sd.FileType, sd.Description, sd.ContentHash, sd.DocTokenCount,
 		sd.UpdatedBy, time.Now().UTC(), sd.ID,
 	)
 	return wrapErr("UpdateServiceDoc", err)
@@ -782,7 +782,7 @@ func (d *DB) SoftDeleteServiceDoc(ctx context.Context, id string) error {
 func scanServiceDoc(row interface{ Scan(...any) error }) (catalog.ServiceDoc, error) {
 	var sd catalog.ServiceDoc
 	return sd, row.Scan(
-		&sd.ID, &sd.ServiceID, &sd.OrgID, &sd.FileKey, &sd.FileName, &sd.FileType, &sd.Description, &sd.ContentHash,
+		&sd.ID, &sd.ServiceID, &sd.OrgID, &sd.FileKey, &sd.FileName, &sd.FileType, &sd.Description, &sd.ContentHash, &sd.DocTokenCount,
 		&sd.CreatedBy, &sd.UpdatedBy, &sd.CreatedAt, &sd.UpdatedAt, &sd.DeletedAt,
 	)
 }

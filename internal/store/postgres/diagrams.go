@@ -15,9 +15,9 @@ import (
 func (d *DB) CreateDiagram(ctx context.Context, dg diagram.Diagram) error {
 	const q = `
 		INSERT INTO diagrams
-			(id, org_id, folder_id, team_id, name, content_key, content_hash,
+			(id, org_id, folder_id, team_id, name, content_key, content_hash, content_token_count,
 			 preview_asset_id, preview_content_hash, source, created_by, updated_by, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`
 	now := time.Now().UTC()
 	if dg.CreatedAt.IsZero() {
 		dg.CreatedAt = now
@@ -26,7 +26,7 @@ func (d *DB) CreateDiagram(ctx context.Context, dg diagram.Diagram) error {
 		dg.UpdatedAt = now
 	}
 	_, err := d.db.ExecContext(ctx, q,
-		dg.ID, dg.OrgID, dg.FolderID, dg.TeamID, dg.Name, dg.ContentKey, dg.ContentHash,
+		dg.ID, dg.OrgID, dg.FolderID, dg.TeamID, dg.Name, dg.ContentKey, dg.ContentHash, dg.ContentTokenCount,
 		dg.PreviewAssetID, dg.PreviewContentHash, dg.Source, dg.CreatedBy, dg.UpdatedBy, dg.CreatedAt, dg.UpdatedAt,
 	)
 	if err != nil {
@@ -37,7 +37,7 @@ func (d *DB) CreateDiagram(ctx context.Context, dg diagram.Diagram) error {
 
 func (d *DB) GetDiagram(ctx context.Context, id string) (*diagram.Diagram, error) {
 	const q = `
-		SELECT id, org_id, folder_id, team_id, name, content_key, content_hash,
+		SELECT id, org_id, folder_id, team_id, name, content_key, content_hash, content_token_count,
 		       preview_asset_id, preview_content_hash, source, created_by, updated_by,
 		       created_at, updated_at, deleted_at, deleted_by
 		FROM diagrams WHERE id = $1`
@@ -53,7 +53,7 @@ func (d *DB) GetDiagram(ctx context.Context, id string) (*diagram.Diagram, error
 
 func (d *DB) ListDiagrams(ctx context.Context, orgID string, folderID, teamID *string) ([]diagram.Diagram, error) {
 	q := `
-		SELECT id, org_id, folder_id, team_id, name, content_key, content_hash,
+		SELECT id, org_id, folder_id, team_id, name, content_key, content_hash, content_token_count,
 		       preview_asset_id, preview_content_hash, source, created_by, updated_by,
 		       created_at, updated_at, deleted_at, deleted_by
 		FROM diagrams WHERE org_id = $1 AND deleted_at IS NULL`
@@ -88,11 +88,11 @@ func (d *DB) ListDiagrams(ctx context.Context, orgID string, folderID, teamID *s
 func (d *DB) UpdateDiagram(ctx context.Context, dg diagram.Diagram) error {
 	const q = `
 		UPDATE diagrams
-		SET name=$1, folder_id=$2, team_id=$3, content_key=$4, content_hash=$5,
-		    preview_asset_id=$6, preview_content_hash=$7, source=$8, updated_by=$9, updated_at=$10
-		WHERE id=$11 AND deleted_at IS NULL`
+		SET name=$1, folder_id=$2, team_id=$3, content_key=$4, content_hash=$5, content_token_count=$6,
+		    preview_asset_id=$7, preview_content_hash=$8, source=$9, updated_by=$10, updated_at=$11
+		WHERE id=$12 AND deleted_at IS NULL`
 	_, err := d.db.ExecContext(ctx, q,
-		dg.Name, dg.FolderID, dg.TeamID, dg.ContentKey, dg.ContentHash,
+		dg.Name, dg.FolderID, dg.TeamID, dg.ContentKey, dg.ContentHash, dg.ContentTokenCount,
 		dg.PreviewAssetID, dg.PreviewContentHash, dg.Source, dg.UpdatedBy, time.Now().UTC(), dg.ID,
 	)
 	if err != nil {
@@ -227,7 +227,7 @@ func scanDiagram(row interface{ Scan(...any) error }) (diagram.Diagram, error) {
 	var dg diagram.Diagram
 	return dg, row.Scan(
 		&dg.ID, &dg.OrgID, &dg.FolderID, &dg.TeamID, &dg.Name,
-		&dg.ContentKey, &dg.ContentHash, &dg.PreviewAssetID, &dg.PreviewContentHash,
+		&dg.ContentKey, &dg.ContentHash, &dg.ContentTokenCount, &dg.PreviewAssetID, &dg.PreviewContentHash,
 		&dg.Source, &dg.CreatedBy, &dg.UpdatedBy,
 		&dg.CreatedAt, &dg.UpdatedAt, &dg.DeletedAt, &dg.DeletedBy,
 	)
