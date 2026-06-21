@@ -13,6 +13,7 @@ import (
 	"github.com/uigraph/app/internal/diagram"
 	"github.com/uigraph/app/internal/folder"
 	"github.com/uigraph/app/internal/identity"
+	"github.com/uigraph/app/internal/llm"
 	"github.com/uigraph/app/internal/org"
 	"github.com/uigraph/app/internal/uimap"
 )
@@ -37,4 +38,5 @@ type Store interface {
 	catalog.Store
 	componentlib.Store
 	comment.Store
+	llm.Store
 }
