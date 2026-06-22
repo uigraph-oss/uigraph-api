@@ -1,11 +1,13 @@
 package auth
 
 import (
+	"context"
 	"net/http"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/uigraph/app/internal/asset"
+	"github.com/uigraph/app/internal/authz"
 	"github.com/uigraph/app/internal/httputil"
 	"github.com/uigraph/app/internal/identity"
 	authmw "github.com/uigraph/app/internal/middleware"
@@ -13,14 +15,19 @@ import (
 	"github.com/uigraph/app/internal/store"
 )
 
+type saProvisioner interface {
+	CreateServiceAccount(ctx context.Context, sa identity.ServiceAccount) error
+}
+
 type OrgHandler struct {
 	store   org.OrgStore
 	members org.MemberStore
+	sa      saProvisioner
 	assets  *asset.Resolver // presigns the logo URL; may be nil
 }
 
-func NewOrgHandler(s org.OrgStore, m org.MemberStore, assets *asset.Resolver) *OrgHandler {
-	return &OrgHandler{store: s, members: m, assets: assets}
+func NewOrgHandler(s org.OrgStore, m org.MemberStore, sa saProvisioner, assets *asset.Resolver) *OrgHandler {
+	return &OrgHandler{store: s, members: m, sa: sa, assets: assets}
 }
 
 // logoURL presigns the logo asset id, returning "" when there is no logo or no
@@ -43,6 +50,7 @@ type orgResponse struct {
 	Name      string    `json:"name"`
 	LogoURL   string    `json:"logoUrl,omitempty"`
 	Disabled  bool      `json:"disabled"`
+	AutoJoin  bool      `json:"autoJoin"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
@@ -50,17 +58,19 @@ type orgResponse struct {
 func (h *OrgHandler) orgToResponse(r *http.Request, o org.Org) orgResponse {
 	return orgResponse{
 		ID: o.ID, Name: o.Name, LogoURL: h.logoURL(r, o.LogoAssetID),
-		Disabled: o.Disabled, CreatedAt: o.CreatedAt, UpdatedAt: o.UpdatedAt,
+		Disabled: o.Disabled, AutoJoin: o.AutoJoin, CreatedAt: o.CreatedAt, UpdatedAt: o.UpdatedAt,
 	}
 }
 
 type createOrgRequest struct {
-	Name string `json:"name"`
+	Name     string `json:"name"`
+	AutoJoin bool   `json:"autoJoin"`
 }
 
 type updateOrgRequest struct {
 	Name     string `json:"name"`
 	Disabled bool   `json:"disabled"`
+	AutoJoin bool   `json:"autoJoin"`
 }
 
 // ── Handlers ─────────────────────────────────────────────────────────────────
@@ -99,8 +109,9 @@ func (h *OrgHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	o := org.Org{
-		ID:   newUUID(),
-		Name: req.Name,
+		ID:       newUUID(),
+		Name:     req.Name,
+		AutoJoin: req.AutoJoin,
 	}
 	if err := h.store.CreateOrg(r.Context(), o); err != nil {
 		httputil.Error(w, r, err)
@@ -115,7 +126,20 @@ func (h *OrgHandler) Create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	sa := identity.NewSystemServiceAccount(o.ID, allScopeStrings())
+	if err := h.sa.CreateServiceAccount(r.Context(), sa); err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
 	httputil.JSON(w, http.StatusCreated, h.orgToResponse(r, o))
+}
+
+func allScopeStrings() []string {
+	scopes := make([]string, len(authz.AllScopes))
+	for i, s := range authz.AllScopes {
+		scopes[i] = string(s)
+	}
+	return scopes
 }
 
 // Get returns a single org by ID.
@@ -158,6 +182,7 @@ func (h *OrgHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	o.Name = req.Name
 	o.Disabled = req.Disabled
+	o.AutoJoin = req.AutoJoin
 	if err := h.store.UpdateOrg(r.Context(), *o); err != nil {
 		httputil.Error(w, r, err)
 		return

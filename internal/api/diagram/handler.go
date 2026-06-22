@@ -8,6 +8,7 @@ import (
 
 	"github.com/uigraph/app/internal/cache"
 	diagrampkg "github.com/uigraph/app/internal/diagram"
+	"github.com/uigraph/app/internal/queue"
 )
 
 // store is the minimal persistence interface this package needs.
@@ -39,11 +40,12 @@ type Handler struct {
 	store   store
 	storage objectStore
 	cache   cache.Client // may be nil
+	queue   *queue.Queue // may be nil
 }
 
 // New constructs a Handler.
-func New(s store, st objectStore, c cache.Client) *Handler {
-	return &Handler{store: s, storage: st, cache: c}
+func New(s store, st objectStore, c cache.Client, q *queue.Queue) *Handler {
+	return &Handler{store: s, storage: st, cache: c, queue: q}
 }
 
 // Register wires diagram routes into mux.
@@ -52,9 +54,10 @@ func Register(
 	s store,
 	st objectStore,
 	c cache.Client,
+	q *queue.Queue,
 	requireScope func(scope, method, pattern string, h http.HandlerFunc),
 ) {
-	h := New(s, st, c)
+	h := New(s, st, c, q)
 	requireScope("diagrams:read", "GET", "/api/v1/orgs/{orgID}/diagrams", h.List)
 	requireScope("diagrams:write", "POST", "/api/v1/orgs/{orgID}/diagrams", h.Create)
 	requireScope("diagrams:write", "POST", "/api/v1/orgs/{orgID}/diagrams/sync", h.Sync)

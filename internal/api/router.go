@@ -5,10 +5,10 @@ import (
 
 	authmw "github.com/uigraph/app/internal/middleware"
 
-	"github.com/uigraph/app/internal/api/admin"
-	"github.com/uigraph/app/internal/api/auth"
 	"github.com/uigraph/app/internal/api/actor"
+	"github.com/uigraph/app/internal/api/admin"
 	assetapi "github.com/uigraph/app/internal/api/asset"
+	"github.com/uigraph/app/internal/api/auth"
 	catalogapi "github.com/uigraph/app/internal/api/catalog"
 	commentapi "github.com/uigraph/app/internal/api/comment"
 	"github.com/uigraph/app/internal/api/component"
@@ -23,6 +23,7 @@ import (
 	"github.com/uigraph/app/internal/cache"
 	"github.com/uigraph/app/internal/config"
 	"github.com/uigraph/app/internal/identity"
+	"github.com/uigraph/app/internal/queue"
 	"github.com/uigraph/app/internal/storage"
 	"github.com/uigraph/app/internal/store"
 )
@@ -38,7 +39,7 @@ import (
 //	/api/v1/orgs/{orgID}/folders/*            — folder hierarchy
 //	/api/v1/orgs/{orgID}/diagrams/*           — diagrams + versions
 //	/api/v1/orgs/{orgID}/maps/*               — maps + frames + focal points + canvas
-func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st storage.Client, c cache.Client) http.Handler {
+func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st storage.Client, c cache.Client, q *queue.Queue) http.Handler {
 	mux := http.NewServeMux()
 	mw := authmw.New(bearer, s)
 	authorizer := authz.New(s, s)
@@ -139,7 +140,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	serverAdmin("DELETE", "/api/v1/users/{userID}", userH.Disable)
 
 	// Orgs
-	orgH := auth.NewOrgHandler(s, s, assetResolver)
+	orgH := auth.NewOrgHandler(s, s, s, assetResolver)
 	protected("GET", "/api/v1/orgs", orgH.List)
 	protected("POST", "/api/v1/orgs", orgH.Create)
 	protected("GET", "/api/v1/orgs/{orgID}", orgH.Get)
@@ -186,11 +187,22 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	adminH := admin.New(s)
 	serverAdmin("GET", "/api/v1/server/overview", adminH.Overview)
 
+	// Server org management (global — server-admin only)
+	serverAdmin("GET", "/api/v1/server/orgs", orgH.List)
+	serverAdmin("POST", "/api/v1/server/orgs", orgH.Create)
+	serverAdmin("GET", "/api/v1/server/orgs/{orgID}", orgH.Get)
+	serverAdmin("PUT", "/api/v1/server/orgs/{orgID}", orgH.Update)
+	serverAdmin("DELETE", "/api/v1/server/orgs/{orgID}", orgH.Delete)
+	serverAdmin("PUT", "/api/v1/server/orgs/{orgID}/logo", avatarH.PutOrgLogo)
+	serverAdmin("DELETE", "/api/v1/server/orgs/{orgID}/logo", avatarH.DeleteOrgLogo)
+
 	// SSO (global — server-admin only)
-	ssoH := auth.NewSSOHandler(s)
+	ssoH := auth.NewSSOHandler(s, st, assetResolver)
 	serverAdmin("GET", "/api/v1/sso/oauth", ssoH.ListOAuthProviders)
 	serverAdmin("PUT", "/api/v1/sso/oauth/{provider}", ssoH.UpsertOAuthProvider)
 	serverAdmin("DELETE", "/api/v1/sso/oauth/{provider}", ssoH.DeleteOAuthProvider)
+	serverAdmin("PUT", "/api/v1/sso/oauth/{provider}/icon", ssoH.PutOAuthProviderIcon)
+	serverAdmin("DELETE", "/api/v1/sso/oauth/{provider}/icon", ssoH.DeleteOAuthProviderIcon)
 	serverAdmin("GET", "/api/v1/sso/role-mappings", ssoH.ListMappings)
 	serverAdmin("POST", "/api/v1/sso/role-mappings", ssoH.CreateMapping)
 	serverAdmin("DELETE", "/api/v1/sso/role-mappings/{mappingID}", ssoH.DeleteMapping)
@@ -217,7 +229,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	assetapi.Register(mux, st, c, protected)
 
 	// ── Diagrams ──────────────────────────────────────────────────────────
-	diagram.Register(mux, s, st, c, scopeFn)
+	diagram.Register(mux, s, st, c, q, scopeFn)
 
 	// ── Component palettes + icons ────────────────────────────────────────
 	component.Register(mux, s, st, protected, scopeFn)

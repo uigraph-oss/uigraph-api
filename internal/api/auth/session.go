@@ -111,6 +111,7 @@ type providersResponse struct {
 type providerInfo struct {
 	Name        string `json:"name"`
 	DisplayName string `json:"displayName"`
+	IconURL     string `json:"iconUrl"`
 	LoginURL    string `json:"loginUrl"`
 }
 
@@ -195,6 +196,7 @@ func (h *SessionHandler) ListProviders(w http.ResponseWriter, r *http.Request) {
 		out.Providers = append(out.Providers, providerInfo{
 			Name:        c.ProviderName,
 			DisplayName: label,
+			IconURL:     h.avatarURL(r, &c.IconURL),
 			LoginURL:    "/api/v1/auth/login/" + c.ProviderName,
 		})
 	}
@@ -305,6 +307,20 @@ func (h *SessionHandler) OAuthCallback(w http.ResponseWriter, r *http.Request) {
 		if err := h.store.CreateUser(r.Context(), *u); err != nil {
 			httputil.Error(w, r, err)
 			return
+		}
+		autoJoinOrgs, err := h.store.ListAutoJoinOrgs(r.Context())
+		if err != nil {
+			httputil.Error(w, r, err)
+			return
+		}
+		for _, o := range autoJoinOrgs {
+			err := h.store.AddMember(r.Context(), org.OrgMember{
+				UserID: u.ID, OrgID: o.ID, Role: "viewer", Source: "sso",
+			})
+			if err != nil {
+				httputil.Error(w, r, err)
+				return
+			}
 		}
 	}
 	if u.Disabled {

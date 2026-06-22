@@ -8,6 +8,7 @@ type Org struct {
 	Name        string
 	LogoAssetID *string
 	Disabled    bool
+	AutoJoin    bool
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }

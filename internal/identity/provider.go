@@ -9,6 +9,7 @@ type OAuthProviderConfig struct {
 	ProviderName   string    `json:"providerName"` // unique instance slug used in login URLs
 	Type           string    `json:"type"`         // generic | entra | okta
 	DisplayName    string    `json:"displayName"`  // label shown on the login page
+	IconURL        string    `json:"iconUrl"`      // logo shown on the login button
 	ClientID       string    `json:"clientId"`
 	ClientSecret   string    `json:"clientSecret"` // encrypted at rest
 	AuthURL        string    `json:"authUrl"`

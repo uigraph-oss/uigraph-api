@@ -53,6 +53,8 @@ type store interface {
 
 type objectStore interface {
 	Upload(ctx context.Context, key, contentType string, body io.Reader, size int64) error
+	Download(ctx context.Context, key string) (io.ReadCloser, error)
+	Delete(ctx context.Context, key string) error
 }
 
 // Handler serves map, frame, focal-point, canvas, group, link, and meta endpoints.
