@@ -5,12 +5,16 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/uigraph/app/internal/asset"
 	"github.com/uigraph/app/internal/authz"
 	"github.com/uigraph/app/internal/httputil"
 	"github.com/uigraph/app/internal/identity"
 	"github.com/uigraph/app/internal/oauth"
+	"github.com/uigraph/app/internal/storage"
 	"github.com/uigraph/app/internal/store"
 )
+
+const maxIconBytes = 5 << 20
 
 type ssoStore interface {
 	identity.ProviderStore
@@ -18,11 +22,24 @@ type ssoStore interface {
 }
 
 type SSOHandler struct {
-	store ssoStore
+	store   ssoStore
+	storage storage.Client
+	assets  *asset.Resolver
 }
 
-func NewSSOHandler(s ssoStore) *SSOHandler {
-	return &SSOHandler{store: s}
+func NewSSOHandler(s ssoStore, st storage.Client, assets *asset.Resolver) *SSOHandler {
+	return &SSOHandler{store: s, storage: st, assets: assets}
+}
+
+func (h *SSOHandler) iconURL(r *http.Request, assetID string) string {
+	if assetID == "" || h.assets == nil {
+		return ""
+	}
+	u, err := h.assets.Resolve(r.Context(), assetID)
+	if err != nil {
+		return ""
+	}
+	return u
 }
 
 // ── Request / Response types ─────────────────────────────────────────────────
@@ -104,8 +121,62 @@ func (h *SSOHandler) ListOAuthProviders(w http.ResponseWriter, r *http.Request) 
 		if providers[i].ClientSecret != "" {
 			providers[i].ClientSecret = "***"
 		}
+		providers[i].IconURL = h.iconURL(r, providers[i].IconURL)
 	}
 	httputil.JSON(w, http.StatusOK, map[string]any{"providers": providers})
+}
+
+func (h *SSOHandler) PutOAuthProviderIcon(w http.ResponseWriter, r *http.Request) {
+	provider := r.PathValue("provider")
+
+	existing, err := h.store.GetOAuthProvider(r.Context(), provider)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if existing == nil {
+		httputil.Error(w, r, store.ErrNotFound)
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		httputil.BadRequest(w, "missing file")
+		return
+	}
+	defer file.Close()
+
+	if header.Size > maxIconBytes {
+		httputil.BadRequest(w, "icon too large")
+		return
+	}
+
+	contentType := header.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	assetID := storage.OAuthProviderIconAssetID(provider)
+	if err := h.storage.Upload(r.Context(), storage.AssetKey(assetID), contentType, file, header.Size); err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if err := h.store.SetOAuthProviderIcon(r.Context(), provider, &assetID); err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{"assetId": assetID})
+}
+
+func (h *SSOHandler) DeleteOAuthProviderIcon(w http.ResponseWriter, r *http.Request) {
+	provider := r.PathValue("provider")
+	assetID := storage.OAuthProviderIconAssetID(provider)
+	_ = h.storage.Delete(r.Context(), storage.AssetKey(assetID))
+	if err := h.store.SetOAuthProviderIcon(r.Context(), provider, nil); err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // UpsertOAuthProvider creates or updates an OAuth provider configuration.

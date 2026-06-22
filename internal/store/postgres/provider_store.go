@@ -49,11 +49,19 @@ func (d *DB) UpsertOAuthProvider(ctx context.Context, cfg identity.OAuthProvider
 	return nil
 }
 
+func (d *DB) SetOAuthProviderIcon(ctx context.Context, provider string, assetID *string) error {
+	const q = `UPDATE oauth_provider_config SET icon_asset_id = COALESCE($2,''), updated_at = NOW() WHERE provider_name = $1`
+	if _, err := d.db.ExecContext(ctx, q, provider, assetID); err != nil {
+		return fmt.Errorf("postgres: SetOAuthProviderIcon: %w", err)
+	}
+	return nil
+}
+
 func scanOAuthProvider(row interface{ Scan(...any) error }) (identity.OAuthProviderConfig, error) {
 	var c identity.OAuthProviderConfig
 	var apiURL, allowedDomains sql.NullString
 	err := row.Scan(
-		&c.ID, &c.ProviderName, &c.Type, &c.DisplayName,
+		&c.ID, &c.ProviderName, &c.Type, &c.DisplayName, &c.IconURL,
 		&c.ClientID, &c.ClientSecret,
 		&c.AuthURL, &c.TokenURL, &c.UserinfoURL, &apiURL,
 		&c.Scopes, &allowedDomains, &c.AllowSignUp,
@@ -65,7 +73,7 @@ func scanOAuthProvider(row interface{ Scan(...any) error }) (identity.OAuthProvi
 	return c, err
 }
 
-const oauthCols = `id, provider_name, type, display_name, client_id, client_secret,
+const oauthCols = `id, provider_name, type, display_name, icon_asset_id, client_id, client_secret,
 	auth_url, token_url, userinfo_url, api_url,
 	scopes, allowed_domains, allow_sign_up,
 	email_claim, name_claim, sub_claim,
