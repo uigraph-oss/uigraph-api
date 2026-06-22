@@ -125,6 +125,19 @@ func (h *ServiceAccountHandler) Get(w http.ResponseWriter, r *http.Request) {
 // PUT /api/v1/orgs/{orgID}/service-accounts/{saID}
 func (h *ServiceAccountHandler) Update(w http.ResponseWriter, r *http.Request) {
 	saID := r.PathValue("saID")
+	existing, err := h.store.GetServiceAccount(r.Context(), saID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if existing == nil {
+		httputil.Error(w, r, store.ErrNotFound)
+		return
+	}
+	if existing.IsInternal {
+		httputil.Forbidden(w)
+		return
+	}
 	var req updateServiceAccountRequest
 	if err := httputil.Decode(r, &req); err != nil {
 		httputil.BadRequest(w, "invalid JSON")
@@ -155,6 +168,19 @@ func (h *ServiceAccountHandler) Update(w http.ResponseWriter, r *http.Request) {
 // DELETE /api/v1/orgs/{orgID}/service-accounts/{saID}
 func (h *ServiceAccountHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	saID := r.PathValue("saID")
+	existing, err := h.store.GetServiceAccount(r.Context(), saID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if existing == nil {
+		httputil.Error(w, r, store.ErrNotFound)
+		return
+	}
+	if existing.IsInternal {
+		httputil.Forbidden(w)
+		return
+	}
 	if err := h.store.DeleteServiceAccount(r.Context(), saID); err != nil {
 		httputil.Error(w, r, err)
 		return

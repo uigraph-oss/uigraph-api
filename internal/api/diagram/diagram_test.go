@@ -22,17 +22,17 @@ var _ objectStore = (*fakeObjectStore)(nil)
 
 // fakeDiagramStore implements the unexported store interface.
 type fakeDiagramStore struct {
-	listDiagramsFn       func(ctx context.Context, orgID string, folderID, teamID *string) ([]diagrampkg.Diagram, error)
-	getDiagramFn         func(ctx context.Context, id string) (*diagrampkg.Diagram, error)
-	createDiagramFn      func(ctx context.Context, d diagrampkg.Diagram) error
-	updateDiagramFn      func(ctx context.Context, d diagrampkg.Diagram) error
-	softDeleteDiagramFn  func(ctx context.Context, id, deletedBy string) error
-	listVersionsFn       func(ctx context.Context, diagramID string) ([]diagrampkg.Version, error)
-	getVersionFn         func(ctx context.Context, id string) (*diagrampkg.Version, error)
-	createVersionFn      func(ctx context.Context, v diagrampkg.Version) error
-	latestVersionFn      func(ctx context.Context, diagramID string) (int, error)
-	listImagesFn         func(ctx context.Context, diagramID string) ([]diagrampkg.Image, error)
-	createImageFn        func(ctx context.Context, img diagrampkg.Image) error
+	listDiagramsFn      func(ctx context.Context, orgID string, folderID, teamID *string) ([]diagrampkg.Diagram, error)
+	getDiagramFn        func(ctx context.Context, id string) (*diagrampkg.Diagram, error)
+	createDiagramFn     func(ctx context.Context, d diagrampkg.Diagram) error
+	updateDiagramFn     func(ctx context.Context, d diagrampkg.Diagram) error
+	softDeleteDiagramFn func(ctx context.Context, id, deletedBy string) error
+	listVersionsFn      func(ctx context.Context, diagramID string) ([]diagrampkg.Version, error)
+	getVersionFn        func(ctx context.Context, id string) (*diagrampkg.Version, error)
+	createVersionFn     func(ctx context.Context, v diagrampkg.Version) error
+	latestVersionFn     func(ctx context.Context, diagramID string) (int, error)
+	listImagesFn        func(ctx context.Context, diagramID string) ([]diagrampkg.Image, error)
+	createImageFn       func(ctx context.Context, img diagrampkg.Image) error
 }
 
 func (f *fakeDiagramStore) ListDiagrams(ctx context.Context, orgID string, folderID, teamID *string) ([]diagrampkg.Diagram, error) {
@@ -121,7 +121,7 @@ func TestList_returnsDiagrams(t *testing.T) {
 			return []diagrampkg.Diagram{{ID: "d1", OrgID: orgID, Name: "Flow"}}, nil
 		},
 	}
-	h := New(s, nil, nil)
+	h := New(s, nil, nil, nil)
 
 	r := newReq(http.MethodGet, "/api/v1/orgs/org-1/diagrams", nil)
 	w := httptest.NewRecorder()
@@ -149,7 +149,7 @@ func TestList_propagatesFolderIDFilter(t *testing.T) {
 			return nil, nil
 		},
 	}
-	h := New(s, nil, nil)
+	h := New(s, nil, nil, nil)
 
 	r := newReq(http.MethodGet, "/api/v1/orgs/org-1/diagrams?folderId=folder-42", nil)
 	w := httptest.NewRecorder()
@@ -166,7 +166,7 @@ func TestList_storeError_returns500(t *testing.T) {
 			return nil, storepkg.ErrConflict
 		},
 	}
-	h := New(s, nil, nil)
+	h := New(s, nil, nil, nil)
 
 	r := newReq(http.MethodGet, "/api/v1/orgs/org-1/diagrams", nil)
 	w := httptest.NewRecorder()
@@ -189,7 +189,7 @@ func TestGet_success(t *testing.T) {
 			return nil, nil
 		},
 	}
-	h := New(s, nil, nil)
+	h := New(s, nil, nil, nil)
 
 	r := newReq(http.MethodGet, "/api/v1/orgs/org-1/diagrams/d1", nil)
 	r.SetPathValue("diagramID", "d1")
@@ -214,7 +214,7 @@ func TestGet_notFound_returns404(t *testing.T) {
 			return nil, nil
 		},
 	}
-	h := New(s, nil, nil)
+	h := New(s, nil, nil, nil)
 
 	r := newReq(http.MethodGet, "/api/v1/orgs/org-1/diagrams/missing", nil)
 	r.SetPathValue("diagramID", "missing")
@@ -233,7 +233,7 @@ func TestGet_softDeleted_returns404(t *testing.T) {
 			return &diagrampkg.Diagram{ID: "d1", DeletedAt: &now}, nil
 		},
 	}
-	h := New(s, nil, nil)
+	h := New(s, nil, nil, nil)
 
 	r := newReq(http.MethodGet, "/api/v1/orgs/org-1/diagrams/d1", nil)
 	r.SetPathValue("diagramID", "d1")
@@ -251,7 +251,7 @@ func TestGet_storeErrorNotMaskedAs404(t *testing.T) {
 			return nil, storepkg.ErrConflict
 		},
 	}
-	h := New(s, nil, nil)
+	h := New(s, nil, nil, nil)
 
 	r := newReq(http.MethodGet, "/api/v1/orgs/org-1/diagrams/d1", nil)
 	r.SetPathValue("diagramID", "d1")
@@ -276,7 +276,7 @@ func TestCreate_missingNameOrContent_returns400(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			h := New(&fakeDiagramStore{}, nil, nil)
+			h := New(&fakeDiagramStore{}, nil, nil, nil)
 
 			body, _ := json.Marshal(tc.body)
 			r := withAuth(newReq(http.MethodPost, "/api/v1/orgs/org-1/diagrams", body))
@@ -291,7 +291,7 @@ func TestCreate_missingNameOrContent_returns400(t *testing.T) {
 }
 
 func TestCreate_unauthenticated_returns401(t *testing.T) {
-	h := New(&fakeDiagramStore{}, nil, nil)
+	h := New(&fakeDiagramStore{}, nil, nil, nil)
 
 	body, _ := json.Marshal(map[string]any{"name": "x", "content": "{}"})
 	r := newReq(http.MethodPost, "/api/v1/orgs/org-1/diagrams", body)
@@ -319,7 +319,7 @@ func TestCreate_success(t *testing.T) {
 			return nil
 		},
 	}
-	h := New(s, st, nil)
+	h := New(s, st, nil, nil)
 
 	body, _ := json.Marshal(map[string]any{"name": "Architecture", "content": `{"nodes":[]}`})
 	r := withAuth(newReq(http.MethodPost, "/api/v1/orgs/org-1/diagrams", body))
@@ -350,7 +350,7 @@ func TestDelete_success(t *testing.T) {
 			return nil
 		},
 	}
-	h := New(s, nil, nil)
+	h := New(s, nil, nil, nil)
 
 	r := withAuth(newReq(http.MethodDelete, "/api/v1/orgs/org-1/diagrams/d1", nil))
 	r.SetPathValue("diagramID", "d1")
@@ -369,7 +369,7 @@ func TestDelete_success(t *testing.T) {
 }
 
 func TestDelete_unauthenticated_returns401(t *testing.T) {
-	h := New(&fakeDiagramStore{}, nil, nil)
+	h := New(&fakeDiagramStore{}, nil, nil, nil)
 
 	r := newReq(http.MethodDelete, "/api/v1/orgs/org-1/diagrams/d1", nil)
 	r.SetPathValue("diagramID", "d1")
@@ -398,7 +398,7 @@ func TestPrepareThumbnailUpload_success(t *testing.T) {
 			return "https://storage.example.com/put/" + key, nil
 		},
 	}
-	h := New(s, st, nil)
+	h := New(s, st, nil, nil)
 
 	r := withAuth(newReq(http.MethodPost, "/api/v1/orgs/org-1/diagrams/d1/thumbnail/prepare", nil))
 	r.SetPathValue("diagramID", "d1")
@@ -421,7 +421,7 @@ func TestPrepareThumbnailUpload_success(t *testing.T) {
 }
 
 func TestPrepareThumbnailUpload_unauthenticated_returns401(t *testing.T) {
-	h := New(&fakeDiagramStore{}, &fakeObjectStore{}, nil)
+	h := New(&fakeDiagramStore{}, &fakeObjectStore{}, nil, nil)
 
 	r := newReq(http.MethodPost, "/api/v1/orgs/org-1/diagrams/d1/thumbnail/prepare", nil)
 	r.SetPathValue("diagramID", "d1")
@@ -439,7 +439,7 @@ func TestPrepareThumbnailUpload_notFound_returns404(t *testing.T) {
 			return nil, nil
 		},
 	}
-	h := New(s, &fakeObjectStore{}, nil)
+	h := New(s, &fakeObjectStore{}, nil, nil)
 
 	r := withAuth(newReq(http.MethodPost, "/api/v1/orgs/org-1/diagrams/missing/thumbnail/prepare", nil))
 	r.SetPathValue("diagramID", "missing")
@@ -468,7 +468,7 @@ func TestConfirmThumbnailUpload_success(t *testing.T) {
 			return nil
 		},
 	}
-	h := New(s, &fakeObjectStore{}, nil)
+	h := New(s, &fakeObjectStore{}, nil, nil)
 
 	body, _ := json.Marshal(map[string]any{"contentHash": "abc123"})
 	r := withAuth(newReq(http.MethodPost, "/api/v1/orgs/org-1/diagrams/d1/thumbnail/confirm", body))
@@ -494,7 +494,7 @@ func TestConfirmThumbnailUpload_missingHash_returns400(t *testing.T) {
 			return dg, nil
 		},
 	}
-	h := New(s, &fakeObjectStore{}, nil)
+	h := New(s, &fakeObjectStore{}, nil, nil)
 
 	body, _ := json.Marshal(map[string]any{"contentHash": ""})
 	r := withAuth(newReq(http.MethodPost, "/api/v1/orgs/org-1/diagrams/d1/thumbnail/confirm", body))
@@ -508,7 +508,7 @@ func TestConfirmThumbnailUpload_missingHash_returns400(t *testing.T) {
 }
 
 func TestConfirmThumbnailUpload_unauthenticated_returns401(t *testing.T) {
-	h := New(&fakeDiagramStore{}, &fakeObjectStore{}, nil)
+	h := New(&fakeDiagramStore{}, &fakeObjectStore{}, nil, nil)
 
 	body, _ := json.Marshal(map[string]any{"contentHash": "abc"})
 	r := newReq(http.MethodPost, "/api/v1/orgs/org-1/diagrams/d1/thumbnail/confirm", body)

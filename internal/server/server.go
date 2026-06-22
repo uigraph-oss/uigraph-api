@@ -14,6 +14,8 @@ import (
 	"github.com/uigraph/app/internal/cache"
 	"github.com/uigraph/app/internal/config"
 	"github.com/uigraph/app/internal/migrate"
+	"github.com/uigraph/app/internal/queue"
+	"github.com/uigraph/app/internal/screenshot"
 	"github.com/uigraph/app/internal/storage"
 	"github.com/uigraph/app/internal/store/postgres"
 )
@@ -74,8 +76,25 @@ func Run(ctx context.Context, cfg *config.Config) error {
 		}
 	}
 
+	var jobQueue *queue.Queue
+	if cfg.RedisURL != "" {
+		q, err := queue.New(cfg.RedisURL)
+		if err != nil {
+			slog.WarnContext(ctx, "redis unavailable — job queue disabled", "err", err)
+		} else {
+			jobQueue = q
+		}
+	}
+
+	if jobQueue != nil && cfg.FrontendURL != "" {
+		worker := screenshot.New(jobQueue, db, db, storageClient, cacheClient, cfg.FrontendURL, cfg.ChromiumPath)
+		go worker.Run(ctx)
+	} else {
+		slog.InfoContext(ctx, "screenshot worker disabled — requires REDIS_URL and UIGRAPH_FRONTEND_URL")
+	}
+
 	bearer := authmw.NewSessionVerifier(db, db)
-	handler := api.New(db, bearer, cfg, storageClient, cacheClient)
+	handler := api.New(db, bearer, cfg, storageClient, cacheClient, jobQueue)
 
 	srv := &http.Server{
 		Addr:    cfg.Addr,
