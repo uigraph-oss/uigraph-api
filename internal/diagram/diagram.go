@@ -22,8 +22,9 @@ type Diagram struct {
 	FolderID    *string `json:"folderId,omitempty"`
 	TeamID      *string `json:"teamId,omitempty"`
 	Name        string  `json:"name"`
-	ContentKey  string  `json:"contentKey"`
-	ContentHash string `json:"contentHash"`
+	ContentKey        string     `json:"contentKey"`
+	ContentHash       string     `json:"contentHash"`
+	ContentTokenCount int        `json:"contentTokenCount"`
 	PreviewAssetID     *string    `json:"previewAssetId,omitempty"`
 	PreviewContentHash *string    `json:"previewContentHash,omitempty"`
 	Source             *string    `json:"source,omitempty"`

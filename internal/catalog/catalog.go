@@ -97,6 +97,7 @@ type APIEndpoint struct {
 	Summary     string          `json:"summary"`
 	Description string          `json:"description"`
 	Tags        []string        `json:"tags"`
+	TokenCount  int             `json:"tokenCount"`
 	Parameters  json.RawMessage `json:"parameters"`
 	RequestBody json.RawMessage `json:"requestBody"`
 	Responses   json.RawMessage `json:"responses"`
@@ -121,12 +122,13 @@ type ServiceDoc struct {
 	FileName    string     `json:"fileName"`
 	FileType    string     `json:"fileType"`
 	Description string     `json:"description"`
-	ContentHash string     `json:"contentHash"`
-	CreatedBy   string     `json:"createdBy"`
-	UpdatedBy   *string    `json:"updatedBy,omitempty"`
-	CreatedAt   time.Time  `json:"createdAt"`
-	UpdatedAt   time.Time  `json:"updatedAt"`
-	DeletedAt   *time.Time `json:"deletedAt,omitempty"`
+	ContentHash   string     `json:"contentHash"`
+	DocTokenCount int        `json:"docTokenCount"`
+	CreatedBy     string     `json:"createdBy"`
+	UpdatedBy     *string    `json:"updatedBy,omitempty"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	UpdatedAt     time.Time  `json:"updatedAt"`
+	DeletedAt     *time.Time `json:"deletedAt,omitempty"`
 }
 
 // ServiceDiagram is a diagram linked to a service through a junction row.
@@ -153,9 +155,10 @@ type ServiceDB struct {
 	DBType     string          `json:"dbType"`
 	Dialect    string          `json:"dialect"`
 	SchemaJSON json.RawMessage `json:"schemaJson"`
-	Source     *string         `json:"source,omitempty"`
-	SourceTS   *time.Time      `json:"sourceTs,omitempty"`
-	CreatedBy  string          `json:"createdBy"`
+	Source           *string         `json:"source,omitempty"`
+	SourceTS         *time.Time      `json:"sourceTs,omitempty"`
+	SchemaTokenCount int             `json:"schemaTokenCount"`
+	CreatedBy        string          `json:"createdBy"`
 	UpdatedBy  *string         `json:"updatedBy,omitempty"`
 	CreatedAt  time.Time       `json:"createdAt"`
 	UpdatedAt  time.Time       `json:"updatedAt"`

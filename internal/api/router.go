@@ -15,7 +15,9 @@ import (
 	"github.com/uigraph/app/internal/api/diagram"
 	"github.com/uigraph/app/internal/api/folder"
 	"github.com/uigraph/app/internal/api/health"
+	llmapi "github.com/uigraph/app/internal/api/llm"
 	mapspkg "github.com/uigraph/app/internal/api/maps"
+	mcpusageapi "github.com/uigraph/app/internal/api/mcpusage"
 	"github.com/uigraph/app/internal/asset"
 	"github.com/uigraph/app/internal/authz"
 	"github.com/uigraph/app/internal/cache"
@@ -240,6 +242,12 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 
 	// ── Comments ──────────────────────────────────────────────────────────
 	commentapi.Register(mux, s, scopeFn)
+
+	// ── LLM Models ────────────────────────────────────────────────────────
+	llmapi.Register(mux, s, protected, serverAdmin)
+
+	// ── MCP Usage + Savings ───────────────────────────────────────────────
+	mcpusageapi.Register(mux, s, scopeFn)
 
 	return mux
 }
