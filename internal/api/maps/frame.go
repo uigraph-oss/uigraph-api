@@ -304,6 +304,20 @@ func (h *Handler) uploadScreenshot(ctx context.Context, key, content string) err
 	if contentType, raw, ok := decodeDataURL(content); ok {
 		return h.storage.Upload(ctx, key, contentType, bytes.NewReader(raw), int64(len(raw)))
 	}
+	// Gateway/CLI flow: the image was already uploaded to a temp key via a
+	// presigned PUT, and content is that key — not the image bytes. Copy the
+	// real object into the canonical asset key, then drop the temp object.
+	if strings.HasPrefix(content, "gateway-uploads/") {
+		src, err := h.storage.Download(ctx, content)
+		if err != nil {
+			return err
+		}
+		defer src.Close()
+		if err := h.storage.Upload(ctx, key, "image/png", src, -1); err != nil {
+			return err
+		}
+		return h.storage.Delete(ctx, content)
+	}
 	r := strings.NewReader(content)
 	return h.storage.Upload(ctx, key, "image/png", r, int64(r.Len()))
 }
