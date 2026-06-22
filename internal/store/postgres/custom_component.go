@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/uigraph/app/internal/componentlib"
 )
 
@@ -14,6 +16,19 @@ import (
 // field set. Custom components carry a free-text category (category_text) and a
 // NULL category_id.
 func (d *DB) SaveCustomComponent(ctx context.Context, c componentlib.Component) error {
+	if c.OrgID != nil {
+		slug, err := d.uniqueComponentSlug(ctx, *c.OrgID, c.Kind, c.Slug, c.ID)
+		if err != nil {
+			return err
+		}
+		c.Slug = slug
+	}
+
+	fields, err := d.normalizeComponentFieldIDs(ctx, c.ID, c.Fields)
+	if err != nil {
+		return err
+	}
+
 	const q = `
 		INSERT INTO components
 			(id, org_id, kind, type, name, slug, description, category_id, category_text,
@@ -34,7 +49,7 @@ func (d *DB) SaveCustomComponent(ctx context.Context, c componentlib.Component) 
 		c.CreatedAt = now
 	}
 	c.UpdatedAt = now
-	_, err := d.db.ExecContext(ctx, q,
+	_, err = d.db.ExecContext(ctx, q,
 		c.ID, c.OrgID, c.Kind, c.Type, c.Name, c.Slug, c.Description, c.CategoryName,
 		componentlib.TagsJSON(c.Tags), c.IconKey, c.IsActive, c.Order,
 		c.CreatedAt, c.UpdatedAt,
@@ -42,7 +57,79 @@ func (d *DB) SaveCustomComponent(ctx context.Context, c componentlib.Component) 
 	if err != nil {
 		return fmt.Errorf("postgres: SaveCustomComponent: %w", err)
 	}
-	return d.replaceComponentFields(ctx, c.ID, c.Fields)
+	return d.replaceComponentFields(ctx, c.ID, fields)
+}
+
+func (d *DB) uniqueComponentSlug(ctx context.Context, orgID, kind, slug, excludeComponentID string) (string, error) {
+	if slug == "" {
+		slug = "component"
+	}
+	candidate := slug
+	for i := 0; i < 100; i++ {
+		var existingID string
+		err := d.db.QueryRowContext(ctx, `
+			SELECT id FROM components
+			WHERE org_id = $1 AND kind = $2 AND slug = $3
+			  AND ($4 = '' OR id <> $4)
+			LIMIT 1`, orgID, kind, candidate, excludeComponentID).Scan(&existingID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return candidate, nil
+		}
+		if err != nil {
+			return "", fmt.Errorf("postgres: uniqueComponentSlug: %w", err)
+		}
+		if i == 0 {
+			candidate = slug + "-2"
+		} else {
+			candidate = fmt.Sprintf("%s-%d", slug, i+2)
+		}
+	}
+	return "", fmt.Errorf("postgres: uniqueComponentSlug: exhausted attempts for %q", slug)
+}
+
+func (d *DB) normalizeComponentFieldIDs(ctx context.Context, componentID string, fields []componentlib.ComponentField) ([]componentlib.ComponentField, error) {
+	if len(fields) == 0 {
+		return fields, nil
+	}
+
+	out := make([]componentlib.ComponentField, len(fields))
+	copy(out, fields)
+	seen := make(map[string]struct{}, len(out))
+
+	for i := range out {
+		id := out[i].ID
+		if id != "" {
+			if _, dup := seen[id]; dup {
+				id = ""
+			} else {
+				var ownerID string
+				err := d.db.QueryRowContext(ctx, `SELECT component_id FROM component_fields WHERE id = $1`, id).Scan(&ownerID)
+				switch {
+				case errors.Is(err, sql.ErrNoRows):
+					// unused id — keep it
+				case err != nil:
+					return nil, fmt.Errorf("postgres: normalizeComponentFieldIDs: %w", err)
+				case ownerID != componentID:
+					id = ""
+				}
+				if id != "" {
+					seen[id] = struct{}{}
+				}
+			}
+		}
+		if id == "" {
+			for {
+				id = uuid.NewString()
+				if _, ok := seen[id]; !ok {
+					break
+				}
+			}
+			seen[id] = struct{}{}
+		}
+		out[i].ID = id
+		out[i].ComponentID = componentID
+	}
+	return out, nil
 }
 
 func (d *DB) replaceComponentFields(ctx context.Context, componentID string, fields []componentlib.ComponentField) error {
