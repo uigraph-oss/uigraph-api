@@ -43,6 +43,7 @@ type orgResponse struct {
 	Name      string    `json:"name"`
 	LogoURL   string    `json:"logoUrl,omitempty"`
 	Disabled  bool      `json:"disabled"`
+	AutoJoin  bool      `json:"autoJoin"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
@@ -50,17 +51,19 @@ type orgResponse struct {
 func (h *OrgHandler) orgToResponse(r *http.Request, o org.Org) orgResponse {
 	return orgResponse{
 		ID: o.ID, Name: o.Name, LogoURL: h.logoURL(r, o.LogoAssetID),
-		Disabled: o.Disabled, CreatedAt: o.CreatedAt, UpdatedAt: o.UpdatedAt,
+		Disabled: o.Disabled, AutoJoin: o.AutoJoin, CreatedAt: o.CreatedAt, UpdatedAt: o.UpdatedAt,
 	}
 }
 
 type createOrgRequest struct {
-	Name string `json:"name"`
+	Name     string `json:"name"`
+	AutoJoin bool   `json:"autoJoin"`
 }
 
 type updateOrgRequest struct {
 	Name     string `json:"name"`
 	Disabled bool   `json:"disabled"`
+	AutoJoin bool   `json:"autoJoin"`
 }
 
 // ── Handlers ─────────────────────────────────────────────────────────────────
@@ -99,8 +102,9 @@ func (h *OrgHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	o := org.Org{
-		ID:   newUUID(),
-		Name: req.Name,
+		ID:       newUUID(),
+		Name:     req.Name,
+		AutoJoin: req.AutoJoin,
 	}
 	if err := h.store.CreateOrg(r.Context(), o); err != nil {
 		httputil.Error(w, r, err)
@@ -158,6 +162,7 @@ func (h *OrgHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	o.Name = req.Name
 	o.Disabled = req.Disabled
+	o.AutoJoin = req.AutoJoin
 	if err := h.store.UpdateOrg(r.Context(), *o); err != nil {
 		httputil.Error(w, r, err)
 		return
