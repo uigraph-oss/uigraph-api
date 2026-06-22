@@ -10,6 +10,7 @@ type ProviderStore interface {
 	GetOAuthProvider(ctx context.Context, provider string) (*OAuthProviderConfig, error)
 	ListOAuthProviders(ctx context.Context) ([]OAuthProviderConfig, error)
 	DeleteOAuthProvider(ctx context.Context, provider string) error
+	SetOAuthProviderIcon(ctx context.Context, provider string, assetID *string) error
 
 	// LDAP
 	UpsertLDAPConfig(ctx context.Context, cfg LDAPConfig) error

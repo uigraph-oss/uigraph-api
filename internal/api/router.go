@@ -195,10 +195,12 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	serverAdmin("DELETE", "/api/v1/server/orgs/{orgID}/logo", avatarH.DeleteOrgLogo)
 
 	// SSO (global — server-admin only)
-	ssoH := auth.NewSSOHandler(s)
+	ssoH := auth.NewSSOHandler(s, st, assetResolver)
 	serverAdmin("GET", "/api/v1/sso/oauth", ssoH.ListOAuthProviders)
 	serverAdmin("PUT", "/api/v1/sso/oauth/{provider}", ssoH.UpsertOAuthProvider)
 	serverAdmin("DELETE", "/api/v1/sso/oauth/{provider}", ssoH.DeleteOAuthProvider)
+	serverAdmin("PUT", "/api/v1/sso/oauth/{provider}/icon", ssoH.PutOAuthProviderIcon)
+	serverAdmin("DELETE", "/api/v1/sso/oauth/{provider}/icon", ssoH.DeleteOAuthProviderIcon)
 	serverAdmin("GET", "/api/v1/sso/role-mappings", ssoH.ListMappings)
 	serverAdmin("POST", "/api/v1/sso/role-mappings", ssoH.CreateMapping)
 	serverAdmin("DELETE", "/api/v1/sso/role-mappings/{mappingID}", ssoH.DeleteMapping)

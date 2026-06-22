@@ -111,6 +111,7 @@ type providersResponse struct {
 type providerInfo struct {
 	Name        string `json:"name"`
 	DisplayName string `json:"displayName"`
+	IconURL     string `json:"iconUrl"`
 	LoginURL    string `json:"loginUrl"`
 }
 
@@ -195,6 +196,7 @@ func (h *SessionHandler) ListProviders(w http.ResponseWriter, r *http.Request) {
 		out.Providers = append(out.Providers, providerInfo{
 			Name:        c.ProviderName,
 			DisplayName: label,
+			IconURL:     h.avatarURL(r, &c.IconURL),
 			LoginURL:    "/api/v1/auth/login/" + c.ProviderName,
 		})
 	}
