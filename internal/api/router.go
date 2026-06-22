@@ -5,10 +5,10 @@ import (
 
 	authmw "github.com/uigraph/app/internal/middleware"
 
-	"github.com/uigraph/app/internal/api/admin"
-	"github.com/uigraph/app/internal/api/auth"
 	"github.com/uigraph/app/internal/api/actor"
+	"github.com/uigraph/app/internal/api/admin"
 	assetapi "github.com/uigraph/app/internal/api/asset"
+	"github.com/uigraph/app/internal/api/auth"
 	catalogapi "github.com/uigraph/app/internal/api/catalog"
 	commentapi "github.com/uigraph/app/internal/api/comment"
 	"github.com/uigraph/app/internal/api/component"
@@ -21,6 +21,7 @@ import (
 	"github.com/uigraph/app/internal/cache"
 	"github.com/uigraph/app/internal/config"
 	"github.com/uigraph/app/internal/identity"
+	"github.com/uigraph/app/internal/queue"
 	"github.com/uigraph/app/internal/storage"
 	"github.com/uigraph/app/internal/store"
 )
@@ -36,7 +37,7 @@ import (
 //	/api/v1/orgs/{orgID}/folders/*            — folder hierarchy
 //	/api/v1/orgs/{orgID}/diagrams/*           — diagrams + versions
 //	/api/v1/orgs/{orgID}/maps/*               — maps + frames + focal points + canvas
-func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st storage.Client, c cache.Client) http.Handler {
+func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st storage.Client, c cache.Client, q *queue.Queue) http.Handler {
 	mux := http.NewServeMux()
 	mw := authmw.New(bearer, s)
 	authorizer := authz.New(s, s)
@@ -224,7 +225,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	assetapi.Register(mux, st, c, protected)
 
 	// ── Diagrams ──────────────────────────────────────────────────────────
-	diagram.Register(mux, s, st, c, scopeFn)
+	diagram.Register(mux, s, st, c, q, scopeFn)
 
 	// ── Component palettes + icons ────────────────────────────────────────
 	component.Register(mux, s, st, protected, scopeFn)

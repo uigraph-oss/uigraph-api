@@ -2,6 +2,11 @@ package identity
 
 import "time"
 
+// SystemServiceAccountName is the reserved name of the built-in, hidden service
+// account every org gets for internal service-level tasks (e.g. the screenshot
+// worker). It is excluded from the user-facing service-account listing.
+const SystemServiceAccountName = "System Service"
+
 // ServiceAccount represents a non-human principal scoped to an org.
 type ServiceAccount struct {
 	ID          string    `json:"id"`
@@ -12,10 +17,13 @@ type ServiceAccount struct {
 	// e.g. "diagrams:write". See authz.AllScopes for the full catalog.
 	Scopes        []string `json:"scopes"`
 	Disabled      bool     `json:"disabled"`
-	AvatarAssetID *string  `json:"avatarAssetId,omitempty"`
-	CreatedBy   string    `json:"createdBy,omitempty"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	// Hidden marks built-in system accounts so they are kept out of user-facing
+	// listings; their tokens still authenticate normally.
+	Hidden        bool      `json:"hidden"`
+	AvatarAssetID *string   `json:"avatarAssetId,omitempty"`
+	CreatedBy     string    `json:"createdBy,omitempty"`
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
 }
 
 // Token is a single API token belonging to a ServiceAccount.

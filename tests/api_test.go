@@ -6,7 +6,7 @@
 //	TEST_POSTGRES_URL  postgres://uigraph:devpassword@localhost:5432/uigraph?sslmode=disable
 package tests
 
-	import (
+import (
 	"bytes"
 	"context"
 	"encoding/json"
@@ -26,7 +26,7 @@ package tests
 	"github.com/uigraph/app/internal/migrate"
 	"github.com/uigraph/app/internal/oauth"
 	"github.com/uigraph/app/internal/store/postgres"
-	)
+)
 
 // ── shared state ──────────────────────────────────────────────────────────────
 
@@ -78,7 +78,7 @@ func TestMain(m *testing.M) {
 	}))
 	defer idp.Close()
 
-	srv = httptest.NewServer(api.New(db, authmw.NewSessionVerifier(db, db), &config.Config{PublicURL: "http://localhost:8080", FrontendURL: ""}, testStorage, nil))
+	srv = httptest.NewServer(api.New(db, authmw.NewSessionVerifier(db, db), &config.Config{PublicURL: "http://localhost:8080", FrontendURL: ""}, testStorage, nil, nil))
 	defer srv.Close()
 
 	// obtain admin token once for all tests
@@ -472,7 +472,10 @@ func do(method, path, token string, body any) *http.Response {
 	return resp
 }
 
-func mustDo(t interface{ Helper(); Fatal(...any) }, method, path, token string, body any) M {
+func mustDo(t interface {
+	Helper()
+	Fatal(...any)
+}, method, path, token string, body any) M {
 	t.Helper()
 	resp := do(method, path, token, body)
 	defer resp.Body.Close()

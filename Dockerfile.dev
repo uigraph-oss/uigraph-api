@@ -1,6 +1,9 @@
 FROM golang:1.25-alpine
 WORKDIR /app
-RUN apk add --no-cache git
+# Alpine ships a musl-built chromium; use it directly (UIGRAPH_CHROMIUM_PATH) rather
+# than letting go-rod download a glibc build that musl can't run.
+RUN apk add --no-cache git chromium nss freetype harfbuzz ttf-freefont
+ENV UIGRAPH_CHROMIUM_PATH=/usr/bin/chromium-browser
 RUN go install github.com/air-verse/air@latest
 COPY go.mod go.sum ./
 RUN go mod download

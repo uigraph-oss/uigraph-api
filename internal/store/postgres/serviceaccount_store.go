@@ -11,7 +11,7 @@ import (
 	"github.com/uigraph/app/internal/identity"
 )
 
-const saCols = `id, org_id, name, COALESCE(description,''), scopes, disabled,
+const saCols = `id, org_id, name, COALESCE(description,''), scopes, disabled, hidden,
 	avatar_asset_id,
 	COALESCE(created_by::text,''), created_at, updated_at`
 
@@ -19,7 +19,7 @@ func scanSA(row interface{ Scan(...any) error }) (identity.ServiceAccount, error
 	var sa identity.ServiceAccount
 	var avatarAssetID sql.NullString
 	err := row.Scan(
-		&sa.ID, &sa.OrgID, &sa.Name, &sa.Description, pq.Array(&sa.Scopes), &sa.Disabled,
+		&sa.ID, &sa.OrgID, &sa.Name, &sa.Description, pq.Array(&sa.Scopes), &sa.Disabled, &sa.Hidden,
 		&avatarAssetID,
 		&sa.CreatedBy, &sa.CreatedAt, &sa.UpdatedAt,
 	)
@@ -41,12 +41,12 @@ func (d *DB) SetServiceAccountAvatar(ctx context.Context, saID string, assetID *
 func (d *DB) CreateServiceAccount(ctx context.Context, sa identity.ServiceAccount) error {
 	const q = `
 		INSERT INTO service_accounts
-		    (id, org_id, name, description, scopes, disabled, created_by, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, '')::uuid, $8, $9)`
+		    (id, org_id, name, description, scopes, disabled, hidden, created_by, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, '')::uuid, $9, $10)`
 
 	now := time.Now().UTC()
 	_, err := d.db.ExecContext(ctx, q,
-		sa.ID, sa.OrgID, sa.Name, sa.Description, pq.Array(sa.Scopes), sa.Disabled,
+		sa.ID, sa.OrgID, sa.Name, sa.Description, pq.Array(sa.Scopes), sa.Disabled, sa.Hidden,
 		sa.CreatedBy, now, now,
 	)
 	if err != nil {
@@ -67,8 +67,22 @@ func (d *DB) GetServiceAccount(ctx context.Context, id string) (*identity.Servic
 	return &sa, nil
 }
 
+// GetSystemServiceAccount returns the org's built-in hidden System Service account,
+// or (nil, nil) if it has not been created yet.
+func (d *DB) GetSystemServiceAccount(ctx context.Context, orgID string) (*identity.ServiceAccount, error) {
+	q := "SELECT " + saCols + " FROM service_accounts WHERE org_id=$1 AND name=$2 AND hidden=TRUE AND deleted_at IS NULL"
+	sa, err := scanSA(d.db.QueryRowContext(ctx, q, orgID, identity.SystemServiceAccountName))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("postgres: GetSystemServiceAccount: %w", err)
+	}
+	return &sa, nil
+}
+
 func (d *DB) ListServiceAccounts(ctx context.Context, orgID string) ([]identity.ServiceAccount, error) {
-	q := "SELECT " + saCols + " FROM service_accounts WHERE org_id=$1 AND deleted_at IS NULL ORDER BY created_at DESC"
+	q := "SELECT " + saCols + " FROM service_accounts WHERE org_id=$1 AND hidden=FALSE AND deleted_at IS NULL ORDER BY created_at DESC"
 	rows, err := d.db.QueryContext(ctx, q, orgID)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListServiceAccounts: %w", err)

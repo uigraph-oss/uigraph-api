@@ -7,18 +7,20 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
-	diagrampkg "github.com/uigraph/app/internal/diagram"
 	"github.com/uigraph/app/internal/cache"
+	diagrampkg "github.com/uigraph/app/internal/diagram"
 	"github.com/uigraph/app/internal/httputil"
 	authmw "github.com/uigraph/app/internal/middleware"
-	storepkg "github.com/uigraph/app/internal/store"
+	"github.com/uigraph/app/internal/queue"
 	"github.com/uigraph/app/internal/storage"
+	storepkg "github.com/uigraph/app/internal/store"
 )
 
 const diagramCacheTTL = time.Hour
@@ -115,6 +117,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	})
 
 	h.cacheSet(r.Context(), id, body.Content)
+	h.enqueueScreenshot(r.Context(), orgID, id)
 	httputil.JSON(w, http.StatusCreated, dg)
 }
 
@@ -265,6 +268,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	dg.UpdatedBy = &p.UserID
 
+	contentChanged := false
 	if body.Content != nil {
 		newHash := sha256Hex(*body.Content)
 		if newHash != dg.ContentHash {
@@ -274,12 +278,16 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 			}
 			dg.ContentHash = newHash
 			h.cacheDel(r.Context(), id)
+			contentChanged = true
 		}
 	}
 
 	if err := h.store.UpdateDiagram(r.Context(), *dg); err != nil {
 		httputil.Error(w, r, err)
 		return
+	}
+	if contentChanged {
+		h.enqueueScreenshot(r.Context(), dg.OrgID, dg.ID)
 	}
 	httputil.JSON(w, http.StatusOK, dg)
 }
@@ -378,6 +386,7 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 
+		h.enqueueScreenshot(r.Context(), orgID, dg.ID)
 		httputil.JSON(w, http.StatusOK, map[string]any{
 			"diagramId":      dg.ID,
 			"versionCreated": true,
@@ -428,6 +437,7 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	h.enqueueScreenshot(r.Context(), orgID, id)
 	httputil.JSON(w, http.StatusCreated, map[string]any{
 		"diagramId":      id,
 		"versionCreated": true,
@@ -489,6 +499,15 @@ func (h *Handler) cacheDel(ctx context.Context, id string) {
 		return
 	}
 	_ = h.cache.Del(ctx, cache.DiagramContentKey(id))
+}
+
+func (h *Handler) enqueueScreenshot(ctx context.Context, orgID, diagramID string) {
+	if h.queue == nil {
+		return
+	}
+	if err := h.queue.EnqueueScreenshot(ctx, queue.ScreenshotJob{OrgID: orgID, DiagramID: diagramID}); err != nil {
+		slog.WarnContext(ctx, "enqueue screenshot job failed", "diagramId", diagramID, "err", err)
+	}
 }
 
 func (h *Handler) PrepareThumbnailUpload(w http.ResponseWriter, r *http.Request) {
