@@ -1,11 +1,33 @@
 package identity
 
-import "time"
+import (
+	"time"
 
-// SystemServiceAccountName is the reserved name of the built-in, hidden service
-// account every org gets for internal service-level tasks (e.g. the screenshot
-// worker). It is excluded from the user-facing service-account listing.
+	"github.com/google/uuid"
+)
+
+// SystemServiceAccountName is the reserved name of the built-in service account
+// every org gets for internal service-level tasks (e.g. the screenshot worker).
 const SystemServiceAccountName = "System Service"
+
+// systemServiceAccountDescription is shown read-only in the UI to explain why
+// this account exists and cannot be edited.
+const systemServiceAccountDescription = "Built-in account used for internal service-level tasks (e.g. screenshot rendering)."
+
+// NewSystemServiceAccount builds the org's built-in internal service account.
+// The org handler (eager, at org creation) and the screenshot worker (lazy
+// fallback) both go through here so the name and IsInternal flag stay identical
+// — GetSystemServiceAccount looks the account up by name.
+func NewSystemServiceAccount(orgID string, scopes []string) ServiceAccount {
+	return ServiceAccount{
+		ID:          uuid.NewString(),
+		OrgID:       orgID,
+		Name:        SystemServiceAccountName,
+		Description: systemServiceAccountDescription,
+		Scopes:      scopes,
+		IsInternal:  true,
+	}
+}
 
 // ServiceAccount represents a non-human principal scoped to an org.
 type ServiceAccount struct {
@@ -17,9 +39,10 @@ type ServiceAccount struct {
 	// e.g. "diagrams:write". See authz.AllScopes for the full catalog.
 	Scopes        []string `json:"scopes"`
 	Disabled      bool     `json:"disabled"`
-	// Hidden marks built-in system accounts so they are kept out of user-facing
-	// listings; their tokens still authenticate normally.
-	Hidden        bool      `json:"hidden"`
+	// IsInternal marks the built-in system account used for UIGraph's internal
+	// service-level tasks. It is shown read-only in the UI and cannot be edited
+	// or deleted; its tokens authenticate normally.
+	IsInternal    bool      `json:"isInternal"`
 	AvatarAssetID *string   `json:"avatarAssetId,omitempty"`
 	CreatedBy     string    `json:"createdBy,omitempty"`
 	CreatedAt     time.Time `json:"createdAt"`

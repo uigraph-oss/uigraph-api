@@ -1,11 +1,13 @@
 package auth
 
 import (
+	"context"
 	"net/http"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/uigraph/app/internal/asset"
+	"github.com/uigraph/app/internal/authz"
 	"github.com/uigraph/app/internal/httputil"
 	"github.com/uigraph/app/internal/identity"
 	authmw "github.com/uigraph/app/internal/middleware"
@@ -13,14 +15,19 @@ import (
 	"github.com/uigraph/app/internal/store"
 )
 
+type saProvisioner interface {
+	CreateServiceAccount(ctx context.Context, sa identity.ServiceAccount) error
+}
+
 type OrgHandler struct {
 	store   org.OrgStore
 	members org.MemberStore
+	sa      saProvisioner
 	assets  *asset.Resolver // presigns the logo URL; may be nil
 }
 
-func NewOrgHandler(s org.OrgStore, m org.MemberStore, assets *asset.Resolver) *OrgHandler {
-	return &OrgHandler{store: s, members: m, assets: assets}
+func NewOrgHandler(s org.OrgStore, m org.MemberStore, sa saProvisioner, assets *asset.Resolver) *OrgHandler {
+	return &OrgHandler{store: s, members: m, sa: sa, assets: assets}
 }
 
 // logoURL presigns the logo asset id, returning "" when there is no logo or no
@@ -119,7 +126,20 @@ func (h *OrgHandler) Create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	sa := identity.NewSystemServiceAccount(o.ID, allScopeStrings())
+	if err := h.sa.CreateServiceAccount(r.Context(), sa); err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
 	httputil.JSON(w, http.StatusCreated, h.orgToResponse(r, o))
+}
+
+func allScopeStrings() []string {
+	scopes := make([]string, len(authz.AllScopes))
+	for i, s := range authz.AllScopes {
+		scopes[i] = string(s)
+	}
+	return scopes
 }
 
 // Get returns a single org by ID.

@@ -24,7 +24,6 @@ import (
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
 	"github.com/go-rod/rod/lib/proto"
-	"github.com/google/uuid"
 
 	"github.com/uigraph/app/internal/authz"
 	"github.com/uigraph/app/internal/cache"
@@ -249,20 +248,12 @@ func (w *Worker) ensureSA(ctx context.Context, orgID string) (string, error) {
 		return existing.ID, nil
 	}
 
-	id := uuid.NewString()
-	sa := identity.ServiceAccount{
-		ID:          id,
-		OrgID:       orgID,
-		Name:        identity.SystemServiceAccountName,
-		Description: "Built-in account used for internal service-level tasks (e.g. screenshot rendering).",
-		Scopes:      systemScopes(),
-		Hidden:      true,
-	}
+	sa := identity.NewSystemServiceAccount(orgID, systemScopes())
 	if err := w.sa.CreateServiceAccount(ctx, sa); err != nil {
 		return "", err
 	}
-	w.saCache[orgID] = id
-	return id, nil
+	w.saCache[orgID] = sa.ID
+	return sa.ID, nil
 }
 
 func systemScopes() []string {

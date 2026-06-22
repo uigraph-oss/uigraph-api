@@ -138,7 +138,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	serverAdmin("DELETE", "/api/v1/users/{userID}", userH.Disable)
 
 	// Orgs
-	orgH := auth.NewOrgHandler(s, s, assetResolver)
+	orgH := auth.NewOrgHandler(s, s, s, assetResolver)
 	protected("GET", "/api/v1/orgs", orgH.List)
 	protected("POST", "/api/v1/orgs", orgH.Create)
 	protected("GET", "/api/v1/orgs/{orgID}", orgH.Get)

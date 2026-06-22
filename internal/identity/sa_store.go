@@ -6,7 +6,7 @@ import "context"
 type ServiceAccountStore interface {
 	CreateServiceAccount(ctx context.Context, sa ServiceAccount) error
 	GetServiceAccount(ctx context.Context, id string) (*ServiceAccount, error)
-	// GetSystemServiceAccount returns the org's built-in hidden System Service
+	// GetSystemServiceAccount returns the org's built-in internal System Service
 	// account, or (nil, nil) if it has not been created yet.
 	GetSystemServiceAccount(ctx context.Context, orgID string) (*ServiceAccount, error)
 	ListServiceAccounts(ctx context.Context, orgID string) ([]ServiceAccount, error)
