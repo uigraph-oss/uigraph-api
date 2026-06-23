@@ -13,6 +13,7 @@ import (
 	commentapi "github.com/uigraph/app/internal/api/comment"
 	"github.com/uigraph/app/internal/api/component"
 	"github.com/uigraph/app/internal/api/diagram"
+	docsapi "github.com/uigraph/app/internal/api/docs"
 	"github.com/uigraph/app/internal/api/folder"
 	"github.com/uigraph/app/internal/api/health"
 	llmapi "github.com/uigraph/app/internal/api/llm"
@@ -232,11 +233,14 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	// ── Diagrams ──────────────────────────────────────────────────────────
 	diagram.Register(mux, s, st, c, q, scopeFn)
 
+	// ── Docs ──────────────────────────────────────────────────────────────
+	docsapi.Register(mux, s, st, scopeFn)
+
 	// ── Component palettes + icons ────────────────────────────────────────
 	component.Register(mux, s, st, protected, scopeFn)
 
 	// ── Services + API Groups + API Endpoints ─────────────────────────────
-	catalogapi.Register(mux, s, st, scopeFn)
+	catalogapi.Register(mux, s, st, q, scopeFn)
 
 	// ── Maps + Frames + Focal Points + Canvas ─────────────────────────────
 	mapspkg.Register(mux, s, st, scopeFn)

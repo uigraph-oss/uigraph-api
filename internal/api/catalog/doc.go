@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 	catalogpkg "github.com/uigraph/app/internal/catalog"
 	diagrampkg "github.com/uigraph/app/internal/diagram"
+	docspkg "github.com/uigraph/app/internal/docs"
 	"github.com/uigraph/app/internal/httputil"
 	authmw "github.com/uigraph/app/internal/middleware"
 	storepkg "github.com/uigraph/app/internal/store"
@@ -32,23 +34,6 @@ func (h *Handler) ListDocs(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"docs": docs})
 }
 
-func (h *Handler) GetDoc(w http.ResponseWriter, r *http.Request) {
-	serviceID := r.PathValue("serviceID")
-	if ok := h.ensureServiceInOrg(w, r, serviceID); !ok {
-		return
-	}
-	doc, err := h.store.GetServiceDoc(r.Context(), r.PathValue("docID"))
-	if err != nil {
-		httputil.Error(w, r, err)
-		return
-	}
-	if doc == nil || doc.DeletedAt != nil || doc.ServiceID != serviceID {
-		httputil.Error(w, r, storepkg.ErrNotFound)
-		return
-	}
-	httputil.JSON(w, http.StatusOK, doc)
-}
-
 func (h *Handler) CreateDoc(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	serviceID := r.PathValue("serviceID")
@@ -57,51 +42,108 @@ func (h *Handler) CreateDoc(w http.ResponseWriter, r *http.Request) {
 		httputil.Unauthorized(w)
 		return
 	}
-	if h.storage == nil {
-		httputil.BadRequest(w, "storage is not configured")
-		return
-	}
 	if ok := h.ensureServiceInOrg(w, r, serviceID); !ok {
 		return
 	}
 
-	fileName, fileType, description, fileBytes, err := h.readServiceDocPayload(r)
-	if err != nil {
-		httputil.BadRequest(w, err.Error())
+	var body struct {
+		DocID         *string `json:"docId"`
+		FileName      *string `json:"fileName"`
+		FileType      *string `json:"fileType"`
+		Description   *string `json:"description"`
+		ContentBase64 *string `json:"contentBase64"`
+		FolderID      *string `json:"folderId"`
+		TeamID        *string `json:"teamId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httputil.BadRequest(w, "invalid request body")
 		return
 	}
 
-	docID := uuid.NewString()
-	fileAssetID := storage.NewFileAssetID()
-	if err := h.storage.Upload(r.Context(), storage.AssetKey(fileAssetID), fileType, bytes.NewReader(fileBytes), int64(len(fileBytes))); err != nil {
-		httputil.Error(w, r, err)
-		return
+	var doc *docspkg.Doc
+	if body.DocID != nil && strings.TrimSpace(*body.DocID) != "" {
+		existing, err := h.store.GetDoc(r.Context(), strings.TrimSpace(*body.DocID))
+		if err != nil {
+			httputil.Error(w, r, err)
+			return
+		}
+		if existing == nil || existing.DeletedAt != nil || existing.OrgID != orgID {
+			httputil.Error(w, r, storepkg.ErrNotFound)
+			return
+		}
+		doc = existing
+	} else {
+		if h.storage == nil {
+			httputil.BadRequest(w, "storage is not configured")
+			return
+		}
+		if body.FileName == nil || strings.TrimSpace(*body.FileName) == "" || body.ContentBase64 == nil || strings.TrimSpace(*body.ContentBase64) == "" {
+			httputil.BadRequest(w, "fileName and contentBase64 are required when docId is not provided")
+			return
+		}
+		fileBytes, err := base64.StdEncoding.DecodeString(*body.ContentBase64)
+		if err != nil {
+			httputil.BadRequest(w, "contentBase64 must be valid base64")
+			return
+		}
+
+		fileType := "application/octet-stream"
+		if body.FileType != nil && strings.TrimSpace(*body.FileType) != "" {
+			fileType = strings.TrimSpace(*body.FileType)
+		}
+		description := ""
+		if body.Description != nil {
+			description = strings.TrimSpace(*body.Description)
+		}
+
+		fileAssetID := storage.NewFileAssetID()
+		if err := h.storage.Upload(r.Context(), storage.AssetKey(fileAssetID), fileType, bytes.NewReader(fileBytes), int64(len(fileBytes))); err != nil {
+			httputil.Error(w, r, err)
+			return
+		}
+
+		now := time.Now().UTC()
+		newDoc := docspkg.Doc{
+			ID:          uuid.NewString(),
+			OrgID:       orgID,
+			FolderID:    nonEmptyPtr(body.FolderID),
+			TeamID:      nonEmptyPtr(body.TeamID),
+			FileAssetID: fileAssetID,
+			FileName:    strings.TrimSpace(*body.FileName),
+			FileType:    fileType,
+			Description: description,
+			ContentHash: sha256Bytes(fileBytes),
+			CreatedBy:   p.UserID,
+			UpdatedBy:   &p.UserID,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}
+		if err := h.store.CreateDoc(r.Context(), newDoc); err != nil {
+			httputil.Error(w, r, err)
+			return
+		}
+		doc = &newDoc
 	}
 
 	now := time.Now().UTC()
-	doc := catalogpkg.ServiceDoc{
-		ID:          docID,
-		ServiceID:   serviceID,
-		OrgID:       orgID,
-		FileAssetID: fileAssetID,
-		FileName:    fileName,
-		FileType:    fileType,
-		Description: description,
-		ContentHash: sha256Bytes(fileBytes),
-		CreatedBy:   p.UserID,
-		UpdatedBy:   &p.UserID,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+	link := catalogpkg.ServiceDoc{
+		ServiceID: serviceID,
+		DocID:     doc.ID,
+		OrgID:     orgID,
+		CreatedBy: p.UserID,
+		UpdatedBy: &p.UserID,
+		CreatedAt: now,
+		UpdatedAt: now,
+		Doc:       doc,
 	}
-	if err := h.store.CreateServiceDoc(r.Context(), doc); err != nil {
+	if err := h.store.CreateServiceDoc(r.Context(), link); err != nil {
 		httputil.Error(w, r, err)
 		return
 	}
-	httputil.JSON(w, http.StatusCreated, doc)
+	httputil.JSON(w, http.StatusCreated, link)
 }
 
-func (h *Handler) UpdateDoc(w http.ResponseWriter, r *http.Request) {
-	orgID := r.PathValue("orgID")
+func (h *Handler) DeleteDoc(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	docID := r.PathValue("docID")
 	p, ok := authmw.PrincipalFromCtx(r.Context())
@@ -109,76 +151,34 @@ func (h *Handler) UpdateDoc(w http.ResponseWriter, r *http.Request) {
 		httputil.Unauthorized(w)
 		return
 	}
-	if h.storage == nil {
-		httputil.BadRequest(w, "storage is not configured")
-		return
-	}
 	if ok := h.ensureServiceInOrg(w, r, serviceID); !ok {
 		return
 	}
-
-	doc, err := h.store.GetServiceDoc(r.Context(), docID)
+	link, err := h.store.GetServiceDoc(r.Context(), serviceID, docID)
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
 	}
-	if doc == nil || doc.DeletedAt != nil || doc.ServiceID != serviceID {
+	if link == nil || link.DeletedAt != nil {
 		httputil.Error(w, r, storepkg.ErrNotFound)
 		return
 	}
-
-	fileName, fileType, description, fileBytes, payloadErr := h.readOptionalServiceDocPayload(r, doc)
-	if payloadErr != nil {
-		httputil.BadRequest(w, payloadErr.Error())
-		return
-	}
-
-	doc.Description = description
-	doc.FileName = fileName
-	doc.FileType = fileType
-	doc.OrgID = orgID
-	doc.UpdatedBy = &p.UserID
-
-	if fileBytes != nil {
-		newAssetID := storage.NewFileAssetID()
-		if err := h.storage.Upload(r.Context(), storage.AssetKey(newAssetID), fileType, bytes.NewReader(fileBytes), int64(len(fileBytes))); err != nil {
-			httputil.Error(w, r, err)
-			return
-		}
-		if doc.FileAssetID != "" {
-			_ = h.storage.Delete(r.Context(), storage.AssetKey(doc.FileAssetID))
-		}
-		doc.FileAssetID = newAssetID
-		doc.ContentHash = sha256Bytes(fileBytes)
-	}
-
-	if err := h.store.UpdateServiceDoc(r.Context(), *doc); err != nil {
-		httputil.Error(w, r, err)
-		return
-	}
-	httputil.JSON(w, http.StatusOK, doc)
-}
-
-func (h *Handler) DeleteDoc(w http.ResponseWriter, r *http.Request) {
-	serviceID := r.PathValue("serviceID")
-	docID := r.PathValue("docID")
-	if ok := h.ensureServiceInOrg(w, r, serviceID); !ok {
-		return
-	}
-	doc, err := h.store.GetServiceDoc(r.Context(), docID)
-	if err != nil {
-		httputil.Error(w, r, err)
-		return
-	}
-	if doc == nil || doc.DeletedAt != nil || doc.ServiceID != serviceID {
-		httputil.Error(w, r, storepkg.ErrNotFound)
-		return
-	}
-	if err := h.store.SoftDeleteServiceDoc(r.Context(), docID); err != nil {
+	if err := h.store.SoftDeleteServiceDoc(r.Context(), serviceID, docID, p.UserID); err != nil {
 		httputil.Error(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func nonEmptyPtr(s *string) *string {
+	if s == nil {
+		return nil
+	}
+	v := strings.TrimSpace(*s)
+	if v == "" {
+		return nil
+	}
+	return &v
 }
 
 // ── Service diagrams ──────────────────────────────────────────────────────────
@@ -289,6 +289,7 @@ func (h *Handler) CreateDiagram(w http.ResponseWriter, r *http.Request) {
 			CreatedAt:     now,
 		})
 
+		h.enqueueScreenshot(r.Context(), orgID, id)
 		dg = &newDiagram
 	}
 

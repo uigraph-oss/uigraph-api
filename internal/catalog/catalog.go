@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/uigraph/app/internal/diagram"
+	"github.com/uigraph/app/internal/docs"
 )
 
 // ── Service ───────────────────────────────────────────────────────────────────
@@ -114,23 +115,17 @@ type APIEndpoint struct {
 
 // ── Service Doc ───────────────────────────────────────────────────────────────
 
-// ServiceDoc is a documentation file attached to a service.
-// The bytes are stored in object storage; Postgres stores metadata + object key.
+// ServiceDoc is a doc linked to a service through a junction row.
 type ServiceDoc struct {
-	ID          string     `json:"id"`
-	ServiceID   string     `json:"serviceId"`
-	OrgID       string     `json:"orgId"`
-	FileAssetID string     `json:"fileAssetId"`
-	FileName    string     `json:"fileName"`
-	FileType    string     `json:"fileType"`
-	Description string     `json:"description"`
-	ContentHash   string     `json:"contentHash"`
-	DocTokenCount int        `json:"docTokenCount"`
-	CreatedBy     string     `json:"createdBy"`
-	UpdatedBy     *string    `json:"updatedBy,omitempty"`
-	CreatedAt     time.Time  `json:"createdAt"`
-	UpdatedAt     time.Time  `json:"updatedAt"`
-	DeletedAt     *time.Time `json:"deletedAt,omitempty"`
+	ServiceID string     `json:"serviceId"`
+	DocID     string     `json:"docId"`
+	OrgID     string     `json:"orgId"`
+	CreatedBy string     `json:"createdBy"`
+	UpdatedBy *string    `json:"updatedBy,omitempty"`
+	CreatedAt time.Time  `json:"createdAt"`
+	UpdatedAt time.Time  `json:"updatedAt"`
+	DeletedAt *time.Time `json:"deletedAt,omitempty"`
+	Doc       *docs.Doc  `json:"doc,omitempty"`
 }
 
 // ServiceDiagram is a diagram linked to a service through a junction row.

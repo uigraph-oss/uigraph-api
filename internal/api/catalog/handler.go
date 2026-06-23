@@ -5,10 +5,13 @@ package catalog
 import (
 	"context"
 	"io"
+	"log/slog"
 	"net/http"
 
 	catalogpkg "github.com/uigraph/app/internal/catalog"
 	diagrampkg "github.com/uigraph/app/internal/diagram"
+	docspkg "github.com/uigraph/app/internal/docs"
+	"github.com/uigraph/app/internal/queue"
 )
 
 // store is the minimal persistence interface this package needs.
@@ -23,10 +26,13 @@ type store interface {
 
 	// Service docs
 	ListServiceDocs(ctx context.Context, serviceID string) ([]catalogpkg.ServiceDoc, error)
-	GetServiceDoc(ctx context.Context, id string) (*catalogpkg.ServiceDoc, error)
+	GetServiceDoc(ctx context.Context, serviceID, docID string) (*catalogpkg.ServiceDoc, error)
 	CreateServiceDoc(ctx context.Context, d catalogpkg.ServiceDoc) error
-	UpdateServiceDoc(ctx context.Context, d catalogpkg.ServiceDoc) error
-	SoftDeleteServiceDoc(ctx context.Context, id string) error
+	SoftDeleteServiceDoc(ctx context.Context, serviceID, docID, actorID string) error
+
+	// Docs (used by CreateDoc handler)
+	GetDoc(ctx context.Context, id string) (*docspkg.Doc, error)
+	CreateDoc(ctx context.Context, d docspkg.Doc) error
 
 	// Service diagrams
 	ListServiceDiagrams(ctx context.Context, serviceID string) ([]catalogpkg.ServiceDiagram, error)
@@ -108,11 +114,21 @@ type objectStore interface {
 type Handler struct {
 	store   store
 	storage objectStore
+	queue   *queue.Queue // may be nil
 }
 
 // New constructs a Handler.
-func New(s store, st objectStore) *Handler {
-	return &Handler{store: s, storage: st}
+func New(s store, st objectStore, q *queue.Queue) *Handler {
+	return &Handler{store: s, storage: st, queue: q}
+}
+
+func (h *Handler) enqueueScreenshot(ctx context.Context, orgID, diagramID string) {
+	if h.queue == nil {
+		return
+	}
+	if err := h.queue.EnqueueScreenshot(ctx, queue.ScreenshotJob{OrgID: orgID, DiagramID: diagramID}); err != nil {
+		slog.WarnContext(ctx, "enqueue screenshot job failed", "diagramId", diagramID, "err", err)
+	}
 }
 
 // Register wires catalog routes into mux.
@@ -121,9 +137,10 @@ func Register(
 	mux *http.ServeMux,
 	s store,
 	st objectStore,
+	q *queue.Queue,
 	requireScope func(scope, method, pattern string, h http.HandlerFunc),
 ) {
-	h := New(s, st)
+	h := New(s, st, q)
 	// Services
 	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/services", h.List)
 	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/services/stats", h.ListStats)
@@ -149,8 +166,6 @@ func Register(
 	// Service docs
 	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/docs", h.ListDocs)
 	requireScope("services:write", "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/docs", h.CreateDoc)
-	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/docs/{docID}", h.GetDoc)
-	requireScope("services:write", "PUT", "/api/v1/orgs/{orgID}/services/{serviceID}/docs/{docID}", h.UpdateDoc)
 	requireScope("services:write", "DELETE", "/api/v1/orgs/{orgID}/services/{serviceID}/docs/{docID}", h.DeleteDoc)
 	// Service diagrams
 	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/diagrams", h.ListDiagrams)

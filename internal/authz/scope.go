@@ -15,6 +15,9 @@ const (
 	ScopeDiagramsRead  Scope = "diagrams:read"
 	ScopeDiagramsWrite Scope = "diagrams:write"
 
+	ScopeDocsRead  Scope = "docs:read"
+	ScopeDocsWrite Scope = "docs:write"
+
 	ScopeMapsRead  Scope = "maps:read"
 	ScopeMapsWrite Scope = "maps:write"
 
@@ -50,6 +53,7 @@ const (
 // AllScopes is the catalog of concrete grantable scopes, returned by the discovery endpoint.
 var AllScopes = []Scope{
 	ScopeDiagramsRead, ScopeDiagramsWrite,
+	ScopeDocsRead, ScopeDocsWrite,
 	ScopeMapsRead, ScopeMapsWrite,
 	ScopeServicesRead, ScopeServicesWrite,
 	ScopeFoldersRead, ScopeFoldersWrite,
@@ -65,16 +69,16 @@ var AllScopes = []Scope{
 // The admin role uses per-resource wildcards, which are deterministic.
 var RoleScopes = map[Role][]Scope{
 	RoleViewer: {
-		ScopeDiagramsRead, ScopeMapsRead, ScopeServicesRead, ScopeFoldersRead,
+		ScopeDiagramsRead, ScopeDocsRead, ScopeMapsRead, ScopeServicesRead, ScopeFoldersRead,
 		ScopeMembersRead, ScopeTeamsRead, ScopeServiceAccountsRead,
 	},
 	RoleEditor: {
-		ScopeDiagramsRead, ScopeMapsRead, ScopeServicesRead, ScopeFoldersRead,
+		ScopeDiagramsRead, ScopeDocsRead, ScopeMapsRead, ScopeServicesRead, ScopeFoldersRead,
 		ScopeMembersRead, ScopeTeamsRead, ScopeServiceAccountsRead,
-		ScopeDiagramsWrite, ScopeMapsWrite, ScopeServicesWrite, ScopeFoldersWrite,
+		ScopeDiagramsWrite, ScopeDocsWrite, ScopeMapsWrite, ScopeServicesWrite, ScopeFoldersWrite,
 	},
 	RoleAdmin: {
-		"diagrams:*", "maps:*", "services:*", "folders:*",
+		"diagrams:*", "docs:*", "maps:*", "services:*", "folders:*",
 		"members:*", "teams:*", "serviceaccounts:*", "org:*",
 	},
 }
