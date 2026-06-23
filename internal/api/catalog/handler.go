@@ -5,10 +5,12 @@ package catalog
 import (
 	"context"
 	"io"
+	"log/slog"
 	"net/http"
 
 	catalogpkg "github.com/uigraph/app/internal/catalog"
 	diagrampkg "github.com/uigraph/app/internal/diagram"
+	"github.com/uigraph/app/internal/queue"
 )
 
 // store is the minimal persistence interface this package needs.
@@ -108,11 +110,21 @@ type objectStore interface {
 type Handler struct {
 	store   store
 	storage objectStore
+	queue   *queue.Queue // may be nil
 }
 
 // New constructs a Handler.
-func New(s store, st objectStore) *Handler {
-	return &Handler{store: s, storage: st}
+func New(s store, st objectStore, q *queue.Queue) *Handler {
+	return &Handler{store: s, storage: st, queue: q}
+}
+
+func (h *Handler) enqueueScreenshot(ctx context.Context, orgID, diagramID string) {
+	if h.queue == nil {
+		return
+	}
+	if err := h.queue.EnqueueScreenshot(ctx, queue.ScreenshotJob{OrgID: orgID, DiagramID: diagramID}); err != nil {
+		slog.WarnContext(ctx, "enqueue screenshot job failed", "diagramId", diagramID, "err", err)
+	}
 }
 
 // Register wires catalog routes into mux.
@@ -121,9 +133,10 @@ func Register(
 	mux *http.ServeMux,
 	s store,
 	st objectStore,
+	q *queue.Queue,
 	requireScope func(scope, method, pattern string, h http.HandlerFunc),
 ) {
-	h := New(s, st)
+	h := New(s, st, q)
 	// Services
 	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/services", h.List)
 	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/services/stats", h.ListStats)

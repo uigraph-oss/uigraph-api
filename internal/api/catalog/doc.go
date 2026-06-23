@@ -289,6 +289,7 @@ func (h *Handler) CreateDiagram(w http.ResponseWriter, r *http.Request) {
 			CreatedAt:     now,
 		})
 
+		h.enqueueScreenshot(r.Context(), orgID, id)
 		dg = &newDiagram
 	}
 
