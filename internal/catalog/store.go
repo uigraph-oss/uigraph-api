@@ -34,6 +34,8 @@ type Store interface {
 	ListAPIEndpoints(ctx context.Context, apiGroupID string) ([]APIEndpoint, error)
 	UpdateAPIEndpoint(ctx context.Context, e APIEndpoint) error
 	SoftDeleteAPIEndpoint(ctx context.Context, id, deletedBy string) error
+	SoftDeleteCurrentAPIEndpoints(ctx context.Context, apiGroupID, deletedBy string) error
+	CopyEndpointsForVersion(ctx context.Context, apiGroupID, versionID, actorID string) error
 
 	// Service docs
 	CreateServiceDoc(ctx context.Context, d ServiceDoc) error
