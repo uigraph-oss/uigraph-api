@@ -10,6 +10,7 @@ import (
 
 	catalogpkg "github.com/uigraph/app/internal/catalog"
 	diagrampkg "github.com/uigraph/app/internal/diagram"
+	docspkg "github.com/uigraph/app/internal/docs"
 	"github.com/uigraph/app/internal/queue"
 )
 
@@ -25,10 +26,13 @@ type store interface {
 
 	// Service docs
 	ListServiceDocs(ctx context.Context, serviceID string) ([]catalogpkg.ServiceDoc, error)
-	GetServiceDoc(ctx context.Context, id string) (*catalogpkg.ServiceDoc, error)
+	GetServiceDoc(ctx context.Context, serviceID, docID string) (*catalogpkg.ServiceDoc, error)
 	CreateServiceDoc(ctx context.Context, d catalogpkg.ServiceDoc) error
-	UpdateServiceDoc(ctx context.Context, d catalogpkg.ServiceDoc) error
-	SoftDeleteServiceDoc(ctx context.Context, id string) error
+	SoftDeleteServiceDoc(ctx context.Context, serviceID, docID, actorID string) error
+
+	// Docs (used by CreateDoc handler)
+	GetDoc(ctx context.Context, id string) (*docspkg.Doc, error)
+	CreateDoc(ctx context.Context, d docspkg.Doc) error
 
 	// Service diagrams
 	ListServiceDiagrams(ctx context.Context, serviceID string) ([]catalogpkg.ServiceDiagram, error)
@@ -162,8 +166,6 @@ func Register(
 	// Service docs
 	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/docs", h.ListDocs)
 	requireScope("services:write", "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/docs", h.CreateDoc)
-	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/docs/{docID}", h.GetDoc)
-	requireScope("services:write", "PUT", "/api/v1/orgs/{orgID}/services/{serviceID}/docs/{docID}", h.UpdateDoc)
 	requireScope("services:write", "DELETE", "/api/v1/orgs/{orgID}/services/{serviceID}/docs/{docID}", h.DeleteDoc)
 	// Service diagrams
 	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/diagrams", h.ListDiagrams)

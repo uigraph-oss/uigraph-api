@@ -11,6 +11,7 @@ import (
 	"github.com/uigraph/app/internal/comment"
 	"github.com/uigraph/app/internal/componentlib"
 	"github.com/uigraph/app/internal/diagram"
+	"github.com/uigraph/app/internal/docs"
 	"github.com/uigraph/app/internal/folder"
 	"github.com/uigraph/app/internal/identity"
 	"github.com/uigraph/app/internal/llm"
@@ -35,6 +36,7 @@ type Store interface {
 	org.TeamStore
 	folder.Store
 	diagram.Store
+	docs.Store
 	uimap.Store
 	catalog.Store
 	componentlib.Store
