@@ -78,6 +78,8 @@ func Load() (*Config, error) {
 		EmbeddingBackend:      env("EMBEDDING_BACKEND", "ollama"),
 		EmbeddingModel:        env("EMBEDDING_MODEL", "nomic-embed-text"),
 		EmbeddingURL:          env("EMBEDDING_URL", "http://ollama:11434"),
+		AdminEmail:            env("UIGRAPH_ADMIN_EMAIL", "admin@uigraph.app"),
+		AdminPassword:         env("UIGRAPH_ADMIN_PASSWORD", "admin"),
 		SecretKey:             env("UIGRAPH_SECRET_KEY", ""),
 		Domain:                env("UIGRAPH_DOMAIN", "localhost"),
 		LicenseKey:            env("UIGRAPH_LICENSE_KEY", ""),

@@ -86,28 +86,30 @@ type APIGroupVersion struct {
 // ── API Endpoint ──────────────────────────────────────────────────────────────
 
 // APIEndpoint is a single operation within an API group.
+// APIGroupVersionID is nil for the current working copy; set to the version's ID when snapshotted.
 type APIEndpoint struct {
-	ID          string          `json:"id"`
-	APIGroupID  string          `json:"apiGroupId"`
-	ServiceID   string          `json:"serviceId"`
-	OrgID       string          `json:"orgId"`
-	OperationID string          `json:"operationId"`
-	Method      string          `json:"method"`
-	Path        string          `json:"path"`
-	Summary     string          `json:"summary"`
-	Description string          `json:"description"`
-	Tags        []string        `json:"tags"`
-	TokenCount  int             `json:"tokenCount"`
-	Parameters  json.RawMessage `json:"parameters"`
-	RequestBody json.RawMessage `json:"requestBody"`
-	Responses   json.RawMessage `json:"responses"`
-	Order       float64         `json:"order"`
-	CreatedBy   string          `json:"createdBy"`
-	UpdatedBy   *string         `json:"updatedBy,omitempty"`
-	CreatedAt   time.Time       `json:"createdAt"`
-	UpdatedAt   time.Time       `json:"updatedAt"`
-	DeletedAt   *time.Time      `json:"deletedAt,omitempty"`
-	DeletedBy   *string         `json:"deletedBy,omitempty"`
+	ID                 string          `json:"id"`
+	APIGroupID         string          `json:"apiGroupId"`
+	APIGroupVersionID  *string         `json:"apiGroupVersionId,omitempty"`
+	ServiceID          string          `json:"serviceId"`
+	OrgID              string          `json:"orgId"`
+	OperationID        string          `json:"operationId"`
+	Method             string          `json:"method"`
+	Path               string          `json:"path"`
+	Summary            string          `json:"summary"`
+	Description        string          `json:"description"`
+	Tags               []string        `json:"tags"`
+	TokenCount         int             `json:"tokenCount"`
+	Parameters         json.RawMessage `json:"parameters"`
+	RequestBody        json.RawMessage `json:"requestBody"`
+	Responses          json.RawMessage `json:"responses"`
+	Order              float64         `json:"order"`
+	CreatedBy          string          `json:"createdBy"`
+	UpdatedBy          *string         `json:"updatedBy,omitempty"`
+	CreatedAt          time.Time       `json:"createdAt"`
+	UpdatedAt          time.Time       `json:"updatedAt"`
+	DeletedAt          *time.Time      `json:"deletedAt,omitempty"`
+	DeletedBy          *string         `json:"deletedBy,omitempty"`
 }
 
 // ── Service Doc ───────────────────────────────────────────────────────────────

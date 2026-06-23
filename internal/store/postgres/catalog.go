@@ -572,11 +572,11 @@ func (d *DB) LatestAPIGroupVersionNumber(ctx context.Context, apiGroupID string)
 func (d *DB) CreateAPIEndpoint(ctx context.Context, e catalog.APIEndpoint) error {
 	const q = `
 		INSERT INTO api_endpoints
-			(id, api_group_id, service_id, org_id,
+			(id, api_group_id, api_group_version_id, service_id, org_id,
 			 operation_id, method, path, summary, description,
 			 tags, token_count, parameters, request_body, responses, ord,
 			 created_by, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`
 	now := time.Now().UTC()
 	if e.CreatedAt.IsZero() {
 		e.CreatedAt = now
@@ -601,7 +601,7 @@ func (d *DB) CreateAPIEndpoint(ctx context.Context, e catalog.APIEndpoint) error
 		resps = json.RawMessage("{}")
 	}
 	_, err := d.db.ExecContext(ctx, q,
-		e.ID, e.APIGroupID, e.ServiceID, e.OrgID,
+		e.ID, e.APIGroupID, e.APIGroupVersionID, e.ServiceID, e.OrgID,
 		e.OperationID, e.Method, e.Path, e.Summary, e.Description,
 		pq.Array(tags), e.TokenCount, params, reqBody, resps, e.Order,
 		e.CreatedBy, e.CreatedAt, e.UpdatedAt,
@@ -611,7 +611,7 @@ func (d *DB) CreateAPIEndpoint(ctx context.Context, e catalog.APIEndpoint) error
 
 func (d *DB) GetAPIEndpoint(ctx context.Context, id string) (*catalog.APIEndpoint, error) {
 	const q = `
-		SELECT id, api_group_id, service_id, org_id,
+		SELECT id, api_group_id, api_group_version_id, service_id, org_id,
 		       operation_id, method, path, summary, description,
 		       tags, token_count, parameters, request_body, responses, ord,
 		       created_by, updated_by, created_at, updated_at, deleted_at, deleted_by
@@ -626,14 +626,15 @@ func (d *DB) GetAPIEndpoint(ctx context.Context, id string) (*catalog.APIEndpoin
 	return &e, nil
 }
 
+// ListAPIEndpoints returns the current working-copy endpoints (api_group_version_id IS NULL).
 func (d *DB) ListAPIEndpoints(ctx context.Context, apiGroupID string) ([]catalog.APIEndpoint, error) {
 	const q = `
-		SELECT id, api_group_id, service_id, org_id,
+		SELECT id, api_group_id, api_group_version_id, service_id, org_id,
 		       operation_id, method, path, summary, description,
 		       tags, token_count, parameters, request_body, responses, ord,
 		       created_by, updated_by, created_at, updated_at, deleted_at, deleted_by
 		FROM api_endpoints
-		WHERE api_group_id = $1 AND deleted_at IS NULL
+		WHERE api_group_id = $1 AND api_group_version_id IS NULL AND deleted_at IS NULL
 		ORDER BY ord ASC, created_at ASC`
 	rows, err := d.db.QueryContext(ctx, q, apiGroupID)
 	if err != nil {
@@ -676,12 +677,39 @@ func (d *DB) SoftDeleteAPIEndpoint(ctx context.Context, id, deletedBy string) er
 	return wrapErr("SoftDeleteAPIEndpoint", err)
 }
 
+// SoftDeleteCurrentAPIEndpoints soft-deletes only the working-copy endpoints (api_group_version_id IS NULL).
+// Versioned snapshot endpoints are never touched.
+func (d *DB) SoftDeleteCurrentAPIEndpoints(ctx context.Context, apiGroupID, deletedBy string) error {
+	const q = `UPDATE api_endpoints SET deleted_at=$1, deleted_by=$2
+	            WHERE api_group_id=$3 AND api_group_version_id IS NULL AND deleted_at IS NULL`
+	_, err := d.db.ExecContext(ctx, q, time.Now().UTC(), deletedBy, apiGroupID)
+	return wrapErr("SoftDeleteCurrentAPIEndpoints", err)
+}
+
+// CopyEndpointsForVersion snapshots the current working-copy endpoints into versioned rows.
+func (d *DB) CopyEndpointsForVersion(ctx context.Context, apiGroupID, versionID, actorID string) error {
+	const q = `
+		INSERT INTO api_endpoints
+			(id, api_group_id, api_group_version_id, service_id, org_id,
+			 operation_id, method, path, summary, description,
+			 tags, token_count, parameters, request_body, responses, ord,
+			 created_by, updated_by, created_at, updated_at)
+		SELECT gen_random_uuid(), api_group_id, $2, service_id, org_id,
+		       operation_id, method, path, summary, description,
+		       tags, token_count, parameters, request_body, responses, ord,
+		       created_by, $3, created_at, NOW()
+		FROM api_endpoints
+		WHERE api_group_id = $1 AND api_group_version_id IS NULL AND deleted_at IS NULL`
+	_, err := d.db.ExecContext(ctx, q, apiGroupID, versionID, actorID)
+	return wrapErr("CopyEndpointsForVersion", err)
+}
+
 func scanAPIEndpoint(row interface{ Scan(...any) error }) (catalog.APIEndpoint, error) {
 	var e catalog.APIEndpoint
 	var tags pq.StringArray
 	var params, reqBody, resps []byte
 	err := row.Scan(
-		&e.ID, &e.APIGroupID, &e.ServiceID, &e.OrgID,
+		&e.ID, &e.APIGroupID, &e.APIGroupVersionID, &e.ServiceID, &e.OrgID,
 		&e.OperationID, &e.Method, &e.Path, &e.Summary, &e.Description,
 		&tags, &e.TokenCount, &params, &reqBody, &resps, &e.Order,
 		&e.CreatedBy, &e.UpdatedBy,

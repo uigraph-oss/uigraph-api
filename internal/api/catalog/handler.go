@@ -55,6 +55,8 @@ type store interface {
 	CreateAPIEndpoint(ctx context.Context, e catalogpkg.APIEndpoint) error
 	UpdateAPIEndpoint(ctx context.Context, e catalogpkg.APIEndpoint) error
 	SoftDeleteAPIEndpoint(ctx context.Context, id, actorID string) error
+	SoftDeleteCurrentAPIEndpoints(ctx context.Context, apiGroupID, actorID string) error
+	CopyEndpointsForVersion(ctx context.Context, apiGroupID, versionID, actorID string) error
 
 	// Service DBs
 	ListServiceDBs(ctx context.Context, serviceID string) ([]catalogpkg.ServiceDB, error)
