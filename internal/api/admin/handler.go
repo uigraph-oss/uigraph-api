@@ -5,6 +5,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/uigraph/app/internal/config"
 	"github.com/uigraph/app/internal/httputil"
 )
 
@@ -19,11 +20,12 @@ type store interface {
 // Handler serves /api/v1/server/* instance-admin endpoints.
 type Handler struct {
 	store store
+	cfg   *config.Config
 }
 
 // New constructs a Handler.
-func New(s store) *Handler {
-	return &Handler{store: s}
+func New(s store, cfg *config.Config) *Handler {
+	return &Handler{store: s, cfg: cfg}
 }
 
 type overviewResponse struct {
@@ -53,5 +55,26 @@ func (h *Handler) Overview(w http.ResponseWriter, r *http.Request) {
 		TotalUsers:  totalUsers,
 		ActiveUsers: activeUsers,
 		TotalOrgs:   totalOrgs,
+	})
+}
+
+type configResponse struct {
+	StorageBackend   string `json:"storageBackend"`
+	StorageBucket    string `json:"storageBucket"`
+	StorageEndpoint  string `json:"storageEndpoint"`
+	VectorBackend    string `json:"vectorBackend"`
+	EmbeddingBackend string `json:"embeddingBackend"`
+	EmbeddingModel   string `json:"embeddingModel"`
+}
+
+// Config handles GET /api/v1/server/config
+func (h *Handler) Config(w http.ResponseWriter, r *http.Request) {
+	httputil.JSON(w, http.StatusOK, configResponse{
+		StorageBackend:   h.cfg.StorageBackend,
+		StorageBucket:    h.cfg.StorageBucket,
+		StorageEndpoint:  h.cfg.StorageEndpoint,
+		VectorBackend:    h.cfg.VectorBackend,
+		EmbeddingBackend: h.cfg.EmbeddingBackend,
+		EmbeddingModel:   h.cfg.EmbeddingModel,
 	})
 }

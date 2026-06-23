@@ -184,8 +184,9 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	requireScope(authz.ScopeServiceAccountsRevokeToken, "DELETE", "/api/v1/orgs/{orgID}/service-accounts/{saID}/tokens/{tokenID}", saH.RevokeToken)
 
 	// Server overview (global — server-admin only)
-	adminH := admin.New(s)
+	adminH := admin.New(s, cfg)
 	serverAdmin("GET", "/api/v1/server/overview", adminH.Overview)
+	serverAdmin("GET", "/api/v1/server/config", adminH.Config)
 
 	// Server org management (global — server-admin only)
 	serverAdmin("GET", "/api/v1/server/orgs", orgH.List)
