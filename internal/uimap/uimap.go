@@ -46,6 +46,7 @@ type Frame struct {
 	UpdatedAt             time.Time  `json:"updatedAt"`
 	DeletedAt             *time.Time `json:"deletedAt,omitempty"`
 	DeletedBy             *string    `json:"deletedBy,omitempty"`
+	FocalPointCount       int        `json:"focalPointCount"`
 }
 
 // FocalPoint is a named hotspot pinned to a (x,y) location on a Frame.

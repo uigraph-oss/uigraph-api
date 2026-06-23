@@ -72,8 +72,8 @@ func (h *Handler) CreateDoc(w http.ResponseWriter, r *http.Request) {
 	}
 
 	docID := uuid.NewString()
-	fileKey := storage.ServiceDocFileKey(orgID, serviceID, docID, fileName)
-	if err := h.storage.Upload(r.Context(), fileKey, fileType, bytes.NewReader(fileBytes), int64(len(fileBytes))); err != nil {
+	fileAssetID := storage.NewFileAssetID()
+	if err := h.storage.Upload(r.Context(), storage.AssetKey(fileAssetID), fileType, bytes.NewReader(fileBytes), int64(len(fileBytes))); err != nil {
 		httputil.Error(w, r, err)
 		return
 	}
@@ -83,7 +83,7 @@ func (h *Handler) CreateDoc(w http.ResponseWriter, r *http.Request) {
 		ID:          docID,
 		ServiceID:   serviceID,
 		OrgID:       orgID,
-		FileKey:     fileKey,
+		FileAssetID: fileAssetID,
 		FileName:    fileName,
 		FileType:    fileType,
 		Description: description,
@@ -140,15 +140,15 @@ func (h *Handler) UpdateDoc(w http.ResponseWriter, r *http.Request) {
 	doc.UpdatedBy = &p.UserID
 
 	if fileBytes != nil {
-		newFileKey := storage.ServiceDocFileKey(orgID, serviceID, docID, fileName)
-		if err := h.storage.Upload(r.Context(), newFileKey, fileType, bytes.NewReader(fileBytes), int64(len(fileBytes))); err != nil {
+		newAssetID := storage.NewFileAssetID()
+		if err := h.storage.Upload(r.Context(), storage.AssetKey(newAssetID), fileType, bytes.NewReader(fileBytes), int64(len(fileBytes))); err != nil {
 			httputil.Error(w, r, err)
 			return
 		}
-		if doc.FileKey != newFileKey {
-			_ = h.storage.Delete(r.Context(), doc.FileKey)
+		if doc.FileAssetID != "" {
+			_ = h.storage.Delete(r.Context(), storage.AssetKey(doc.FileAssetID))
 		}
-		doc.FileKey = newFileKey
+		doc.FileAssetID = newAssetID
 		doc.ContentHash = sha256Bytes(fileBytes)
 	}
 

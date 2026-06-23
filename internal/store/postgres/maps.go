@@ -160,7 +160,8 @@ func (d *DB) GetFrame(ctx context.Context, id string) (*uimap.Frame, error) {
 	const q = `
 		SELECT id, map_id, org_id, parent_frame_id, name, description, template_type,
 		       screenshot_asset_id, screenshot_content_hash, status, ord, source,
-		       created_by, updated_by, created_at, updated_at, deleted_at, deleted_by
+		       created_by, updated_by, created_at, updated_at, deleted_at, deleted_by,
+		       (SELECT COUNT(*) FROM focal_points fp WHERE fp.frame_id = frames.id AND fp.deleted_at IS NULL)
 		FROM frames WHERE id = $1`
 	f, err := scanFrame(d.db.QueryRowContext(ctx, q, id))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -176,7 +177,8 @@ func (d *DB) ListFrames(ctx context.Context, mapID string) ([]uimap.Frame, error
 	const q = `
 		SELECT id, map_id, org_id, parent_frame_id, name, description, template_type,
 		       screenshot_asset_id, screenshot_content_hash, status, ord, source,
-		       created_by, updated_by, created_at, updated_at, deleted_at, deleted_by
+		       created_by, updated_by, created_at, updated_at, deleted_at, deleted_by,
+		       (SELECT COUNT(*) FROM focal_points fp WHERE fp.frame_id = frames.id AND fp.deleted_at IS NULL)
 		FROM frames
 		WHERE map_id = $1 AND deleted_at IS NULL
 		ORDER BY ord ASC, created_at ASC`
@@ -238,6 +240,7 @@ func scanFrame(row interface{ Scan(...any) error }) (uimap.Frame, error) {
 		&f.Status, &f.Order, &f.Source,
 		&f.CreatedBy, &f.UpdatedBy,
 		&f.CreatedAt, &f.UpdatedAt, &f.DeletedAt, &f.DeletedBy,
+		&f.FocalPointCount,
 	)
 }
 
