@@ -120,7 +120,7 @@ type ServiceDoc struct {
 	ID          string     `json:"id"`
 	ServiceID   string     `json:"serviceId"`
 	OrgID       string     `json:"orgId"`
-	FileKey     string     `json:"fileKey"`
+	FileAssetID string     `json:"fileAssetId"`
 	FileName    string     `json:"fileName"`
 	FileType    string     `json:"fileType"`
 	Description string     `json:"description"`
