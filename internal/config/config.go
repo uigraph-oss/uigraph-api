@@ -25,6 +25,10 @@ type Config struct {
 	// asset URLs (e.g. http://localhost:9000). Empty falls back to StorageEndpoint.
 	StoragePublicEndpoint string
 	StorageRegion         string
+	// StorageForcePathStyle controls bucket addressing. Path-style is required by
+	// MinIO, Cloudflare R2, and most S3-compatible providers; AWS S3 uses
+	// virtual-hosted style. Defaults to true whenever StorageEndpoint is set.
+	StorageForcePathStyle bool
 
 	// Vector store
 	VectorBackend string // qdrant | s3vectors
@@ -73,6 +77,7 @@ func Load() (*Config, error) {
 		StorageEndpoint:       env("STORAGE_ENDPOINT", ""),
 		StoragePublicEndpoint: env("STORAGE_PUBLIC_ENDPOINT", ""),
 		StorageRegion:         env("STORAGE_REGION", "us-east-1"),
+		StorageForcePathStyle: envBool("STORAGE_FORCE_PATH_STYLE", env("STORAGE_ENDPOINT", "") != ""),
 		VectorBackend:         env("VECTOR_BACKEND", "qdrant"),
 		QdrantURL:             env("QDRANT_URL", "http://qdrant:6333"),
 		EmbeddingBackend:      env("EMBEDDING_BACKEND", "ollama"),
@@ -102,6 +107,20 @@ func Load() (*Config, error) {
 func env(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return fallback
+}
+
+func envBool(key string, fallback bool) bool {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	if v == "true" {
+		return true
+	}
+	if v == "false" {
+		return false
 	}
 	return fallback
 }

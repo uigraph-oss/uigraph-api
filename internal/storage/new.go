@@ -11,6 +11,9 @@ type Config struct {
 	// PublicEndpoint is the browser-reachable host used when signing presigned
 	// GET/PUT URLs. When empty, Endpoint is used. Only relevant for MinIO.
 	PublicEndpoint string
+	// ForcePathStyle uses path-style bucket addressing (required by MinIO, R2,
+	// and most S3-compatible providers). AWS S3 uses virtual-hosted style.
+	ForcePathStyle bool
 }
 
 // New creates a storage Client for the given backend.
