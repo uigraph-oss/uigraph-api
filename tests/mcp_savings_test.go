@@ -113,3 +113,35 @@ func TestMCPSavings_ByTool(t *testing.T) {
 		t.Fatalf("want tokensSaved=500, got %v", found["tokensSaved"])
 	}
 }
+
+func TestMCPSavings_ByModel(t *testing.T) {
+	before := mustDo(t, "GET", "/api/v1/orgs/"+orgID+"/mcp/savings/by-model?period=1y", adminToken, nil)
+	beforeCalls := 0
+	for _, row := range list(before, "byModel") {
+		if str(row, "modelId") == "claude-haiku-4-5" {
+			beforeCalls = int(row["totalCalls"].(float64))
+		}
+	}
+
+	mustDo(t, "POST", "/api/v1/orgs/"+orgID+"/mcp/usage", adminToken, M{
+		"toolName": "get_api_spec", "resourceIds": []string{"svc-1"},
+		"modelId": "claude-haiku-4-5", "tokensServed": 50, "tokensRawEquivalent": 200,
+		"tokensSaved": 150, "responseSizeBytes": 1024,
+	})
+
+	after := mustDo(t, "GET", "/api/v1/orgs/"+orgID+"/mcp/savings/by-model?period=1y", adminToken, nil)
+	var afterCalls int
+	var displayName string
+	for _, row := range list(after, "byModel") {
+		if str(row, "modelId") == "claude-haiku-4-5" {
+			afterCalls = int(row["totalCalls"].(float64))
+			displayName = str(row, "displayName")
+		}
+	}
+	if afterCalls != beforeCalls+1 {
+		t.Fatalf("want totalCalls to increase by 1, before=%d after=%d", beforeCalls, afterCalls)
+	}
+	if displayName != "Claude Haiku 4.5" {
+		t.Fatalf("want displayName %q, got %q", "Claude Haiku 4.5", displayName)
+	}
+}

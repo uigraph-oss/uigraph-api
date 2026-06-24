@@ -16,6 +16,7 @@ type store interface {
 	GetSavingsSummary(ctx context.Context, orgID, modelID string, since time.Time) (*mcppkg.SavingsSummary, error)
 	GetSavingsTimeseries(ctx context.Context, orgID, modelID string, since time.Time) ([]mcppkg.DailySavings, error)
 	GetSavingsByTool(ctx context.Context, orgID, modelID string, since time.Time) ([]mcppkg.ToolSavings, error)
+	GetSavingsByModel(ctx context.Context, orgID string, since time.Time) ([]mcppkg.ModelSavings, error)
 }
 
 type Handler struct{ store store }
@@ -32,4 +33,5 @@ func Register(mux *http.ServeMux, s store, requireScope func(scope, method, patt
 	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/mcp/savings/summary", h.Summary)
 	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/mcp/savings/timeseries", h.Timeseries)
 	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/mcp/savings/by-tool", h.ByTool)
+	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/mcp/savings/by-model", h.ByModel)
 }

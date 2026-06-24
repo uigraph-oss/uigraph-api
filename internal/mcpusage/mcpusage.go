@@ -58,6 +58,16 @@ type ToolSavings struct {
 	CostSavedUSD float64 `json:"costSavedUsd"`
 }
 
+// ModelSavings is one LLM model's aggregated usage/cost-savings totals.
+type ModelSavings struct {
+	ModelID      string  `json:"modelId"`
+	DisplayName  string  `json:"displayName"`
+	Provider     string  `json:"provider"`
+	TotalCalls   int     `json:"totalCalls"`
+	TokensSaved  int     `json:"tokensSaved"`
+	CostSavedUSD float64 `json:"costSavedUsd"`
+}
+
 // Filter narrows ListUsageEvents results.
 type Filter struct {
 	Tool   *string
@@ -72,4 +82,5 @@ type Store interface {
 	GetSavingsSummary(ctx context.Context, orgID, modelID string, since time.Time) (*SavingsSummary, error)
 	GetSavingsTimeseries(ctx context.Context, orgID, modelID string, since time.Time) ([]DailySavings, error)
 	GetSavingsByTool(ctx context.Context, orgID, modelID string, since time.Time) ([]ToolSavings, error)
+	GetSavingsByModel(ctx context.Context, orgID string, since time.Time) ([]ModelSavings, error)
 }

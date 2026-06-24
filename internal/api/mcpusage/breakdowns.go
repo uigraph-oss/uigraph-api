@@ -38,3 +38,18 @@ func (h *Handler) ByTool(w http.ResponseWriter, r *http.Request) {
 	}
 	httputil.JSON(w, http.StatusOK, map[string]any{"byTool": rows})
 }
+
+func (h *Handler) ByModel(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	_, since := parsePeriod(q.Get("period"))
+
+	rows, err := h.store.GetSavingsByModel(r.Context(), r.PathValue("orgID"), since)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if rows == nil {
+		rows = []mcppkg.ModelSavings{}
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{"byModel": rows})
+}
