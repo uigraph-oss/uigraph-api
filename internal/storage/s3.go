@@ -29,11 +29,11 @@ func newS3Client(cfg Config) (Client, error) {
 		Credentials: creds,
 	}
 
-	opts := []func(*s3.Options){}
+	opts := []func(*s3.Options){
+		func(o *s3.Options) { o.UsePathStyle = cfg.ForcePathStyle },
+	}
 	if cfg.Endpoint != "" {
 		awsCfg.BaseEndpoint = aws.String(cfg.Endpoint)
-		// Path-style addressing is required for custom endpoints (e.g. localstack).
-		opts = append(opts, func(o *s3.Options) { o.UsePathStyle = true })
 	}
 
 	client := s3.NewFromConfig(awsCfg, opts...)

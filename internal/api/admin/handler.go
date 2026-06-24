@@ -62,6 +62,7 @@ type configResponse struct {
 	StorageBackend   string `json:"storageBackend"`
 	StorageBucket    string `json:"storageBucket"`
 	StorageEndpoint  string `json:"storageEndpoint"`
+	StorageRegion    string `json:"storageRegion"`
 	VectorBackend    string `json:"vectorBackend"`
 	EmbeddingBackend string `json:"embeddingBackend"`
 	EmbeddingModel   string `json:"embeddingModel"`
@@ -73,6 +74,7 @@ func (h *Handler) Config(w http.ResponseWriter, r *http.Request) {
 		StorageBackend:   h.cfg.StorageBackend,
 		StorageBucket:    h.cfg.StorageBucket,
 		StorageEndpoint:  h.cfg.StorageEndpoint,
+		StorageRegion:    h.cfg.StorageRegion,
 		VectorBackend:    h.cfg.VectorBackend,
 		EmbeddingBackend: h.cfg.EmbeddingBackend,
 		EmbeddingModel:   h.cfg.EmbeddingModel,
