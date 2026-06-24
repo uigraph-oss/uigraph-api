@@ -80,20 +80,20 @@ func (d *DB) ListUsageEvents(ctx context.Context, orgID string, f mcpusage.Filte
 func (d *DB) GetSavingsSummary(ctx context.Context, orgID, modelID string, since time.Time) (*mcpusage.SavingsSummary, error) {
 	const q = `
 		SELECT
-		    COUNT(*)                                                         AS total_calls,
-		    COALESCE(SUM(e.tokens_served), 0)                               AS total_tokens_served,
-		    COALESCE(SUM(e.tokens_saved), 0)                                AS total_tokens_saved,
-		    COALESCE(SUM(e.tokens_served)        ::NUMERIC / 1000000 * m.input_cost_per_million, 0) AS cost_served_usd,
-		    COALESCE(SUM(e.tokens_raw_equivalent)::NUMERIC / 1000000 * m.input_cost_per_million, 0) AS cost_raw_usd,
-		    COALESCE(SUM(e.tokens_saved)         ::NUMERIC / 1000000 * m.input_cost_per_million, 0) AS cost_saved_usd,
-		    COUNT(DISTINCT e.user_id)                                        AS unique_users_count
+		    COUNT(*)                                                                                AS total_calls,
+		    COALESCE(SUM(e.tokens_served), 0)                                                        AS total_tokens_served,
+		    COALESCE(SUM(e.tokens_saved), 0)                                                         AS total_tokens_saved,
+		    COALESCE(SUM(e.tokens_served::NUMERIC / 1000000 * m.input_cost_per_million), 0)          AS cost_served_usd,
+		    COALESCE(SUM(e.tokens_raw_equivalent::NUMERIC / 1000000 * m.input_cost_per_million), 0)  AS cost_raw_usd,
+		    COALESCE(SUM(e.tokens_saved::NUMERIC / 1000000 * m.input_cost_per_million), 0)           AS cost_saved_usd,
+		    COUNT(DISTINCT e.user_id)                                                                 AS unique_users_count
 		FROM mcp_usage_events e
-		CROSS JOIN llm_models m
+		LEFT JOIN llm_models m ON m.model_id = e.model_id
 		WHERE e.org_id = $1
-		  AND m.model_id = $2
-		  AND e.created_at >= $3`
+		  AND e.created_at >= $2
+		  AND ($3 = '' OR e.model_id = $3)`
 	var s mcpusage.SavingsSummary
-	err := d.db.QueryRowContext(ctx, q, orgID, modelID, since).Scan(
+	err := d.db.QueryRowContext(ctx, q, orgID, since, modelID).Scan(
 		&s.TotalCalls, &s.TotalTokensServed, &s.TotalTokensSaved,
 		&s.CostServedUSD, &s.CostRawUSD, &s.CostSavedUSD,
 		&s.UniqueUsersCount,
