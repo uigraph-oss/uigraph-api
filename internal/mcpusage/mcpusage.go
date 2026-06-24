@@ -68,6 +68,16 @@ type ModelSavings struct {
 	CostSavedUSD float64 `json:"costSavedUsd"`
 }
 
+// UserSavings is one user's (or service account's) aggregated usage/cost-savings
+// totals. Exactly one of UserID/ServiceAccountID is non-nil per row.
+type UserSavings struct {
+	UserID           *string `json:"userId,omitempty"`
+	ServiceAccountID *string `json:"serviceAccountId,omitempty"`
+	TotalCalls       int     `json:"totalCalls"`
+	TokensSaved      int     `json:"tokensSaved"`
+	CostSavedUSD     float64 `json:"costSavedUsd"`
+}
+
 // Filter narrows ListUsageEvents results.
 type Filter struct {
 	Tool   *string
@@ -83,4 +93,5 @@ type Store interface {
 	GetSavingsTimeseries(ctx context.Context, orgID, modelID string, since time.Time) ([]DailySavings, error)
 	GetSavingsByTool(ctx context.Context, orgID, modelID string, since time.Time) ([]ToolSavings, error)
 	GetSavingsByModel(ctx context.Context, orgID string, since time.Time) ([]ModelSavings, error)
+	GetSavingsByUser(ctx context.Context, orgID, modelID string, since time.Time) ([]UserSavings, error)
 }

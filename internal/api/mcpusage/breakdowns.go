@@ -53,3 +53,19 @@ func (h *Handler) ByModel(w http.ResponseWriter, r *http.Request) {
 	}
 	httputil.JSON(w, http.StatusOK, map[string]any{"byModel": rows})
 }
+
+func (h *Handler) ByUser(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	modelID := q.Get("model_id")
+	_, since := parsePeriod(q.Get("period"))
+
+	rows, err := h.store.GetSavingsByUser(r.Context(), r.PathValue("orgID"), modelID, since)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if rows == nil {
+		rows = []mcppkg.UserSavings{}
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{"byUser": rows})
+}
