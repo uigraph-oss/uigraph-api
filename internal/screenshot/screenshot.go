@@ -213,7 +213,7 @@ func (w *Worker) capture(browser *rod.Browser, job queue.ScreenshotJob) ([]byte,
 			Y:      c.Get("y").Num(),
 			Width:  c.Get("width").Num(),
 			Height: c.Get("height").Num(),
-			Scale:  3,
+			Scale:  2,
 		},
 		CaptureBeyondViewport: true,
 	})
