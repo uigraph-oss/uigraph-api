@@ -50,6 +50,14 @@ type DailySavings struct {
 	CostSavedUSD      float64   `json:"costSavedUsd"`
 }
 
+// ToolSavings is one MCP tool's aggregated usage/cost-savings totals.
+type ToolSavings struct {
+	ToolName     string  `json:"toolName"`
+	TotalCalls   int     `json:"totalCalls"`
+	TokensSaved  int     `json:"tokensSaved"`
+	CostSavedUSD float64 `json:"costSavedUsd"`
+}
+
 // Filter narrows ListUsageEvents results.
 type Filter struct {
 	Tool   *string
@@ -63,4 +71,5 @@ type Store interface {
 	ListUsageEvents(ctx context.Context, orgID string, f Filter) ([]UsageEvent, error)
 	GetSavingsSummary(ctx context.Context, orgID, modelID string, since time.Time) (*SavingsSummary, error)
 	GetSavingsTimeseries(ctx context.Context, orgID, modelID string, since time.Time) ([]DailySavings, error)
+	GetSavingsByTool(ctx context.Context, orgID, modelID string, since time.Time) ([]ToolSavings, error)
 }

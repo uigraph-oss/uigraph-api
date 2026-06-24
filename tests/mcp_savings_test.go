@@ -83,3 +83,33 @@ func TestMCPSavings_Timeseries(t *testing.T) {
 		t.Fatalf("want today's bucket to include the 500 tokens just saved, got %d", totalSavedToday)
 	}
 }
+
+func TestMCPSavings_ByTool(t *testing.T) {
+	tool := fmt.Sprintf("test-bytool-tool-%d", time.Now().UnixNano())
+
+	mustDo(t, "POST", "/api/v1/orgs/"+orgID+"/mcp/usage", adminToken, M{
+		"toolName": tool, "resourceIds": []string{"svc-1"},
+		"modelId": "claude-sonnet-4-6", "tokensServed": 100, "tokensRawEquivalent": 600,
+		"tokensSaved": 500, "responseSizeBytes": 2048,
+	})
+
+	body := mustDo(t, "GET", "/api/v1/orgs/"+orgID+"/mcp/savings/by-tool?period=1y", adminToken, nil)
+	rows := list(body, "byTool")
+
+	var found M
+	for _, row := range rows {
+		if str(row, "toolName") == tool {
+			found = row
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("expected tool %q in by-tool breakdown", tool)
+	}
+	if int(found["totalCalls"].(float64)) != 1 {
+		t.Fatalf("want totalCalls=1, got %v", found["totalCalls"])
+	}
+	if int(found["tokensSaved"].(float64)) != 500 {
+		t.Fatalf("want tokensSaved=500, got %v", found["tokensSaved"])
+	}
+}

@@ -141,3 +141,33 @@ func (d *DB) GetSavingsTimeseries(ctx context.Context, orgID, modelID string, si
 	}
 	return out, rows.Err()
 }
+
+func (d *DB) GetSavingsByTool(ctx context.Context, orgID, modelID string, since time.Time) ([]mcpusage.ToolSavings, error) {
+	const q = `
+		SELECT
+		    e.tool_name,
+		    COUNT(*)                                                                      AS total_calls,
+		    COALESCE(SUM(e.tokens_saved), 0)                                               AS tokens_saved,
+		    COALESCE(SUM(e.tokens_saved::NUMERIC / 1000000 * m.input_cost_per_million), 0) AS cost_saved_usd
+		FROM mcp_usage_events e
+		LEFT JOIN llm_models m ON m.model_id = e.model_id
+		WHERE e.org_id = $1
+		  AND e.created_at >= $2
+		  AND ($3 = '' OR e.model_id = $3)
+		GROUP BY e.tool_name
+		ORDER BY cost_saved_usd DESC`
+	rows, err := d.db.QueryContext(ctx, q, orgID, since, modelID)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: GetSavingsByTool: %w", err)
+	}
+	defer rows.Close()
+	var out []mcpusage.ToolSavings
+	for rows.Next() {
+		var row mcpusage.ToolSavings
+		if scanErr := rows.Scan(&row.ToolName, &row.TotalCalls, &row.TokensSaved, &row.CostSavedUSD); scanErr != nil {
+			return nil, fmt.Errorf("postgres: GetSavingsByTool scan: %w", scanErr)
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
