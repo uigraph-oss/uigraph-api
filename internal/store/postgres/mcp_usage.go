@@ -105,3 +105,39 @@ func (d *DB) GetSavingsSummary(ctx context.Context, orgID, modelID string, since
 	s.ModelID = modelID
 	return &s, nil
 }
+
+func (d *DB) GetSavingsTimeseries(ctx context.Context, orgID, modelID string, since time.Time) ([]mcpusage.DailySavings, error) {
+	const q = `
+		SELECT
+		    date_trunc('day', e.created_at)                                                          AS day,
+		    COUNT(*)                                                                                  AS total_calls,
+		    COALESCE(SUM(e.tokens_served), 0)                                                         AS total_tokens_served,
+		    COALESCE(SUM(e.tokens_saved), 0)                                                          AS total_tokens_saved,
+		    COALESCE(SUM(e.tokens_served::NUMERIC / 1000000 * m.input_cost_per_million), 0)           AS cost_served_usd,
+		    COALESCE(SUM(e.tokens_raw_equivalent::NUMERIC / 1000000 * m.input_cost_per_million), 0)   AS cost_raw_usd,
+		    COALESCE(SUM(e.tokens_saved::NUMERIC / 1000000 * m.input_cost_per_million), 0)            AS cost_saved_usd
+		FROM mcp_usage_events e
+		LEFT JOIN llm_models m ON m.model_id = e.model_id
+		WHERE e.org_id = $1
+		  AND e.created_at >= $2
+		  AND ($3 = '' OR e.model_id = $3)
+		GROUP BY day
+		ORDER BY day ASC`
+	rows, err := d.db.QueryContext(ctx, q, orgID, since, modelID)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: GetSavingsTimeseries: %w", err)
+	}
+	defer rows.Close()
+	var out []mcpusage.DailySavings
+	for rows.Next() {
+		var row mcpusage.DailySavings
+		if scanErr := rows.Scan(
+			&row.Date, &row.TotalCalls, &row.TotalTokensServed, &row.TotalTokensSaved,
+			&row.CostServedUSD, &row.CostRawUSD, &row.CostSavedUSD,
+		); scanErr != nil {
+			return nil, fmt.Errorf("postgres: GetSavingsTimeseries scan: %w", scanErr)
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}

@@ -1,7 +1,11 @@
 // Package tests — see api_test.go for shared TestMain setup, adminToken, orgID.
 package tests
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+	"time"
+)
 
 func TestMCPSavings_Summary_Blended(t *testing.T) {
 	before := mustDo(t, "GET", "/api/v1/orgs/"+orgID+"/mcp/savings/summary?period=1y", adminToken, nil)
@@ -49,5 +53,33 @@ func TestMCPSavings_Summary_FilteredByModel(t *testing.T) {
 	}
 	if after["modelId"] != other {
 		t.Fatalf("want modelId %q echoed back, got %v", other, after["modelId"])
+	}
+}
+
+func TestMCPSavings_Timeseries(t *testing.T) {
+	tool := fmt.Sprintf("test-timeseries-tool-%d", time.Now().UnixNano())
+
+	mustDo(t, "POST", "/api/v1/orgs/"+orgID+"/mcp/usage", adminToken, M{
+		"toolName": tool, "resourceIds": []string{"svc-1"},
+		"modelId": "claude-sonnet-4-6", "tokensServed": 100, "tokensRawEquivalent": 600,
+		"tokensSaved": 500, "responseSizeBytes": 2048,
+	})
+
+	body := mustDo(t, "GET", "/api/v1/orgs/"+orgID+"/mcp/savings/timeseries?period=1y", adminToken, nil)
+	days := list(body, "timeseries")
+	if len(days) == 0 {
+		t.Fatal("expected at least one day bucket")
+	}
+
+	today := time.Now().UTC().Format("2006-01-02")
+	var totalSavedToday int
+	for _, d := range days {
+		date, _ := d["date"].(string)
+		if len(date) >= 10 && date[:10] == today {
+			totalSavedToday = int(d["totalTokensSaved"].(float64))
+		}
+	}
+	if totalSavedToday < 500 {
+		t.Fatalf("want today's bucket to include the 500 tokens just saved, got %d", totalSavedToday)
 	}
 }

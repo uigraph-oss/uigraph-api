@@ -39,6 +39,17 @@ type SavingsSummary struct {
 	UniqueUsersCount  int     `json:"uniqueUsersCount"`
 }
 
+// DailySavings is one day's aggregated usage/cost-savings totals.
+type DailySavings struct {
+	Date              time.Time `json:"date"`
+	TotalCalls        int       `json:"totalCalls"`
+	TotalTokensServed int       `json:"totalTokensServed"`
+	TotalTokensSaved  int       `json:"totalTokensSaved"`
+	CostServedUSD     float64   `json:"costServedUsd"`
+	CostRawUSD        float64   `json:"costRawUsd"`
+	CostSavedUSD      float64   `json:"costSavedUsd"`
+}
+
 // Filter narrows ListUsageEvents results.
 type Filter struct {
 	Tool   *string
@@ -51,4 +62,5 @@ type Store interface {
 	CreateUsageEvent(ctx context.Context, e UsageEvent) error
 	ListUsageEvents(ctx context.Context, orgID string, f Filter) ([]UsageEvent, error)
 	GetSavingsSummary(ctx context.Context, orgID, modelID string, since time.Time) (*SavingsSummary, error)
+	GetSavingsTimeseries(ctx context.Context, orgID, modelID string, since time.Time) ([]DailySavings, error)
 }
