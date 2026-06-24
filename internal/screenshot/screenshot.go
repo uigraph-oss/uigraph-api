@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net/url"
 	"sync"
 	"time"
@@ -206,14 +207,24 @@ func (w *Worker) capture(browser *rod.Browser, job queue.ScreenshotJob) ([]byte,
 		return nil, fmt.Errorf("read screenshot clip: %w", err)
 	}
 	c := clip.Value
+	x, y := c.Get("x").Num(), c.Get("y").Num()
+	cw, ch := c.Get("width").Num(), c.Get("height").Num()
+
+	if err := page.SetViewport(&proto.EmulationSetDeviceMetricsOverride{
+		Width:             int(math.Ceil(x + cw)),
+		Height:            int(math.Ceil(y + ch)),
+		DeviceScaleFactor: 2,
+	}); err != nil {
+		return nil, fmt.Errorf("set viewport: %w", err)
+	}
+
 	png, err := page.Screenshot(false, &proto.PageCaptureScreenshot{
 		Format: proto.PageCaptureScreenshotFormatPng,
 		Clip: &proto.PageViewport{
-			X:      c.Get("x").Num(),
-			Y:      c.Get("y").Num(),
-			Width:  c.Get("width").Num(),
-			Height: c.Get("height").Num(),
-			Scale:  2,
+			X:      x,
+			Y:      y,
+			Width:  cw,
+			Height: ch,
 		},
 		CaptureBeyondViewport: true,
 	})
