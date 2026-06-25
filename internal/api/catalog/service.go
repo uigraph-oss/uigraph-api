@@ -66,6 +66,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		Language        string          `json:"language"`
 		FolderID        *string         `json:"folderId"`
 		TeamID          *string         `json:"teamId"`
+		TeamName        string          `json:"teamName"`
 		GitRepoURL      *string         `json:"gitRepoUrl"`
 		JiraProjectURL  *string         `json:"jiraProjectUrl"`
 		SlackChannelURL *string         `json:"slackChannelUrl"`
@@ -78,6 +79,16 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Name == "" {
 		httputil.BadRequest(w, "name is required")
+		return
+	}
+	hasTeamID := body.TeamID != nil && *body.TeamID != ""
+	hasTeamName := body.TeamName != ""
+	if hasTeamID && hasTeamName {
+		httputil.BadRequest(w, "provide either teamId or teamName, not both")
+		return
+	}
+	if !hasTeamID && !hasTeamName {
+		httputil.BadRequest(w, "team is required")
 		return
 	}
 	if body.Slug == "" {
@@ -96,6 +107,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		OrgID:           orgID,
 		FolderID:        body.FolderID,
 		TeamID:          body.TeamID,
+		TeamName:        body.TeamName,
 		Name:            body.Name,
 		Slug:            body.Slug,
 		Description:     body.Description,
@@ -158,6 +170,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		Language        *string         `json:"language"`
 		FolderID        *string         `json:"folderId"`
 		TeamID          *string         `json:"teamId"`
+		TeamName        *string         `json:"teamName"`
 		GitRepoURL      *string         `json:"gitRepoUrl"`
 		JiraProjectURL  *string         `json:"jiraProjectUrl"`
 		SlackChannelURL *string         `json:"slackChannelUrl"`
@@ -193,8 +206,18 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	if body.FolderID != nil {
 		svc.FolderID = body.FolderID
 	}
-	if body.TeamID != nil {
+	hasTeamID := body.TeamID != nil && *body.TeamID != ""
+	hasTeamName := body.TeamName != nil && *body.TeamName != ""
+	if hasTeamID && hasTeamName {
+		httputil.BadRequest(w, "provide either teamId or teamName, not both")
+		return
+	}
+	if hasTeamID {
 		svc.TeamID = body.TeamID
+	}
+	if hasTeamName {
+		svc.TeamID = nil
+		svc.TeamName = *body.TeamName
 	}
 	if body.GitRepoURL != nil {
 		svc.GitRepoURL = body.GitRepoURL

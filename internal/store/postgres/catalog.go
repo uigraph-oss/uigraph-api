@@ -11,11 +11,35 @@ import (
 
 	"github.com/lib/pq"
 	"github.com/uigraph/app/internal/catalog"
+	"github.com/uigraph/app/internal/store"
 )
 
 // ── Services ──────────────────────────────────────────────────────────────────
 
+// resolveTeamID maps a team name to its id within an org. It returns
+// store.ErrNotFound when no team matches, so callers surface a 404.
+func (d *DB) resolveTeamID(ctx context.Context, orgID, name string) (string, error) {
+	const q = `SELECT id FROM teams WHERE org_id = $1 AND name = $2`
+	var id string
+	err := d.db.QueryRowContext(ctx, q, orgID, name).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", store.ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("postgres: resolveTeamID: %w", err)
+	}
+	return id, nil
+}
+
 func (d *DB) CreateService(ctx context.Context, s catalog.Service) error {
+	if (s.TeamID == nil || *s.TeamID == "") && s.TeamName != "" {
+		id, err := d.resolveTeamID(ctx, s.OrgID, s.TeamName)
+		if err != nil {
+			return err
+		}
+		s.TeamID = &id
+	}
+
 	const q = `
 		INSERT INTO services
 			(id, org_id, folder_id, team_id, name, slug, description,
@@ -344,6 +368,13 @@ func (d *DB) columnExists(ctx context.Context, tableName, columnName string) (bo
 }
 
 func (d *DB) UpdateService(ctx context.Context, s catalog.Service) error {
+	if (s.TeamID == nil || *s.TeamID == "") && s.TeamName != "" {
+		id, err := d.resolveTeamID(ctx, s.OrgID, s.TeamName)
+		if err != nil {
+			return err
+		}
+		s.TeamID = &id
+	}
 	const q = `
 		UPDATE services
 		SET name=$1, slug=$2, description=$3, status=$4, tier=$5, category=$6, language=$7,
