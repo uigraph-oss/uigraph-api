@@ -338,12 +338,18 @@ func (d *DB) SoftDeleteFocalPointMeta(ctx context.Context, id, deletedBy string)
 
 func scanFocalPointMeta(row interface{ Scan(...any) error }) (uimap.FocalPointMeta, error) {
 	var m uimap.FocalPointMeta
-	return m, row.Scan(
-		&m.ID, &m.FocalPointID, &m.OrgID, &m.FrameID, &m.ComponentID, &m.ComponentLink,
+	var componentLink []byte
+	err := row.Scan(
+		&m.ID, &m.FocalPointID, &m.OrgID, &m.FrameID, &m.ComponentID, &componentLink,
 		&m.ComponentModalFields,
 		&m.CreatedBy, &m.UpdatedBy,
 		&m.CreatedAt, &m.UpdatedAt, &m.DeletedAt, &m.DeletedBy,
 	)
+	if err != nil {
+		return m, err
+	}
+	m.ComponentLink = componentLink
+	return m, nil
 }
 
 func defaultJSON(raw []byte, fallback string) []byte {
