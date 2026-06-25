@@ -97,14 +97,15 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	bearer := authmw.NewSessionVerifier(db, db)
 	handler := api.New(db, bearer, cfg, storageClient, cacheClient, jobQueue)
 
+	addr := cfg.Host + ":" + cfg.Port
 	srv := &http.Server{
-		Addr:    cfg.Addr,
+		Addr:    addr,
 		Handler: handler,
 	}
 
 	errCh := make(chan error, 1)
 	go func() {
-		slog.InfoContext(ctx, "listening", "addr", cfg.Addr)
+		slog.InfoContext(ctx, "listening", "addr", addr)
 		errCh <- srv.ListenAndServe()
 	}()
 
