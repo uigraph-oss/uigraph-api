@@ -27,6 +27,7 @@ type store interface {
 	// Service docs
 	ListServiceDocs(ctx context.Context, serviceID string) ([]catalogpkg.ServiceDoc, error)
 	GetServiceDoc(ctx context.Context, serviceID, docID string) (*catalogpkg.ServiceDoc, error)
+	GetServiceDocByID(ctx context.Context, docID string) (*catalogpkg.ServiceDoc, error)
 	CreateServiceDoc(ctx context.Context, d catalogpkg.ServiceDoc) error
 	SoftDeleteServiceDoc(ctx context.Context, serviceID, docID, actorID string) error
 
@@ -141,6 +142,10 @@ func Register(
 	requireScope func(scope, method, pattern string, h http.HandlerFunc),
 ) {
 	h := New(s, st, q)
+	// By-id lookups (resolve a leaf id to its full record incl. parent ids)
+	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/endpoints/{endpointID}", h.GetAPIEndpointByID)
+	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/test-packs/{testPackID}", h.GetTestPackByID)
+	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/service-docs/{docID}", h.GetServiceDocByID)
 	// Services
 	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/services", h.List)
 	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/services/stats", h.ListStats)

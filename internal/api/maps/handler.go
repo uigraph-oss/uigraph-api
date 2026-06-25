@@ -43,7 +43,7 @@ type store interface {
 	CreateFocalPointMeta(ctx context.Context, m uimap.FocalPointMeta) error
 	GetFocalPointMeta(ctx context.Context, id string) (*uimap.FocalPointMeta, error)
 	ListFocalPointMeta(ctx context.Context, focalPointID string) ([]uimap.FocalPointMeta, error)
-	ListFocalPointMetaByLink(ctx context.Context, orgID, linkKey, linkValue string) ([]uimap.FocalPointMeta, error)
+	ListFocalPointMetaByLink(ctx context.Context, orgID, linkID string) ([]uimap.FocalPointMeta, error)
 	UpdateFocalPointMeta(ctx context.Context, m uimap.FocalPointMeta) error
 	SoftDeleteFocalPointMeta(ctx context.Context, id, deletedBy string) error
 

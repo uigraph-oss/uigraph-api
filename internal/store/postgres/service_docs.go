@@ -52,6 +52,23 @@ func (d *DB) GetServiceDoc(ctx context.Context, serviceID, docID string) (*catal
 	return &sd, nil
 }
 
+func (d *DB) GetServiceDocByID(ctx context.Context, docID string) (*catalog.ServiceDoc, error) {
+	const q = `
+		SELECT service_id, doc_id, org_id, created_by, updated_by, created_at, updated_at, deleted_at
+		FROM service_docs
+		WHERE doc_id = $1 AND deleted_at IS NULL
+		ORDER BY created_at ASC
+		LIMIT 1`
+	sd, err := scanServiceDoc(d.db.QueryRowContext(ctx, q, docID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("postgres: GetServiceDocByID: %w", err)
+	}
+	return &sd, nil
+}
+
 func (d *DB) ListServiceDocs(ctx context.Context, serviceID string) ([]catalog.ServiceDoc, error) {
 	const q = `
 		SELECT

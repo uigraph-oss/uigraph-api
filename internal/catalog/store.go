@@ -40,6 +40,7 @@ type Store interface {
 	// Service docs
 	CreateServiceDoc(ctx context.Context, d ServiceDoc) error
 	GetServiceDoc(ctx context.Context, serviceID, docID string) (*ServiceDoc, error)
+	GetServiceDocByID(ctx context.Context, docID string) (*ServiceDoc, error)
 	ListServiceDocs(ctx context.Context, serviceID string) ([]ServiceDoc, error)
 	SoftDeleteServiceDoc(ctx context.Context, serviceID, docID, deletedBy string) error
 

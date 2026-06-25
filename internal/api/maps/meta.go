@@ -7,8 +7,8 @@ import (
 
 	"github.com/google/uuid"
 
-	authmw "github.com/uigraph/app/internal/middleware"
 	"github.com/uigraph/app/internal/httputil"
+	authmw "github.com/uigraph/app/internal/middleware"
 	storepkg "github.com/uigraph/app/internal/store"
 	"github.com/uigraph/app/internal/uimap"
 )
@@ -23,15 +23,14 @@ func (h *Handler) ListMeta(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"meta": metas})
 }
 
-// ListMetaByLink handles GET /api/v1/orgs/{orgID}/focal-point-meta?linkKey=...&linkValue=...
+// ListMetaByLink handles GET /api/v1/orgs/{orgID}/focal-point-meta?linkId=...
 func (h *Handler) ListMetaByLink(w http.ResponseWriter, r *http.Request) {
-	linkKey := r.URL.Query().Get("linkKey")
-	linkValue := r.URL.Query().Get("linkValue")
-	if linkKey == "" || linkValue == "" {
-		httputil.BadRequest(w, "linkKey and linkValue are required")
+	linkID := r.URL.Query().Get("linkId")
+	if linkID == "" {
+		httputil.BadRequest(w, "linkId is required")
 		return
 	}
-	metas, err := h.store.ListFocalPointMetaByLink(r.Context(), r.PathValue("orgID"), linkKey, linkValue)
+	metas, err := h.store.ListFocalPointMetaByLink(r.Context(), r.PathValue("orgID"), linkID)
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
@@ -51,9 +50,12 @@ func (h *Handler) CreateMeta(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		ComponentID          string          `json:"componentId"`
-		ComponentLink        json.RawMessage `json:"componentLink"`
-		ComponentModalFields json.RawMessage `json:"componentModalFields"`
+		ComponentID                string          `json:"componentId"`
+		ComponentLinkDiagramID     *string         `json:"componentLinkDiagramId"`
+		ComponentLinkAPIEndpointID *string         `json:"componentLinkApiEndpointId"`
+		ComponentLinkTestPackID    *string         `json:"componentLinkTestPackId"`
+		ComponentLinkServiceDocID  *string         `json:"componentLinkServiceDocId"`
+		ComponentModalFields       json.RawMessage `json:"componentModalFields"`
 	}
 	if err := httputil.Decode(r, &body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -62,16 +64,19 @@ func (h *Handler) CreateMeta(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now().UTC()
 	m := uimap.FocalPointMeta{
-		ID:                   uuid.NewString(),
-		FocalPointID:         fpID,
-		OrgID:                orgID,
-		FrameID:              frameID,
-		ComponentID:          body.ComponentID,
-		ComponentLink:        body.ComponentLink,
-		ComponentModalFields: body.ComponentModalFields,
-		CreatedBy:            p.UserID,
-		CreatedAt:            now,
-		UpdatedAt:            now,
+		ID:                         uuid.NewString(),
+		FocalPointID:               fpID,
+		OrgID:                      orgID,
+		FrameID:                    frameID,
+		ComponentID:                body.ComponentID,
+		ComponentLinkDiagramID:     body.ComponentLinkDiagramID,
+		ComponentLinkAPIEndpointID: body.ComponentLinkAPIEndpointID,
+		ComponentLinkTestPackID:    body.ComponentLinkTestPackID,
+		ComponentLinkServiceDocID:  body.ComponentLinkServiceDocID,
+		ComponentModalFields:       body.ComponentModalFields,
+		CreatedBy:                  p.UserID,
+		CreatedAt:                  now,
+		UpdatedAt:                  now,
 	}
 	if err := h.store.CreateFocalPointMeta(r.Context(), m); err != nil {
 		httputil.Error(w, r, err)
@@ -98,9 +103,12 @@ func (h *Handler) UpdateMeta(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		ComponentID          *string         `json:"componentId"`
-		ComponentLink        json.RawMessage `json:"componentLink"`
-		ComponentModalFields json.RawMessage `json:"componentModalFields"`
+		ComponentID                *string         `json:"componentId"`
+		ComponentLinkDiagramID     *string         `json:"componentLinkDiagramId"`
+		ComponentLinkAPIEndpointID *string         `json:"componentLinkApiEndpointId"`
+		ComponentLinkTestPackID    *string         `json:"componentLinkTestPackId"`
+		ComponentLinkServiceDocID  *string         `json:"componentLinkServiceDocId"`
+		ComponentModalFields       json.RawMessage `json:"componentModalFields"`
 	}
 	if err := httputil.Decode(r, &body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -109,8 +117,17 @@ func (h *Handler) UpdateMeta(w http.ResponseWriter, r *http.Request) {
 	if body.ComponentID != nil {
 		m.ComponentID = *body.ComponentID
 	}
-	if body.ComponentLink != nil {
-		m.ComponentLink = body.ComponentLink
+	if body.ComponentLinkDiagramID != nil {
+		m.ComponentLinkDiagramID = body.ComponentLinkDiagramID
+	}
+	if body.ComponentLinkAPIEndpointID != nil {
+		m.ComponentLinkAPIEndpointID = body.ComponentLinkAPIEndpointID
+	}
+	if body.ComponentLinkTestPackID != nil {
+		m.ComponentLinkTestPackID = body.ComponentLinkTestPackID
+	}
+	if body.ComponentLinkServiceDocID != nil {
+		m.ComponentLinkServiceDocID = body.ComponentLinkServiceDocID
 	}
 	if body.ComponentModalFields != nil {
 		m.ComponentModalFields = body.ComponentModalFields
