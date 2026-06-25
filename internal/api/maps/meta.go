@@ -23,14 +23,15 @@ func (h *Handler) ListMeta(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"meta": metas})
 }
 
-// ListMetaByComponentLink handles GET /api/v1/orgs/{orgID}/focal-point-meta?componentLinkId=...
-func (h *Handler) ListMetaByComponentLink(w http.ResponseWriter, r *http.Request) {
-	componentLinkID := r.URL.Query().Get("componentLinkId")
-	if componentLinkID == "" {
-		httputil.BadRequest(w, "componentLinkId is required")
+// ListMetaByLink handles GET /api/v1/orgs/{orgID}/focal-point-meta?linkKey=...&linkValue=...
+func (h *Handler) ListMetaByLink(w http.ResponseWriter, r *http.Request) {
+	linkKey := r.URL.Query().Get("linkKey")
+	linkValue := r.URL.Query().Get("linkValue")
+	if linkKey == "" || linkValue == "" {
+		httputil.BadRequest(w, "linkKey and linkValue are required")
 		return
 	}
-	metas, err := h.store.ListFocalPointMetaByComponentLink(r.Context(), r.PathValue("orgID"), componentLinkID)
+	metas, err := h.store.ListFocalPointMetaByLink(r.Context(), r.PathValue("orgID"), linkKey, linkValue)
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
@@ -51,9 +52,7 @@ func (h *Handler) CreateMeta(w http.ResponseWriter, r *http.Request) {
 
 	var body struct {
 		ComponentID          string          `json:"componentId"`
-		ComponentLinkID      *string         `json:"componentLinkId"`
-		ComponentImages      json.RawMessage `json:"componentImages"`
-		ComponentFlowDiagram *string         `json:"componentFlowDiagram"`
+		ComponentLink        json.RawMessage `json:"componentLink"`
 		ComponentModalFields json.RawMessage `json:"componentModalFields"`
 	}
 	if err := httputil.Decode(r, &body); err != nil {
@@ -68,9 +67,7 @@ func (h *Handler) CreateMeta(w http.ResponseWriter, r *http.Request) {
 		OrgID:                orgID,
 		FrameID:              frameID,
 		ComponentID:          body.ComponentID,
-		ComponentLinkID:      body.ComponentLinkID,
-		ComponentImages:      body.ComponentImages,
-		ComponentFlowDiagram: body.ComponentFlowDiagram,
+		ComponentLink:        body.ComponentLink,
 		ComponentModalFields: body.ComponentModalFields,
 		CreatedBy:            p.UserID,
 		CreatedAt:            now,
@@ -102,9 +99,7 @@ func (h *Handler) UpdateMeta(w http.ResponseWriter, r *http.Request) {
 
 	var body struct {
 		ComponentID          *string         `json:"componentId"`
-		ComponentLinkID      *string         `json:"componentLinkId"`
-		ComponentImages      json.RawMessage `json:"componentImages"`
-		ComponentFlowDiagram *string         `json:"componentFlowDiagram"`
+		ComponentLink        json.RawMessage `json:"componentLink"`
 		ComponentModalFields json.RawMessage `json:"componentModalFields"`
 	}
 	if err := httputil.Decode(r, &body); err != nil {
@@ -114,14 +109,8 @@ func (h *Handler) UpdateMeta(w http.ResponseWriter, r *http.Request) {
 	if body.ComponentID != nil {
 		m.ComponentID = *body.ComponentID
 	}
-	if body.ComponentLinkID != nil {
-		m.ComponentLinkID = body.ComponentLinkID
-	}
-	if body.ComponentImages != nil {
-		m.ComponentImages = body.ComponentImages
-	}
-	if body.ComponentFlowDiagram != nil {
-		m.ComponentFlowDiagram = body.ComponentFlowDiagram
+	if body.ComponentLink != nil {
+		m.ComponentLink = body.ComponentLink
 	}
 	if body.ComponentModalFields != nil {
 		m.ComponentModalFields = body.ComponentModalFields

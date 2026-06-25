@@ -112,9 +112,7 @@ type FocalPointMeta struct {
 	OrgID                string          `json:"orgId"`
 	FrameID              string          `json:"frameId"`
 	ComponentID          string          `json:"componentId"`
-	ComponentLinkID      *string         `json:"componentLinkId,omitempty"`
-	ComponentImages      json.RawMessage `json:"componentImages"`
-	ComponentFlowDiagram *string         `json:"componentFlowDiagram,omitempty"`
+	ComponentLink        json.RawMessage `json:"componentLink,omitempty"`
 	ComponentModalFields json.RawMessage `json:"componentModalFields"`
 	CreatedBy            string          `json:"createdBy"`
 	UpdatedBy            *string         `json:"updatedBy,omitempty"`
@@ -173,7 +171,7 @@ type Store interface {
 	CreateFocalPointMeta(ctx context.Context, m FocalPointMeta) error
 	GetFocalPointMeta(ctx context.Context, id string) (*FocalPointMeta, error)
 	ListFocalPointMeta(ctx context.Context, focalPointID string) ([]FocalPointMeta, error)
-	ListFocalPointMetaByComponentLink(ctx context.Context, orgID, componentLinkID string) ([]FocalPointMeta, error)
+	ListFocalPointMetaByLink(ctx context.Context, orgID, linkKey, linkValue string) ([]FocalPointMeta, error)
 	UpdateFocalPointMeta(ctx context.Context, m FocalPointMeta) error
 	SoftDeleteFocalPointMeta(ctx context.Context, id, deletedBy string) error
 
