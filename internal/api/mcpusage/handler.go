@@ -14,6 +14,10 @@ type store interface {
 	CreateUsageEvent(ctx context.Context, e mcppkg.UsageEvent) error
 	ListUsageEvents(ctx context.Context, orgID string, f mcppkg.Filter) ([]mcppkg.UsageEvent, error)
 	GetSavingsSummary(ctx context.Context, orgID, modelID string, since time.Time) (*mcppkg.SavingsSummary, error)
+	GetSavingsTimeseries(ctx context.Context, orgID, modelID string, since time.Time) ([]mcppkg.DailySavings, error)
+	GetSavingsByTool(ctx context.Context, orgID, modelID string, since time.Time) ([]mcppkg.ToolSavings, error)
+	GetSavingsByModel(ctx context.Context, orgID string, since time.Time) ([]mcppkg.ModelSavings, error)
+	GetSavingsByUser(ctx context.Context, orgID, modelID string, since time.Time) ([]mcppkg.UserSavings, error)
 }
 
 type Handler struct{ store store }
@@ -28,4 +32,8 @@ func Register(mux *http.ServeMux, s store, requireScope func(scope, method, patt
 	requireScope("services:read", "POST", "/api/v1/orgs/{orgID}/mcp/usage", h.Record)
 	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/mcp/usage", h.List)
 	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/mcp/savings/summary", h.Summary)
+	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/mcp/savings/timeseries", h.Timeseries)
+	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/mcp/savings/by-tool", h.ByTool)
+	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/mcp/savings/by-model", h.ByModel)
+	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/mcp/savings/by-user", h.ByUser)
 }
