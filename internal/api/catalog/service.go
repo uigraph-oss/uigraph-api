@@ -18,19 +18,29 @@ import (
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	q := r.URL.Query()
-	var folderID, teamID *string
+	p := catalogpkg.ListParams{
+		SortBy:  q.Get("sortBy"),
+		SortDir: q.Get("sortDir"),
+	}
+	if v := q.Get("limit"); v != "" {
+		p.Limit = httputil.ListLimit(v)
+		p.Offset = httputil.ListOffset(q.Get("offset"))
+	}
 	if v := q.Get("folderId"); v != "" {
-		folderID = &v
+		p.FolderID = &v
 	}
 	if v := q.Get("teamId"); v != "" {
-		teamID = &v
+		p.TeamID = &v
 	}
-	svcs, err := h.store.ListServices(r.Context(), orgID, folderID, teamID)
+	if v := q.Get("search"); v != "" {
+		p.Search = &v
+	}
+	svcs, total, err := h.store.ListServices(r.Context(), orgID, p)
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
 	}
-	httputil.JSON(w, http.StatusOK, map[string]any{"services": svcs})
+	httputil.JSON(w, http.StatusOK, map[string]any{"services": svcs, "total": total})
 }
 
 func (h *Handler) ListStats(w http.ResponseWriter, r *http.Request) {

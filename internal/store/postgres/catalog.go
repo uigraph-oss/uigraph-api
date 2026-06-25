@@ -112,28 +112,54 @@ func (d *DB) GetServiceBySlug(ctx context.Context, orgID, slug string) (*catalog
 	return &s, nil
 }
 
-func (d *DB) ListServices(ctx context.Context, orgID string, folderID, teamID *string) ([]catalog.Service, error) {
+func (d *DB) ListServices(ctx context.Context, orgID string, p catalog.ListParams) ([]catalog.Service, int, error) {
+	where := " WHERE org_id = $1 AND deleted_at IS NULL"
+	args := []any{orgID}
+	if p.FolderID != nil {
+		args = append(args, *p.FolderID)
+		where += fmt.Sprintf(" AND folder_id = $%d", len(args))
+	}
+	if p.TeamID != nil {
+		args = append(args, *p.TeamID)
+		where += fmt.Sprintf(" AND team_id = $%d", len(args))
+	}
+	if p.Search != nil && *p.Search != "" {
+		args = append(args, "%"+*p.Search+"%")
+		where += fmt.Sprintf(" AND (name ILIKE $%d OR description ILIKE $%d)", len(args), len(args))
+	}
+
+	var total int
+	if err := d.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM services"+where, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("postgres: ListServices count: %w", err)
+	}
+
+	sortCols := map[string]string{"name": "name", "created": "created_at", "updated": "updated_at"}
+	col, ok := sortCols[p.SortBy]
+	if !ok {
+		col = "name"
+	}
+	dir := "ASC"
+	if strings.EqualFold(p.SortDir, "desc") {
+		dir = "DESC"
+	}
+
 	q := `
 		SELECT id, org_id, folder_id, team_id, name, slug, description,
 		       status, tier, category, language,
 		       git_repo_url, jira_project_url, slack_channel_url, last_commit_sha,
 		       labels, metadata, created_by, updated_by,
 		       created_at, updated_at, deleted_at, deleted_by
-		FROM services WHERE org_id = $1 AND deleted_at IS NULL`
-	args := []any{orgID}
-	if folderID != nil {
-		args = append(args, *folderID)
-		q += fmt.Sprintf(" AND folder_id = $%d", len(args))
+		FROM services` + where + fmt.Sprintf(" ORDER BY %s %s", col, dir)
+	if p.Limit > 0 {
+		args = append(args, p.Limit)
+		q += fmt.Sprintf(" LIMIT $%d", len(args))
+		args = append(args, p.Offset)
+		q += fmt.Sprintf(" OFFSET $%d", len(args))
 	}
-	if teamID != nil {
-		args = append(args, *teamID)
-		q += fmt.Sprintf(" AND team_id = $%d", len(args))
-	}
-	q += " ORDER BY name ASC"
 
 	rows, err := d.db.QueryContext(ctx, q, args...)
 	if err != nil {
-		return nil, fmt.Errorf("postgres: ListServices: %w", err)
+		return nil, 0, fmt.Errorf("postgres: ListServices: %w", err)
 	}
 	defer rows.Close()
 
@@ -141,11 +167,11 @@ func (d *DB) ListServices(ctx context.Context, orgID string, folderID, teamID *s
 	for rows.Next() {
 		s, err := scanService(rows)
 		if err != nil {
-			return nil, fmt.Errorf("postgres: ListServices scan: %w", err)
+			return nil, 0, fmt.Errorf("postgres: ListServices scan: %w", err)
 		}
 		out = append(out, s)
 	}
-	return out, rows.Err()
+	return out, total, rows.Err()
 }
 
 func (d *DB) ListServiceStats(ctx context.Context, orgID string, serviceID *string) ([]catalog.ServiceStats, error) {

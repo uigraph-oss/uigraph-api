@@ -21,12 +21,24 @@ import (
 
 // ListFrames handles GET /api/v1/orgs/{orgID}/maps/{mapID}/frames
 func (h *Handler) ListFrames(w http.ResponseWriter, r *http.Request) {
-	frames, err := h.store.ListFrames(r.Context(), r.PathValue("mapID"))
+	q := r.URL.Query()
+	p := uimap.ListParams{
+		SortBy:  q.Get("sortBy"),
+		SortDir: q.Get("sortDir"),
+	}
+	if v := q.Get("search"); v != "" {
+		p.Search = &v
+	}
+	if v := q.Get("limit"); v != "" {
+		p.Limit = httputil.ListLimit(v)
+		p.Offset = httputil.ListOffset(q.Get("offset"))
+	}
+	frames, total, err := h.store.ListFrames(r.Context(), r.PathValue("mapID"), p)
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
 	}
-	httputil.JSON(w, http.StatusOK, map[string]any{"frames": frames})
+	httputil.JSON(w, http.StatusOK, map[string]any{"frames": frames, "total": total})
 }
 
 // CreateFrame handles POST /api/v1/orgs/{orgID}/maps/{mapID}/frames

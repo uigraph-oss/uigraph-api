@@ -16,19 +16,29 @@ import (
 func (h *Handler) ListMaps(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	q := r.URL.Query()
-	var folderID, teamID *string
+	p := uimap.ListParams{
+		SortBy:  q.Get("sortBy"),
+		SortDir: q.Get("sortDir"),
+	}
+	if v := q.Get("limit"); v != "" {
+		p.Limit = httputil.ListLimit(v)
+		p.Offset = httputil.ListOffset(q.Get("offset"))
+	}
 	if v := q.Get("folderId"); v != "" {
-		folderID = &v
+		p.FolderID = &v
 	}
 	if v := q.Get("teamId"); v != "" {
-		teamID = &v
+		p.TeamID = &v
 	}
-	maps, err := h.store.ListMaps(r.Context(), orgID, folderID, teamID)
+	if v := q.Get("search"); v != "" {
+		p.Search = &v
+	}
+	maps, total, err := h.store.ListMaps(r.Context(), orgID, p)
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
 	}
-	httputil.JSON(w, http.StatusOK, map[string]any{"maps": maps})
+	httputil.JSON(w, http.StatusOK, map[string]any{"maps": maps, "total": total})
 }
 
 // CreateMap handles POST /api/v1/orgs/{orgID}/maps

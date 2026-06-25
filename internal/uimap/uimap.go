@@ -140,16 +140,26 @@ type Canvas struct {
 	UpdatedAt      time.Time                `json:"updatedAt"`
 }
 
+type ListParams struct {
+	FolderID *string
+	TeamID   *string
+	Search   *string
+	SortBy   string
+	SortDir  string
+	Limit    int
+	Offset   int
+}
+
 type Store interface {
 	CreateMap(ctx context.Context, m Map) error
 	GetMap(ctx context.Context, id string) (*Map, error)
-	ListMaps(ctx context.Context, orgID string, folderID, teamID *string) ([]Map, error)
+	ListMaps(ctx context.Context, orgID string, p ListParams) ([]Map, int, error)
 	UpdateMap(ctx context.Context, m Map) error
 	SoftDeleteMap(ctx context.Context, id, deletedBy string) error
 
 	CreateFrame(ctx context.Context, f Frame) error
 	GetFrame(ctx context.Context, id string) (*Frame, error)
-	ListFrames(ctx context.Context, mapID string) ([]Frame, error)
+	ListFrames(ctx context.Context, mapID string, p ListParams) ([]Frame, int, error)
 	UpdateFrame(ctx context.Context, f Frame) error
 	SoftDeleteFrame(ctx context.Context, id, deletedBy string) error
 

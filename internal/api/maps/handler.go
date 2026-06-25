@@ -12,13 +12,13 @@ import (
 type store interface {
 	CreateMap(ctx context.Context, m uimap.Map) error
 	GetMap(ctx context.Context, id string) (*uimap.Map, error)
-	ListMaps(ctx context.Context, orgID string, folderID, teamID *string) ([]uimap.Map, error)
+	ListMaps(ctx context.Context, orgID string, p uimap.ListParams) ([]uimap.Map, int, error)
 	UpdateMap(ctx context.Context, m uimap.Map) error
 	SoftDeleteMap(ctx context.Context, id, deletedBy string) error
 
 	CreateFrame(ctx context.Context, f uimap.Frame) error
 	GetFrame(ctx context.Context, id string) (*uimap.Frame, error)
-	ListFrames(ctx context.Context, mapID string) ([]uimap.Frame, error)
+	ListFrames(ctx context.Context, mapID string, p uimap.ListParams) ([]uimap.Frame, int, error)
 	UpdateFrame(ctx context.Context, f uimap.Frame) error
 	SoftDeleteFrame(ctx context.Context, id, deletedBy string) error
 

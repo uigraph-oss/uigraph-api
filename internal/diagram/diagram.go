@@ -61,10 +61,20 @@ type Image struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
+type ListParams struct {
+	FolderID *string
+	TeamID   *string
+	Search   *string
+	SortBy   string
+	SortDir  string
+	Limit    int
+	Offset   int
+}
+
 type Store interface {
 	CreateDiagram(ctx context.Context, d Diagram) error
 	GetDiagram(ctx context.Context, id string) (*Diagram, error)
-	ListDiagrams(ctx context.Context, orgID string, folderID, teamID *string) ([]Diagram, error)
+	ListDiagrams(ctx context.Context, orgID string, p ListParams) ([]Diagram, int, error)
 	UpdateDiagram(ctx context.Context, d Diagram) error
 	SoftDeleteDiagram(ctx context.Context, id, deletedBy string) error
 

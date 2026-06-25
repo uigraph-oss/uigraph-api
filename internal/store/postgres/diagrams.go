@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/uigraph/app/internal/diagram"
@@ -51,26 +52,52 @@ func (d *DB) GetDiagram(ctx context.Context, id string) (*diagram.Diagram, error
 	return &dg, nil
 }
 
-func (d *DB) ListDiagrams(ctx context.Context, orgID string, folderID, teamID *string) ([]diagram.Diagram, error) {
+func (d *DB) ListDiagrams(ctx context.Context, orgID string, p diagram.ListParams) ([]diagram.Diagram, int, error) {
+	where := " WHERE org_id = $1 AND deleted_at IS NULL"
+	args := []any{orgID}
+	if p.FolderID != nil {
+		args = append(args, *p.FolderID)
+		where += fmt.Sprintf(" AND folder_id = $%d", len(args))
+	}
+	if p.TeamID != nil {
+		args = append(args, *p.TeamID)
+		where += fmt.Sprintf(" AND team_id = $%d", len(args))
+	}
+	if p.Search != nil && *p.Search != "" {
+		args = append(args, "%"+*p.Search+"%")
+		where += fmt.Sprintf(" AND name ILIKE $%d", len(args))
+	}
+
+	var total int
+	if err := d.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM diagrams"+where, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("postgres: ListDiagrams count: %w", err)
+	}
+
+	sortCols := map[string]string{"name": "name", "created": "created_at", "updated": "updated_at"}
+	col, ok := sortCols[p.SortBy]
+	if !ok {
+		col = "created_at"
+	}
+	dir := "DESC"
+	if strings.EqualFold(p.SortDir, "asc") {
+		dir = "ASC"
+	}
+
 	q := `
 		SELECT id, org_id, folder_id, team_id, name, content_key, content_hash, content_token_count,
 		       preview_asset_id, preview_content_hash, source, created_by, updated_by,
 		       created_at, updated_at, deleted_at, deleted_by
-		FROM diagrams WHERE org_id = $1 AND deleted_at IS NULL`
-	args := []any{orgID}
-	if folderID != nil {
-		args = append(args, *folderID)
-		q += fmt.Sprintf(" AND folder_id = $%d", len(args))
+		FROM diagrams` + where + fmt.Sprintf(" ORDER BY %s %s", col, dir)
+	if p.Limit > 0 {
+		args = append(args, p.Limit)
+		q += fmt.Sprintf(" LIMIT $%d", len(args))
+		args = append(args, p.Offset)
+		q += fmt.Sprintf(" OFFSET $%d", len(args))
 	}
-	if teamID != nil {
-		args = append(args, *teamID)
-		q += fmt.Sprintf(" AND team_id = $%d", len(args))
-	}
-	q += " ORDER BY created_at DESC"
 
 	rows, err := d.db.QueryContext(ctx, q, args...)
 	if err != nil {
-		return nil, fmt.Errorf("postgres: ListDiagrams: %w", err)
+		return nil, 0, fmt.Errorf("postgres: ListDiagrams: %w", err)
 	}
 	defer rows.Close()
 
@@ -78,11 +105,11 @@ func (d *DB) ListDiagrams(ctx context.Context, orgID string, folderID, teamID *s
 	for rows.Next() {
 		dg, err := scanDiagram(rows)
 		if err != nil {
-			return nil, fmt.Errorf("postgres: ListDiagrams scan: %w", err)
+			return nil, 0, fmt.Errorf("postgres: ListDiagrams scan: %w", err)
 		}
 		out = append(out, dg)
 	}
-	return out, rows.Err()
+	return out, total, rows.Err()
 }
 
 func (d *DB) UpdateDiagram(ctx context.Context, dg diagram.Diagram) error {

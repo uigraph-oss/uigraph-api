@@ -17,7 +17,7 @@ import (
 // store is the minimal persistence interface this package needs.
 type store interface {
 	// Services
-	ListServices(ctx context.Context, orgID string, folderID, teamID *string) ([]catalogpkg.Service, error)
+	ListServices(ctx context.Context, orgID string, p catalogpkg.ListParams) ([]catalogpkg.Service, int, error)
 	ListServiceStats(ctx context.Context, orgID string, serviceID *string) ([]catalogpkg.ServiceStats, error)
 	CreateService(ctx context.Context, s catalogpkg.Service) error
 	GetService(ctx context.Context, id string) (*catalogpkg.Service, error)

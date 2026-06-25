@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/uigraph/app/internal/docs"
@@ -48,25 +49,51 @@ func (d *DB) GetDoc(ctx context.Context, id string) (*docs.Doc, error) {
 	return &doc, nil
 }
 
-func (d *DB) ListDocs(ctx context.Context, orgID string, folderID, teamID *string) ([]docs.Doc, error) {
+func (d *DB) ListDocs(ctx context.Context, orgID string, p docs.ListParams) ([]docs.Doc, int, error) {
+	where := " WHERE org_id = $1 AND deleted_at IS NULL"
+	args := []any{orgID}
+	if p.FolderID != nil {
+		args = append(args, *p.FolderID)
+		where += fmt.Sprintf(" AND folder_id = $%d", len(args))
+	}
+	if p.TeamID != nil {
+		args = append(args, *p.TeamID)
+		where += fmt.Sprintf(" AND team_id = $%d", len(args))
+	}
+	if p.Search != nil && *p.Search != "" {
+		args = append(args, "%"+*p.Search+"%")
+		where += fmt.Sprintf(" AND file_name ILIKE $%d", len(args))
+	}
+
+	var total int
+	if err := d.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM docs"+where, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("postgres: ListDocs count: %w", err)
+	}
+
+	sortCols := map[string]string{"name": "file_name", "created": "created_at", "updated": "updated_at"}
+	col, ok := sortCols[p.SortBy]
+	if !ok {
+		col = "created_at"
+	}
+	dir := "DESC"
+	if strings.EqualFold(p.SortDir, "asc") {
+		dir = "ASC"
+	}
+
 	q := `
 		SELECT id, org_id, folder_id, team_id, file_asset_id, file_name, file_type, description,
 		       content_hash, doc_token_count, created_by, updated_by, created_at, updated_at, deleted_at, deleted_by
-		FROM docs WHERE org_id = $1 AND deleted_at IS NULL`
-	args := []any{orgID}
-	if folderID != nil {
-		args = append(args, *folderID)
-		q += fmt.Sprintf(" AND folder_id = $%d", len(args))
+		FROM docs` + where + fmt.Sprintf(" ORDER BY %s %s", col, dir)
+	if p.Limit > 0 {
+		args = append(args, p.Limit)
+		q += fmt.Sprintf(" LIMIT $%d", len(args))
+		args = append(args, p.Offset)
+		q += fmt.Sprintf(" OFFSET $%d", len(args))
 	}
-	if teamID != nil {
-		args = append(args, *teamID)
-		q += fmt.Sprintf(" AND team_id = $%d", len(args))
-	}
-	q += " ORDER BY created_at DESC"
 
 	rows, err := d.db.QueryContext(ctx, q, args...)
 	if err != nil {
-		return nil, fmt.Errorf("postgres: ListDocs: %w", err)
+		return nil, 0, fmt.Errorf("postgres: ListDocs: %w", err)
 	}
 	defer rows.Close()
 
@@ -74,11 +101,11 @@ func (d *DB) ListDocs(ctx context.Context, orgID string, folderID, teamID *strin
 	for rows.Next() {
 		doc, err := scanDoc(rows)
 		if err != nil {
-			return nil, fmt.Errorf("postgres: ListDocs scan: %w", err)
+			return nil, 0, fmt.Errorf("postgres: ListDocs scan: %w", err)
 		}
 		out = append(out, doc)
 	}
-	return out, rows.Err()
+	return out, total, rows.Err()
 }
 
 func (d *DB) UpdateDoc(ctx context.Context, doc docs.Doc) error {

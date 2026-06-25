@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/uigraph/app/internal/uimap"
@@ -54,25 +55,51 @@ func (d *DB) GetMap(ctx context.Context, id string) (*uimap.Map, error) {
 	return &m, nil
 }
 
-func (d *DB) ListMaps(ctx context.Context, orgID string, folderID, teamID *string) ([]uimap.Map, error) {
+func (d *DB) ListMaps(ctx context.Context, orgID string, p uimap.ListParams) ([]uimap.Map, int, error) {
+	where := " WHERE org_id = $1 AND deleted_at IS NULL"
+	args := []any{orgID}
+	if p.FolderID != nil {
+		args = append(args, *p.FolderID)
+		where += fmt.Sprintf(" AND folder_id = $%d", len(args))
+	}
+	if p.TeamID != nil {
+		args = append(args, *p.TeamID)
+		where += fmt.Sprintf(" AND team_id = $%d", len(args))
+	}
+	if p.Search != nil && *p.Search != "" {
+		args = append(args, "%"+*p.Search+"%")
+		where += fmt.Sprintf(" AND name ILIKE $%d", len(args))
+	}
+
+	var total int
+	if err := d.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM maps"+where, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("postgres: ListMaps count: %w", err)
+	}
+
+	sortCols := map[string]string{"name": "name", "created": "created_at", "updated": "updated_at"}
+	col, ok := sortCols[p.SortBy]
+	if !ok {
+		col = "created_at"
+	}
+	dir := "DESC"
+	if strings.EqualFold(p.SortDir, "asc") {
+		dir = "ASC"
+	}
+
 	q := `
 		SELECT id, org_id, folder_id, team_id, name, description, status,
 		       created_by, updated_by, created_at, updated_at, deleted_at, deleted_by
-		FROM maps WHERE org_id = $1 AND deleted_at IS NULL`
-	args := []any{orgID}
-	if folderID != nil {
-		args = append(args, *folderID)
-		q += fmt.Sprintf(" AND folder_id = $%d", len(args))
+		FROM maps` + where + fmt.Sprintf(" ORDER BY %s %s", col, dir)
+	if p.Limit > 0 {
+		args = append(args, p.Limit)
+		q += fmt.Sprintf(" LIMIT $%d", len(args))
+		args = append(args, p.Offset)
+		q += fmt.Sprintf(" OFFSET $%d", len(args))
 	}
-	if teamID != nil {
-		args = append(args, *teamID)
-		q += fmt.Sprintf(" AND team_id = $%d", len(args))
-	}
-	q += " ORDER BY created_at DESC"
 
 	rows, err := d.db.QueryContext(ctx, q, args...)
 	if err != nil {
-		return nil, fmt.Errorf("postgres: ListMaps: %w", err)
+		return nil, 0, fmt.Errorf("postgres: ListMaps: %w", err)
 	}
 	defer rows.Close()
 
@@ -80,11 +107,11 @@ func (d *DB) ListMaps(ctx context.Context, orgID string, folderID, teamID *strin
 	for rows.Next() {
 		m, err := scanMap(rows)
 		if err != nil {
-			return nil, fmt.Errorf("postgres: ListMaps scan: %w", err)
+			return nil, 0, fmt.Errorf("postgres: ListMaps scan: %w", err)
 		}
 		out = append(out, m)
 	}
-	return out, rows.Err()
+	return out, total, rows.Err()
 }
 
 func (d *DB) UpdateMap(ctx context.Context, m uimap.Map) error {
@@ -173,19 +200,45 @@ func (d *DB) GetFrame(ctx context.Context, id string) (*uimap.Frame, error) {
 	return &f, nil
 }
 
-func (d *DB) ListFrames(ctx context.Context, mapID string) ([]uimap.Frame, error) {
-	const q = `
+func (d *DB) ListFrames(ctx context.Context, mapID string, p uimap.ListParams) ([]uimap.Frame, int, error) {
+	where := " WHERE map_id = $1 AND deleted_at IS NULL"
+	args := []any{mapID}
+	if p.Search != nil && *p.Search != "" {
+		args = append(args, "%"+*p.Search+"%")
+		where += fmt.Sprintf(" AND name ILIKE $%d", len(args))
+	}
+
+	var total int
+	if err := d.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM frames"+where, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("postgres: ListFrames count: %w", err)
+	}
+
+	sortCols := map[string]string{"name": "name", "created": "created_at", "updated": "updated_at"}
+	order := " ORDER BY ord ASC, created_at ASC"
+	if col, ok := sortCols[p.SortBy]; ok {
+		dir := "DESC"
+		if strings.EqualFold(p.SortDir, "asc") {
+			dir = "ASC"
+		}
+		order = fmt.Sprintf(" ORDER BY %s %s", col, dir)
+	}
+
+	q := `
 		SELECT id, map_id, org_id, parent_frame_id, name, description, template_type,
 		       screenshot_asset_id, screenshot_content_hash, status, ord, source,
 		       created_by, updated_by, created_at, updated_at, deleted_at, deleted_by,
 		       (SELECT COUNT(*) FROM focal_points fp WHERE fp.frame_id = frames.id AND fp.deleted_at IS NULL)
-		FROM frames
-		WHERE map_id = $1 AND deleted_at IS NULL
-		ORDER BY ord ASC, created_at ASC`
+		FROM frames` + where + order
+	if p.Limit > 0 {
+		args = append(args, p.Limit)
+		q += fmt.Sprintf(" LIMIT $%d", len(args))
+		args = append(args, p.Offset)
+		q += fmt.Sprintf(" OFFSET $%d", len(args))
+	}
 
-	rows, err := d.db.QueryContext(ctx, q, mapID)
+	rows, err := d.db.QueryContext(ctx, q, args...)
 	if err != nil {
-		return nil, fmt.Errorf("postgres: ListFrames: %w", err)
+		return nil, 0, fmt.Errorf("postgres: ListFrames: %w", err)
 	}
 	defer rows.Close()
 
@@ -193,11 +246,11 @@ func (d *DB) ListFrames(ctx context.Context, mapID string) ([]uimap.Frame, error
 	for rows.Next() {
 		f, err := scanFrame(rows)
 		if err != nil {
-			return nil, fmt.Errorf("postgres: ListFrames scan: %w", err)
+			return nil, 0, fmt.Errorf("postgres: ListFrames scan: %w", err)
 		}
 		out = append(out, f)
 	}
-	return out, rows.Err()
+	return out, total, rows.Err()
 }
 
 func (d *DB) UpdateFrame(ctx context.Context, f uimap.Frame) error {
