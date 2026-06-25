@@ -98,7 +98,7 @@ func (h *Handler) CreateAPIGroup(w http.ResponseWriter, r *http.Request) {
 	// Auto-version 1 — created after the parent row is committed.
 	if specContent != "" {
 		hash := specHash(specContent)
-		h.importSpecEndpoints(r.Context(), specContent, id, serviceID, orgID, p.UserID, now)
+		h.importSpecEndpoints(r.Context(), specContent, body.Protocol, id, serviceID, orgID, p.UserID, now)
 		versionID := uuid.NewString()
 		vKey := storage.APIGroupVersionSpecKey(orgID, serviceID, id, versionID)
 		if err := h.uploadSpec(r.Context(), vKey, specContent); err == nil {
@@ -243,7 +243,7 @@ func (h *Handler) UpdateAPIGroup(w http.ResponseWriter, r *http.Request) {
 				latestVer, _ := h.store.LatestAPIGroupVersionNumber(r.Context(), g.ID)
 				versionID := uuid.NewString()
 				vKey := storage.APIGroupVersionSpecKey(orgID, serviceID, g.ID, versionID)
-				h.importSpecEndpoints(r.Context(), specContent, g.ID, serviceID, orgID, p.UserID, time.Now().UTC())
+				h.importSpecEndpoints(r.Context(), specContent, g.Protocol, g.ID, serviceID, orgID, p.UserID, time.Now().UTC())
 				if err := h.uploadSpec(r.Context(), vKey, specContent); err == nil {
 					if err := h.store.CreateAPIGroupVersion(r.Context(), catalogpkg.APIGroupVersion{
 						ID: versionID, APIGroupID: g.ID, VersionNumber: latestVer + 1,
@@ -343,7 +343,7 @@ func (h *Handler) SyncAPIGroup(w http.ResponseWriter, r *http.Request) {
 			}
 			g.SpecKey = &key
 			g.SpecHash = &newHash
-			h.importSpecEndpoints(r.Context(), specContent, g.ID, serviceID, orgID, p.UserID, time.Now().UTC())
+			h.importSpecEndpoints(r.Context(), specContent, body.Protocol, g.ID, serviceID, orgID, p.UserID, time.Now().UTC())
 			latestVer, _ := h.store.LatestAPIGroupVersionNumber(r.Context(), g.ID)
 			versionID := uuid.NewString()
 			vKey := storage.APIGroupVersionSpecKey(orgID, serviceID, g.ID, versionID)
@@ -394,7 +394,7 @@ func (h *Handler) SyncAPIGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if uploadedSpec {
-		h.importSpecEndpoints(r.Context(), specContent, id, serviceID, orgID, p.UserID, now)
+		h.importSpecEndpoints(r.Context(), specContent, body.Protocol, id, serviceID, orgID, p.UserID, now)
 		versionID := uuid.NewString()
 		vKey := storage.APIGroupVersionSpecKey(orgID, serviceID, id, versionID)
 		if err := h.uploadSpec(r.Context(), vKey, specContent); err == nil {

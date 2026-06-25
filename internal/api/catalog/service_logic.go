@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	catalogpkg "github.com/uigraph/app/internal/catalog"
 	"github.com/uigraph/app/internal/httputil"
+	"github.com/uigraph/app/internal/specparser"
 	storepkg "github.com/uigraph/app/internal/store"
 	"github.com/uigraph/app/internal/storage"
 	"gopkg.in/yaml.v3"
@@ -68,14 +69,37 @@ var httpMethods = []string{"get", "post", "put", "delete", "patch", "head", "opt
 
 // importSpecEndpoints replaces the current working-copy endpoints for an API group.
 // Versioned snapshot endpoints (api_group_version_id IS NOT NULL) are never touched.
-func (h *Handler) importSpecEndpoints(ctx context.Context, spec, apiGroupID, serviceID, orgID, actorID string, now time.Time) {
-	endpoints, err := parseSpecEndpoints(spec, apiGroupID, serviceID, orgID, actorID, now)
+// The protocol determines which spec format the content is parsed as.
+func (h *Handler) importSpecEndpoints(ctx context.Context, spec, protocol, apiGroupID, serviceID, orgID, actorID string, now time.Time) {
+	var endpoints []catalogpkg.APIEndpoint
+	var err error
+	switch normalizeProtocol(protocol) {
+	case "graphql":
+		endpoints, err = parseGraphQLSpecEndpoints(spec, apiGroupID, serviceID, orgID, actorID, now)
+	case "grpc":
+		endpoints, err = parseGrpcSpecEndpoints(spec, apiGroupID, serviceID, orgID, actorID, now)
+	default:
+		endpoints, err = parseSpecEndpoints(spec, apiGroupID, serviceID, orgID, actorID, now)
+	}
 	if err != nil || len(endpoints) == 0 {
 		return
 	}
 	_ = h.store.SoftDeleteCurrentAPIEndpoints(ctx, apiGroupID, actorID)
 	for _, e := range endpoints {
 		_ = h.store.CreateAPIEndpoint(ctx, e)
+	}
+}
+
+// normalizeProtocol maps a free-form protocol label (as stored on the API group)
+// to the lowercase token used to pick a spec parser.
+func normalizeProtocol(protocol string) string {
+	switch strings.ToLower(strings.TrimSpace(protocol)) {
+	case "graphql":
+		return "graphql"
+	case "grpc":
+		return "grpc"
+	default:
+		return "openapi"
 	}
 }
 
@@ -145,6 +169,105 @@ func parseSpecEndpoints(spec, apiGroupID, serviceID, orgID, actorID string, now 
 			})
 			order++
 		}
+	}
+	return endpoints, nil
+}
+
+// parseGraphQLSpecEndpoints parses a GraphQL SDL document and returns one
+// APIEndpoint per root Query/Mutation/Subscription field.
+func parseGraphQLSpecEndpoints(spec, apiGroupID, serviceID, orgID, actorID string, now time.Time) ([]catalogpkg.APIEndpoint, error) {
+	ops, err := specparser.ParseGraphQL([]byte(spec))
+	if err != nil {
+		return nil, err
+	}
+
+	endpoints := make([]catalogpkg.APIEndpoint, 0, len(ops))
+	for i, op := range ops {
+		requestBody, _ := json.Marshal(map[string]string{"query": op.RequestExample})
+
+		responses := json.RawMessage(op.ResponseExample)
+		if !json.Valid(responses) {
+			responses, _ = json.Marshal(map[string]string{})
+		}
+		parameters := json.RawMessage(op.Variables)
+		if !json.Valid(parameters) {
+			parameters, _ = json.Marshal(map[string]string{})
+		}
+
+		endpoints = append(endpoints, catalogpkg.APIEndpoint{
+			ID:          uuid.NewString(),
+			APIGroupID:  apiGroupID,
+			ServiceID:   serviceID,
+			OrgID:       orgID,
+			OperationID: op.OperationID,
+			Method:      op.Kind,
+			Path:        op.Signature,
+			Description: op.Description,
+			Tags:        op.Tags,
+			Parameters:  parameters,
+			RequestBody: requestBody,
+			Responses:   responses,
+			Order:       float64(i),
+			CreatedBy:   actorID,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		})
+	}
+	return endpoints, nil
+}
+
+// parseGrpcSpecEndpoints parses a .proto document and returns one APIEndpoint
+// per RPC method. Package/service/request/response type names are packed into
+// the Parameters column as a small JSON object since the generic APIEndpoint
+// shape only has a handful of scalar text columns.
+func parseGrpcSpecEndpoints(spec, apiGroupID, serviceID, orgID, actorID string, now time.Time) ([]catalogpkg.APIEndpoint, error) {
+	methods, err := specparser.ParseGrpc([]byte(spec))
+	if err != nil {
+		return nil, err
+	}
+
+	endpoints := make([]catalogpkg.APIEndpoint, 0, len(methods))
+	for i, m := range methods {
+		grpcMeta, _ := json.Marshal(map[string]string{
+			"packageName":  m.PackageName,
+			"serviceName":  m.ServiceName,
+			"requestType":  m.RequestType,
+			"responseType": m.ResponseType,
+		})
+
+		requestExample := json.RawMessage(m.RequestExample)
+		if !json.Valid(requestExample) {
+			requestExample, _ = json.Marshal(map[string]string{})
+		}
+		responseExample := json.RawMessage(m.ResponseExample)
+		if !json.Valid(responseExample) {
+			responseExample, _ = json.Marshal(map[string]string{})
+		}
+
+		path := m.MethodID
+		if path != "" && !strings.HasPrefix(path, "/") {
+			path = "/" + path
+		}
+
+		endpoints = append(endpoints, catalogpkg.APIEndpoint{
+			ID:          uuid.NewString(),
+			APIGroupID:  apiGroupID,
+			ServiceID:   serviceID,
+			OrgID:       orgID,
+			OperationID: m.MethodName,
+			Method:      m.StreamingType,
+			Path:        path,
+			Summary:     m.ProtoSnippet,
+			Description: m.Description,
+			Tags:        m.Tags,
+			Parameters:  grpcMeta,
+			RequestBody: requestExample,
+			Responses:   responseExample,
+			Order:       float64(i),
+			CreatedBy:   actorID,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		})
 	}
 	return endpoints, nil
 }
