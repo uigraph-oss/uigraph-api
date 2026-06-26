@@ -64,7 +64,7 @@ type FocalPoint struct {
 	CreatedAt  time.Time  `json:"createdAt"`
 	UpdatedAt  time.Time  `json:"updatedAt"`
 	DeletedAt  *time.Time `json:"deletedAt,omitempty"`
-	DeletedBy   *string    `json:"deletedBy,omitempty"`
+	DeletedBy  *string    `json:"deletedBy,omitempty"`
 }
 
 type FrameGroup struct {
@@ -107,21 +107,22 @@ type FrameLink struct {
 }
 
 type FocalPointMeta struct {
-	ID                   string          `json:"id"`
-	FocalPointID         string          `json:"focalPointId"`
-	OrgID                string          `json:"orgId"`
-	FrameID              string          `json:"frameId"`
-	ComponentID          string          `json:"componentId"`
-	ComponentLinkID      *string         `json:"componentLinkId,omitempty"`
-	ComponentImages      json.RawMessage `json:"componentImages"`
-	ComponentFlowDiagram *string         `json:"componentFlowDiagram,omitempty"`
-	ComponentModalFields json.RawMessage `json:"componentModalFields"`
-	CreatedBy            string          `json:"createdBy"`
-	UpdatedBy            *string         `json:"updatedBy,omitempty"`
-	CreatedAt            time.Time       `json:"createdAt"`
-	UpdatedAt            time.Time       `json:"updatedAt"`
-	DeletedAt            *time.Time      `json:"deletedAt,omitempty"`
-	DeletedBy            *string         `json:"deletedBy,omitempty"`
+	ID                         string          `json:"id"`
+	FocalPointID               string          `json:"focalPointId"`
+	OrgID                      string          `json:"orgId"`
+	FrameID                    string          `json:"frameId"`
+	ComponentID                string          `json:"componentId"`
+	ComponentLinkDiagramID     *string         `json:"componentLinkDiagramId,omitempty"`
+	ComponentLinkAPIEndpointID *string         `json:"componentLinkApiEndpointId,omitempty"`
+	ComponentLinkTestPackID    *string         `json:"componentLinkTestPackId,omitempty"`
+	ComponentLinkServiceDocID  *string         `json:"componentLinkServiceDocId,omitempty"`
+	ComponentModalFields       json.RawMessage `json:"componentModalFields"`
+	CreatedBy                  string          `json:"createdBy"`
+	UpdatedBy                  *string         `json:"updatedBy,omitempty"`
+	CreatedAt                  time.Time       `json:"createdAt"`
+	UpdatedAt                  time.Time       `json:"updatedAt"`
+	DeletedAt                  *time.Time      `json:"deletedAt,omitempty"`
+	DeletedBy                  *string         `json:"deletedBy,omitempty"`
 }
 
 type FramePosition struct {
@@ -130,25 +131,35 @@ type FramePosition struct {
 }
 
 type Canvas struct {
-	MapID           string                    `json:"mapId"`
-	OrgID           string                    `json:"orgId"`
-	Zoom            float64                   `json:"zoom"`
-	NavigationX     float64                   `json:"navigationX"`
-	NavigationY     float64                   `json:"navigationY"`
-	FramePositions  map[string]FramePosition  `json:"framePositions"`
-	UpdatedAt       time.Time                 `json:"updatedAt"`
+	MapID          string                   `json:"mapId"`
+	OrgID          string                   `json:"orgId"`
+	Zoom           float64                  `json:"zoom"`
+	NavigationX    float64                  `json:"navigationX"`
+	NavigationY    float64                  `json:"navigationY"`
+	FramePositions map[string]FramePosition `json:"framePositions"`
+	UpdatedAt      time.Time                `json:"updatedAt"`
+}
+
+type ListParams struct {
+	FolderID *string
+	TeamID   *string
+	Search   *string
+	SortBy   string
+	SortDir  string
+	Limit    int
+	Offset   int
 }
 
 type Store interface {
 	CreateMap(ctx context.Context, m Map) error
 	GetMap(ctx context.Context, id string) (*Map, error)
-	ListMaps(ctx context.Context, orgID string, folderID, teamID *string) ([]Map, error)
+	ListMaps(ctx context.Context, orgID string, p ListParams) ([]Map, int, error)
 	UpdateMap(ctx context.Context, m Map) error
 	SoftDeleteMap(ctx context.Context, id, deletedBy string) error
 
 	CreateFrame(ctx context.Context, f Frame) error
 	GetFrame(ctx context.Context, id string) (*Frame, error)
-	ListFrames(ctx context.Context, mapID string) ([]Frame, error)
+	ListFrames(ctx context.Context, mapID string, p ListParams) ([]Frame, int, error)
 	UpdateFrame(ctx context.Context, f Frame) error
 	SoftDeleteFrame(ctx context.Context, id, deletedBy string) error
 
@@ -173,7 +184,7 @@ type Store interface {
 	CreateFocalPointMeta(ctx context.Context, m FocalPointMeta) error
 	GetFocalPointMeta(ctx context.Context, id string) (*FocalPointMeta, error)
 	ListFocalPointMeta(ctx context.Context, focalPointID string) ([]FocalPointMeta, error)
-	ListFocalPointMetaByComponentLink(ctx context.Context, orgID, componentLinkID string) ([]FocalPointMeta, error)
+	ListFocalPointMetaByLink(ctx context.Context, orgID, linkID string) ([]FocalPointMeta, error)
 	UpdateFocalPointMeta(ctx context.Context, m FocalPointMeta) error
 	SoftDeleteFocalPointMeta(ctx context.Context, id, deletedBy string) error
 

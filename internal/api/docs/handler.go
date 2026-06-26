@@ -13,7 +13,7 @@ import (
 type store interface {
 	CreateDoc(ctx context.Context, d docspkg.Doc) error
 	GetDoc(ctx context.Context, id string) (*docspkg.Doc, error)
-	ListDocs(ctx context.Context, orgID string, folderID, teamID *string) ([]docspkg.Doc, error)
+	ListDocs(ctx context.Context, orgID string, p docspkg.ListParams) ([]docspkg.Doc, int, error)
 	UpdateDoc(ctx context.Context, d docspkg.Doc) error
 	SoftDeleteDoc(ctx context.Context, id, deletedBy string) error
 }

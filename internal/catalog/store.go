@@ -4,13 +4,23 @@ package catalog
 
 import "context"
 
+type ListParams struct {
+	FolderID *string
+	TeamID   *string
+	Search   *string
+	SortBy   string
+	SortDir  string
+	Limit    int
+	Offset   int
+}
+
 // Store is the persistence interface for the service catalog.
 type Store interface {
 	// Services
 	CreateService(ctx context.Context, s Service) error
 	GetService(ctx context.Context, id string) (*Service, error)
 	GetServiceBySlug(ctx context.Context, orgID, slug string) (*Service, error)
-	ListServices(ctx context.Context, orgID string, folderID, teamID *string) ([]Service, error)
+	ListServices(ctx context.Context, orgID string, p ListParams) ([]Service, int, error)
 	UpdateService(ctx context.Context, s Service) error
 	SoftDeleteService(ctx context.Context, id, deletedBy string) error
 	ListServiceStats(ctx context.Context, orgID string, serviceID *string) ([]ServiceStats, error)
@@ -40,6 +50,7 @@ type Store interface {
 	// Service docs
 	CreateServiceDoc(ctx context.Context, d ServiceDoc) error
 	GetServiceDoc(ctx context.Context, serviceID, docID string) (*ServiceDoc, error)
+	GetServiceDocByID(ctx context.Context, docID string) (*ServiceDoc, error)
 	ListServiceDocs(ctx context.Context, serviceID string) ([]ServiceDoc, error)
 	SoftDeleteServiceDoc(ctx context.Context, serviceID, docID, deletedBy string) error
 

@@ -22,7 +22,7 @@ var _ objectStore = (*fakeObjectStore)(nil)
 
 // fakeDiagramStore implements the unexported store interface.
 type fakeDiagramStore struct {
-	listDiagramsFn      func(ctx context.Context, orgID string, folderID, teamID *string) ([]diagrampkg.Diagram, error)
+	listDiagramsFn      func(ctx context.Context, orgID string, p diagrampkg.ListParams) ([]diagrampkg.Diagram, int, error)
 	getDiagramFn        func(ctx context.Context, id string) (*diagrampkg.Diagram, error)
 	createDiagramFn     func(ctx context.Context, d diagrampkg.Diagram) error
 	updateDiagramFn     func(ctx context.Context, d diagrampkg.Diagram) error
@@ -35,8 +35,8 @@ type fakeDiagramStore struct {
 	createImageFn       func(ctx context.Context, img diagrampkg.Image) error
 }
 
-func (f *fakeDiagramStore) ListDiagrams(ctx context.Context, orgID string, folderID, teamID *string) ([]diagrampkg.Diagram, error) {
-	return f.listDiagramsFn(ctx, orgID, folderID, teamID)
+func (f *fakeDiagramStore) ListDiagrams(ctx context.Context, orgID string, p diagrampkg.ListParams) ([]diagrampkg.Diagram, int, error) {
+	return f.listDiagramsFn(ctx, orgID, p)
 }
 func (f *fakeDiagramStore) GetDiagram(ctx context.Context, id string) (*diagrampkg.Diagram, error) {
 	return f.getDiagramFn(ctx, id)
@@ -117,8 +117,8 @@ func newReq(method, path string, body []byte) *http.Request {
 
 func TestList_returnsDiagrams(t *testing.T) {
 	s := &fakeDiagramStore{
-		listDiagramsFn: func(_ context.Context, orgID string, _, _ *string) ([]diagrampkg.Diagram, error) {
-			return []diagrampkg.Diagram{{ID: "d1", OrgID: orgID, Name: "Flow"}}, nil
+		listDiagramsFn: func(_ context.Context, orgID string, _ diagrampkg.ListParams) ([]diagrampkg.Diagram, int, error) {
+			return []diagrampkg.Diagram{{ID: "d1", OrgID: orgID, Name: "Flow"}}, 1, nil
 		},
 	}
 	h := New(s, nil, nil, nil)
@@ -144,9 +144,9 @@ func TestList_returnsDiagrams(t *testing.T) {
 func TestList_propagatesFolderIDFilter(t *testing.T) {
 	var capturedFolderID *string
 	s := &fakeDiagramStore{
-		listDiagramsFn: func(_ context.Context, _ string, folderID, _ *string) ([]diagrampkg.Diagram, error) {
-			capturedFolderID = folderID
-			return nil, nil
+		listDiagramsFn: func(_ context.Context, _ string, p diagrampkg.ListParams) ([]diagrampkg.Diagram, int, error) {
+			capturedFolderID = p.FolderID
+			return nil, 0, nil
 		},
 	}
 	h := New(s, nil, nil, nil)
@@ -162,8 +162,8 @@ func TestList_propagatesFolderIDFilter(t *testing.T) {
 
 func TestList_storeError_returns500(t *testing.T) {
 	s := &fakeDiagramStore{
-		listDiagramsFn: func(_ context.Context, _ string, _, _ *string) ([]diagrampkg.Diagram, error) {
-			return nil, storepkg.ErrConflict
+		listDiagramsFn: func(_ context.Context, _ string, _ diagrampkg.ListParams) ([]diagrampkg.Diagram, int, error) {
+			return nil, 0, storepkg.ErrConflict
 		},
 	}
 	h := New(s, nil, nil, nil)

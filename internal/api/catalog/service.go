@@ -18,19 +18,29 @@ import (
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	q := r.URL.Query()
-	var folderID, teamID *string
+	p := catalogpkg.ListParams{
+		SortBy:  q.Get("sortBy"),
+		SortDir: q.Get("sortDir"),
+	}
+	if v := q.Get("limit"); v != "" {
+		p.Limit = httputil.ListLimit(v)
+		p.Offset = httputil.ListOffset(q.Get("offset"))
+	}
 	if v := q.Get("folderId"); v != "" {
-		folderID = &v
+		p.FolderID = &v
 	}
 	if v := q.Get("teamId"); v != "" {
-		teamID = &v
+		p.TeamID = &v
 	}
-	svcs, err := h.store.ListServices(r.Context(), orgID, folderID, teamID)
+	if v := q.Get("search"); v != "" {
+		p.Search = &v
+	}
+	svcs, total, err := h.store.ListServices(r.Context(), orgID, p)
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
 	}
-	httputil.JSON(w, http.StatusOK, map[string]any{"services": svcs})
+	httputil.JSON(w, http.StatusOK, map[string]any{"services": svcs, "total": total})
 }
 
 func (h *Handler) ListStats(w http.ResponseWriter, r *http.Request) {
@@ -66,6 +76,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		Language        string          `json:"language"`
 		FolderID        *string         `json:"folderId"`
 		TeamID          *string         `json:"teamId"`
+		TeamName        string          `json:"teamName"`
 		GitRepoURL      *string         `json:"gitRepoUrl"`
 		JiraProjectURL  *string         `json:"jiraProjectUrl"`
 		SlackChannelURL *string         `json:"slackChannelUrl"`
@@ -78,6 +89,16 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Name == "" {
 		httputil.BadRequest(w, "name is required")
+		return
+	}
+	hasTeamID := body.TeamID != nil && *body.TeamID != ""
+	hasTeamName := body.TeamName != ""
+	if hasTeamID && hasTeamName {
+		httputil.BadRequest(w, "provide either teamId or teamName, not both")
+		return
+	}
+	if !hasTeamID && !hasTeamName {
+		httputil.BadRequest(w, "team is required")
 		return
 	}
 	if body.Slug == "" {
@@ -96,6 +117,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		OrgID:           orgID,
 		FolderID:        body.FolderID,
 		TeamID:          body.TeamID,
+		TeamName:        body.TeamName,
 		Name:            body.Name,
 		Slug:            body.Slug,
 		Description:     body.Description,
@@ -158,6 +180,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		Language        *string         `json:"language"`
 		FolderID        *string         `json:"folderId"`
 		TeamID          *string         `json:"teamId"`
+		TeamName        *string         `json:"teamName"`
 		GitRepoURL      *string         `json:"gitRepoUrl"`
 		JiraProjectURL  *string         `json:"jiraProjectUrl"`
 		SlackChannelURL *string         `json:"slackChannelUrl"`
@@ -193,8 +216,18 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	if body.FolderID != nil {
 		svc.FolderID = body.FolderID
 	}
-	if body.TeamID != nil {
+	hasTeamID := body.TeamID != nil && *body.TeamID != ""
+	hasTeamName := body.TeamName != nil && *body.TeamName != ""
+	if hasTeamID && hasTeamName {
+		httputil.BadRequest(w, "provide either teamId or teamName, not both")
+		return
+	}
+	if hasTeamID {
 		svc.TeamID = body.TeamID
+	}
+	if hasTeamName {
+		svc.TeamID = nil
+		svc.TeamName = *body.TeamName
 	}
 	if body.GitRepoURL != nil {
 		svc.GitRepoURL = body.GitRepoURL

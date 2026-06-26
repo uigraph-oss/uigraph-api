@@ -511,7 +511,7 @@ func scanTestRunResult(row interface{ Scan(...any) error }) (catalog.TestRunResu
 }
 
 func nullableJSON(b []byte) any {
-	if string(b) == "null" {
+	if len(b) == 0 || string(b) == "null" {
 		return nil
 	}
 	return b

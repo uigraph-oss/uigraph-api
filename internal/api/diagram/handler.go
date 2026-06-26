@@ -15,7 +15,7 @@ import (
 type store interface {
 	CreateDiagram(ctx context.Context, d diagrampkg.Diagram) error
 	GetDiagram(ctx context.Context, id string) (*diagrampkg.Diagram, error)
-	ListDiagrams(ctx context.Context, orgID string, folderID, teamID *string) ([]diagrampkg.Diagram, error)
+	ListDiagrams(ctx context.Context, orgID string, p diagrampkg.ListParams) ([]diagrampkg.Diagram, int, error)
 	UpdateDiagram(ctx context.Context, d diagrampkg.Diagram) error
 	SoftDeleteDiagram(ctx context.Context, id, deletedBy string) error
 

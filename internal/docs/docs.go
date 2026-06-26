@@ -28,10 +28,20 @@ type Doc struct {
 	DeletedBy     *string    `json:"deletedBy,omitempty"`
 }
 
+type ListParams struct {
+	FolderID *string
+	TeamID   *string
+	Search   *string
+	SortBy   string
+	SortDir  string
+	Limit    int
+	Offset   int
+}
+
 type Store interface {
 	CreateDoc(ctx context.Context, d Doc) error
 	GetDoc(ctx context.Context, id string) (*Doc, error)
-	ListDocs(ctx context.Context, orgID string, folderID, teamID *string) ([]Doc, error)
+	ListDocs(ctx context.Context, orgID string, p ListParams) ([]Doc, int, error)
 	UpdateDoc(ctx context.Context, d Doc) error
 	SoftDeleteDoc(ctx context.Context, id, deletedBy string) error
 }

@@ -254,5 +254,5 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	// ── MCP Usage + Savings ───────────────────────────────────────────────
 	mcpusageapi.Register(mux, s, scopeFn)
 
-	return mux
+	return authmw.CORS(mux)
 }

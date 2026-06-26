@@ -22,19 +22,30 @@ import (
 // List handles GET /api/v1/orgs/{orgID}/docs
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
-	var folderID, teamID *string
-	if v := strings.TrimSpace(r.URL.Query().Get("folderId")); v != "" {
-		folderID = &v
+	q := r.URL.Query()
+	p := docspkg.ListParams{
+		SortBy:  q.Get("sortBy"),
+		SortDir: q.Get("sortDir"),
 	}
-	if v := strings.TrimSpace(r.URL.Query().Get("teamId")); v != "" {
-		teamID = &v
+	if v := q.Get("limit"); v != "" {
+		p.Limit = httputil.ListLimit(v)
+		p.Offset = httputil.ListOffset(q.Get("offset"))
 	}
-	list, err := h.store.ListDocs(r.Context(), orgID, folderID, teamID)
+	if v := strings.TrimSpace(q.Get("folderId")); v != "" {
+		p.FolderID = &v
+	}
+	if v := strings.TrimSpace(q.Get("teamId")); v != "" {
+		p.TeamID = &v
+	}
+	if v := strings.TrimSpace(q.Get("search")); v != "" {
+		p.Search = &v
+	}
+	list, total, err := h.store.ListDocs(r.Context(), orgID, p)
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
 	}
-	httputil.JSON(w, http.StatusOK, map[string]any{"docs": list})
+	httputil.JSON(w, http.StatusOK, map[string]any{"docs": list, "total": total})
 }
 
 // Get handles GET /api/v1/orgs/{orgID}/docs/{docID}

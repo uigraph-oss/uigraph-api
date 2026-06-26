@@ -7,7 +7,8 @@ import (
 
 type Config struct {
 	// HTTP
-	Addr string // e.g. ":8080"
+	Host string
+	Port string
 
 	// Postgres
 	PostgresURL string
@@ -67,7 +68,8 @@ type Config struct {
 
 func Load() (*Config, error) {
 	c := &Config{
-		Addr:                  env("UIGRAPH_ADDR", ":8080"),
+		Host:                  env("HOST", ""),
+		Port:                  env("PORT", ""),
 		PostgresURL:           env("POSTGRES_URL", ""),
 		RedisURL:              env("REDIS_URL", ""),
 		StorageBackend:        env("STORAGE_BACKEND", "minio"),

@@ -28,19 +28,29 @@ const diagramCacheTTL = time.Hour
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	q := r.URL.Query()
-	var folderID, teamID *string
+	p := diagrampkg.ListParams{
+		SortBy:  q.Get("sortBy"),
+		SortDir: q.Get("sortDir"),
+	}
+	if v := q.Get("limit"); v != "" {
+		p.Limit = httputil.ListLimit(v)
+		p.Offset = httputil.ListOffset(q.Get("offset"))
+	}
 	if v := q.Get("folderId"); v != "" {
-		folderID = &v
+		p.FolderID = &v
 	}
 	if v := q.Get("teamId"); v != "" {
-		teamID = &v
+		p.TeamID = &v
 	}
-	diagrams, err := h.store.ListDiagrams(r.Context(), orgID, folderID, teamID)
+	if v := q.Get("search"); v != "" {
+		p.Search = &v
+	}
+	diagrams, total, err := h.store.ListDiagrams(r.Context(), orgID, p)
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
 	}
-	httputil.JSON(w, http.StatusOK, map[string]any{"diagrams": diagrams})
+	httputil.JSON(w, http.StatusOK, map[string]any{"diagrams": diagrams, "total": total})
 }
 
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {

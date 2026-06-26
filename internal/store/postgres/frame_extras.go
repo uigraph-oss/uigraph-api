@@ -221,10 +221,11 @@ func scanFrameLink(row interface{ Scan(...any) error }) (uimap.FrameLink, error)
 func (d *DB) CreateFocalPointMeta(ctx context.Context, m uimap.FocalPointMeta) error {
 	const q = `
 		INSERT INTO focal_point_meta
-			(id, focal_point_id, org_id, frame_id, component_id, component_link_id,
-			 component_images, component_flow_diagram, component_modal_fields,
-			 created_by, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`
+			(id, focal_point_id, org_id, frame_id, component_id,
+			 component_link_diagram_id, component_link_api_endpoint_id,
+			 component_link_test_pack_id, component_link_service_doc_id,
+			 component_modal_fields, created_by, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`
 	now := time.Now().UTC()
 	if m.CreatedAt.IsZero() {
 		m.CreatedAt = now
@@ -232,12 +233,12 @@ func (d *DB) CreateFocalPointMeta(ctx context.Context, m uimap.FocalPointMeta) e
 	if m.UpdatedAt.IsZero() {
 		m.UpdatedAt = now
 	}
-	images := defaultJSON(m.ComponentImages, "[]")
 	fields := defaultJSON(m.ComponentModalFields, "[]")
 	_, err := d.db.ExecContext(ctx, q,
-		m.ID, m.FocalPointID, m.OrgID, m.FrameID, m.ComponentID, m.ComponentLinkID,
-		images, m.ComponentFlowDiagram, fields,
-		m.CreatedBy, m.CreatedAt, m.UpdatedAt,
+		m.ID, m.FocalPointID, m.OrgID, m.FrameID, m.ComponentID,
+		m.ComponentLinkDiagramID, m.ComponentLinkAPIEndpointID,
+		m.ComponentLinkTestPackID, m.ComponentLinkServiceDocID,
+		fields, m.CreatedBy, m.CreatedAt, m.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("postgres: CreateFocalPointMeta: %w", err)
@@ -247,8 +248,10 @@ func (d *DB) CreateFocalPointMeta(ctx context.Context, m uimap.FocalPointMeta) e
 
 func (d *DB) GetFocalPointMeta(ctx context.Context, id string) (*uimap.FocalPointMeta, error) {
 	const q = `
-		SELECT id, focal_point_id, org_id, frame_id, component_id, component_link_id,
-		       component_images, component_flow_diagram, component_modal_fields,
+		SELECT id, focal_point_id, org_id, frame_id, component_id,
+		       component_link_diagram_id, component_link_api_endpoint_id,
+		       component_link_test_pack_id, component_link_service_doc_id,
+		       component_modal_fields,
 		       created_by, updated_by, created_at, updated_at, deleted_at, deleted_by
 		FROM focal_point_meta WHERE id = $1`
 	m, err := scanFocalPointMeta(d.db.QueryRowContext(ctx, q, id))
@@ -263,8 +266,10 @@ func (d *DB) GetFocalPointMeta(ctx context.Context, id string) (*uimap.FocalPoin
 
 func (d *DB) ListFocalPointMeta(ctx context.Context, focalPointID string) ([]uimap.FocalPointMeta, error) {
 	const q = `
-		SELECT id, focal_point_id, org_id, frame_id, component_id, component_link_id,
-		       component_images, component_flow_diagram, component_modal_fields,
+		SELECT id, focal_point_id, org_id, frame_id, component_id,
+		       component_link_diagram_id, component_link_api_endpoint_id,
+		       component_link_test_pack_id, component_link_service_doc_id,
+		       component_modal_fields,
 		       created_by, updated_by, created_at, updated_at, deleted_at, deleted_by
 		FROM focal_point_meta
 		WHERE focal_point_id = $1 AND deleted_at IS NULL
@@ -286,17 +291,21 @@ func (d *DB) ListFocalPointMeta(ctx context.Context, focalPointID string) ([]uim
 	return out, rows.Err()
 }
 
-func (d *DB) ListFocalPointMetaByComponentLink(ctx context.Context, orgID, componentLinkID string) ([]uimap.FocalPointMeta, error) {
+func (d *DB) ListFocalPointMetaByLink(ctx context.Context, orgID, linkID string) ([]uimap.FocalPointMeta, error) {
 	const q = `
-		SELECT id, focal_point_id, org_id, frame_id, component_id, component_link_id,
-		       component_images, component_flow_diagram, component_modal_fields,
+		SELECT id, focal_point_id, org_id, frame_id, component_id,
+		       component_link_diagram_id, component_link_api_endpoint_id,
+		       component_link_test_pack_id, component_link_service_doc_id,
+		       component_modal_fields,
 		       created_by, updated_by, created_at, updated_at, deleted_at, deleted_by
 		FROM focal_point_meta
-		WHERE org_id = $1 AND component_link_id = $2 AND deleted_at IS NULL
+		WHERE org_id = $1 AND deleted_at IS NULL
+		  AND $2::uuid IN (component_link_diagram_id, component_link_api_endpoint_id,
+		                   component_link_test_pack_id, component_link_service_doc_id)
 		ORDER BY created_at ASC`
-	rows, err := d.db.QueryContext(ctx, q, orgID, componentLinkID)
+	rows, err := d.db.QueryContext(ctx, q, orgID, linkID)
 	if err != nil {
-		return nil, fmt.Errorf("postgres: ListFocalPointMetaByComponentLink: %w", err)
+		return nil, fmt.Errorf("postgres: ListFocalPointMetaByLink: %w", err)
 	}
 	defer rows.Close()
 
@@ -304,7 +313,7 @@ func (d *DB) ListFocalPointMetaByComponentLink(ctx context.Context, orgID, compo
 	for rows.Next() {
 		m, err := scanFocalPointMeta(rows)
 		if err != nil {
-			return nil, fmt.Errorf("postgres: ListFocalPointMetaByComponentLink scan: %w", err)
+			return nil, fmt.Errorf("postgres: ListFocalPointMetaByLink scan: %w", err)
 		}
 		out = append(out, m)
 	}
@@ -314,16 +323,17 @@ func (d *DB) ListFocalPointMetaByComponentLink(ctx context.Context, orgID, compo
 func (d *DB) UpdateFocalPointMeta(ctx context.Context, m uimap.FocalPointMeta) error {
 	const q = `
 		UPDATE focal_point_meta
-		SET component_id=$1, component_link_id=$2, component_images=$3,
-		    component_flow_diagram=$4, component_modal_fields=$5,
-		    updated_by=$6, updated_at=$7
-		WHERE id=$8 AND deleted_at IS NULL`
-	images := defaultJSON(m.ComponentImages, "[]")
+		SET component_id=$1,
+		    component_link_diagram_id=$2, component_link_api_endpoint_id=$3,
+		    component_link_test_pack_id=$4, component_link_service_doc_id=$5,
+		    component_modal_fields=$6, updated_by=$7, updated_at=$8
+		WHERE id=$9 AND deleted_at IS NULL`
 	fields := defaultJSON(m.ComponentModalFields, "[]")
 	_, err := d.db.ExecContext(ctx, q,
-		m.ComponentID, m.ComponentLinkID, images,
-		m.ComponentFlowDiagram, fields,
-		m.UpdatedBy, time.Now().UTC(), m.ID,
+		m.ComponentID,
+		m.ComponentLinkDiagramID, m.ComponentLinkAPIEndpointID,
+		m.ComponentLinkTestPackID, m.ComponentLinkServiceDocID,
+		fields, m.UpdatedBy, time.Now().UTC(), m.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("postgres: UpdateFocalPointMeta: %w", err)
@@ -345,8 +355,10 @@ func (d *DB) SoftDeleteFocalPointMeta(ctx context.Context, id, deletedBy string)
 func scanFocalPointMeta(row interface{ Scan(...any) error }) (uimap.FocalPointMeta, error) {
 	var m uimap.FocalPointMeta
 	return m, row.Scan(
-		&m.ID, &m.FocalPointID, &m.OrgID, &m.FrameID, &m.ComponentID, &m.ComponentLinkID,
-		&m.ComponentImages, &m.ComponentFlowDiagram, &m.ComponentModalFields,
+		&m.ID, &m.FocalPointID, &m.OrgID, &m.FrameID, &m.ComponentID,
+		&m.ComponentLinkDiagramID, &m.ComponentLinkAPIEndpointID,
+		&m.ComponentLinkTestPackID, &m.ComponentLinkServiceDocID,
+		&m.ComponentModalFields,
 		&m.CreatedBy, &m.UpdatedBy,
 		&m.CreatedAt, &m.UpdatedAt, &m.DeletedAt, &m.DeletedBy,
 	)

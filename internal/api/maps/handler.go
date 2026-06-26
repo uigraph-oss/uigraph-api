@@ -12,13 +12,13 @@ import (
 type store interface {
 	CreateMap(ctx context.Context, m uimap.Map) error
 	GetMap(ctx context.Context, id string) (*uimap.Map, error)
-	ListMaps(ctx context.Context, orgID string, folderID, teamID *string) ([]uimap.Map, error)
+	ListMaps(ctx context.Context, orgID string, p uimap.ListParams) ([]uimap.Map, int, error)
 	UpdateMap(ctx context.Context, m uimap.Map) error
 	SoftDeleteMap(ctx context.Context, id, deletedBy string) error
 
 	CreateFrame(ctx context.Context, f uimap.Frame) error
 	GetFrame(ctx context.Context, id string) (*uimap.Frame, error)
-	ListFrames(ctx context.Context, mapID string) ([]uimap.Frame, error)
+	ListFrames(ctx context.Context, mapID string, p uimap.ListParams) ([]uimap.Frame, int, error)
 	UpdateFrame(ctx context.Context, f uimap.Frame) error
 	SoftDeleteFrame(ctx context.Context, id, deletedBy string) error
 
@@ -43,7 +43,7 @@ type store interface {
 	CreateFocalPointMeta(ctx context.Context, m uimap.FocalPointMeta) error
 	GetFocalPointMeta(ctx context.Context, id string) (*uimap.FocalPointMeta, error)
 	ListFocalPointMeta(ctx context.Context, focalPointID string) ([]uimap.FocalPointMeta, error)
-	ListFocalPointMetaByComponentLink(ctx context.Context, orgID, componentLinkID string) ([]uimap.FocalPointMeta, error)
+	ListFocalPointMetaByLink(ctx context.Context, orgID, linkID string) ([]uimap.FocalPointMeta, error)
 	UpdateFocalPointMeta(ctx context.Context, m uimap.FocalPointMeta) error
 	SoftDeleteFocalPointMeta(ctx context.Context, id, deletedBy string) error
 
@@ -101,7 +101,7 @@ func Register(
 	requireScope("maps:write", "DELETE", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}", h.DeleteFocalPoint)
 
 	// Focal Point Meta
-	requireScope("maps:read", "GET", "/api/v1/orgs/{orgID}/focal-point-meta", h.ListMetaByComponentLink)
+	requireScope("maps:read", "GET", "/api/v1/orgs/{orgID}/focal-point-meta", h.ListMetaByLink)
 	requireScope("maps:read", "GET", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta", h.ListMeta)
 	requireScope("maps:write", "POST", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta", h.CreateMeta)
 	requireScope("maps:write", "PUT", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta/{metaID}", h.UpdateMeta)

@@ -225,6 +225,7 @@ func (w *Worker) capture(browser *rod.Browser, job queue.ScreenshotJob) ([]byte,
 			Y:      y,
 			Width:  cw,
 			Height: ch,
+			Scale:  1,
 		},
 		CaptureBeyondViewport: true,
 	})
