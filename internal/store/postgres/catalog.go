@@ -761,6 +761,171 @@ func (d *DB) CopyEndpointsForVersion(ctx context.Context, apiGroupID, versionID,
 	return wrapErr("CopyEndpointsForVersion", err)
 }
 
+// ListAPIEndpointsForVersion returns the endpoints snapshotted into a specific version.
+func (d *DB) ListAPIEndpointsForVersion(ctx context.Context, apiGroupID, versionID string) ([]catalog.APIEndpoint, error) {
+	const q = `
+		SELECT id, api_group_id, api_group_version_id, service_id, org_id,
+		       operation_id, method, path, summary, description,
+		       tags, token_count, parameters, request_body, responses, ord,
+		       created_by, updated_by, created_at, updated_at, deleted_at, deleted_by
+		FROM api_endpoints
+		WHERE api_group_id = $1 AND api_group_version_id = $2 AND deleted_at IS NULL
+		ORDER BY ord ASC, created_at ASC`
+	rows, err := d.db.QueryContext(ctx, q, apiGroupID, versionID)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: ListAPIEndpointsForVersion: %w", err)
+	}
+	defer rows.Close()
+	var out []catalog.APIEndpoint
+	for rows.Next() {
+		e, err := scanAPIEndpoint(rows)
+		if err != nil {
+			return nil, fmt.Errorf("postgres: ListAPIEndpointsForVersion scan: %w", err)
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+// PublishAPIGroupVersion atomically snapshots an API group version. See
+// catalog.PublishAPIGroupVersionInput for the semantics. It returns the created
+// version row with its resolved VersionNumber and Label. The whole sequence runs
+// in one transaction, so a failure never leaves the working copy mutated without
+// a matching snapshot.
+func (d *DB) PublishAPIGroupVersion(ctx context.Context, in catalog.PublishAPIGroupVersionInput) (catalog.APIGroupVersion, error) {
+	v := in.Version
+	tx, err := d.db.BeginTx(ctx, nil)
+	if err != nil {
+		return v, fmt.Errorf("postgres: PublishAPIGroupVersion begin: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op after a successful Commit
+
+	now := time.Now().UTC()
+
+	// 1. Replace working-copy endpoints when importing a new spec.
+	if in.ReplaceEndpoints {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE api_endpoints SET deleted_at=$1, deleted_by=$2
+			 WHERE api_group_id=$3 AND api_group_version_id IS NULL AND deleted_at IS NULL`,
+			now, in.ActorID, in.Group.ID,
+		); err != nil {
+			return v, fmt.Errorf("postgres: PublishAPIGroupVersion clear endpoints: %w", err)
+		}
+		for _, e := range in.NewEndpoints {
+			if err := insertAPIEndpointTx(ctx, tx, e); err != nil {
+				return v, fmt.Errorf("postgres: PublishAPIGroupVersion insert endpoint: %w", err)
+			}
+		}
+	}
+
+	// 2. Assign the next version number atomically when not provided.
+	if v.VersionNumber <= 0 {
+		if err := tx.QueryRowContext(ctx,
+			`SELECT COALESCE(MAX(version_number),0)+1 FROM api_group_versions WHERE api_group_id=$1`,
+			in.Group.ID,
+		).Scan(&v.VersionNumber); err != nil {
+			return v, fmt.Errorf("postgres: PublishAPIGroupVersion next number: %w", err)
+		}
+	}
+
+	// 3. Derive a "v{N}" label when none was supplied, and reflect it on the group.
+	if v.Label == nil {
+		label := fmt.Sprintf("v%d", v.VersionNumber)
+		v.Label = &label
+	}
+	in.Group.Version = *v.Label
+	if v.CreatedAt.IsZero() {
+		v.CreatedAt = now
+	}
+
+	// 4. Insert the immutable version row.
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO api_group_versions
+			(id, api_group_id, version_number, label, spec_key, spec_hash,
+			 is_auto_version, created_by, created_at)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+		v.ID, v.APIGroupID, v.VersionNumber, v.Label,
+		v.SpecKey, v.SpecHash, v.IsAutoVersion, v.CreatedBy, v.CreatedAt,
+	); err != nil {
+		return v, fmt.Errorf("postgres: PublishAPIGroupVersion insert version: %w", err)
+	}
+
+	// 5. Copy the current working-copy endpoints into the version snapshot.
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO api_endpoints
+			(id, api_group_id, api_group_version_id, service_id, org_id,
+			 operation_id, method, path, summary, description,
+			 tags, token_count, parameters, request_body, responses, ord,
+			 created_by, updated_by, created_at, updated_at)
+		 SELECT gen_random_uuid(), api_group_id, $2, service_id, org_id,
+		        operation_id, method, path, summary, description,
+		        tags, token_count, parameters, request_body, responses, ord,
+		        created_by, $3, created_at, NOW()
+		 FROM api_endpoints
+		 WHERE api_group_id = $1 AND api_group_version_id IS NULL AND deleted_at IS NULL`,
+		in.Group.ID, v.ID, in.ActorID,
+	); err != nil {
+		return v, fmt.Errorf("postgres: PublishAPIGroupVersion copy endpoints: %w", err)
+	}
+
+	// 6. Persist the working-copy row (spec key/hash, version label, …).
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE api_groups
+		 SET name=$1, version=$2, label=$3, protocol=$4,
+		     spec_key=$5, spec_hash=$6, updated_by=$7, updated_at=$8
+		 WHERE id=$9 AND deleted_at IS NULL`,
+		in.Group.Name, in.Group.Version, in.Group.Label, in.Group.Protocol,
+		in.Group.SpecKey, in.Group.SpecHash, in.Group.UpdatedBy, now, in.Group.ID,
+	); err != nil {
+		return v, fmt.Errorf("postgres: PublishAPIGroupVersion update group: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return v, fmt.Errorf("postgres: PublishAPIGroupVersion commit: %w", err)
+	}
+	return v, nil
+}
+
+// insertAPIEndpointTx inserts a single working-copy endpoint within a transaction.
+func insertAPIEndpointTx(ctx context.Context, tx *sql.Tx, e catalog.APIEndpoint) error {
+	now := time.Now().UTC()
+	if e.CreatedAt.IsZero() {
+		e.CreatedAt = now
+	}
+	if e.UpdatedAt.IsZero() {
+		e.UpdatedAt = now
+	}
+	tags := e.Tags
+	if tags == nil {
+		tags = []string{}
+	}
+	params := e.Parameters
+	if params == nil {
+		params = json.RawMessage("[]")
+	}
+	reqBody := e.RequestBody
+	if reqBody == nil {
+		reqBody = json.RawMessage("{}")
+	}
+	resps := e.Responses
+	if resps == nil {
+		resps = json.RawMessage("{}")
+	}
+	_, err := tx.ExecContext(ctx,
+		`INSERT INTO api_endpoints
+			(id, api_group_id, api_group_version_id, service_id, org_id,
+			 operation_id, method, path, summary, description,
+			 tags, token_count, parameters, request_body, responses, ord,
+			 created_by, created_at, updated_at)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+		e.ID, e.APIGroupID, e.APIGroupVersionID, e.ServiceID, e.OrgID,
+		e.OperationID, e.Method, e.Path, e.Summary, e.Description,
+		pq.Array(tags), e.TokenCount, params, reqBody, resps, e.Order,
+		e.CreatedBy, e.CreatedAt, e.UpdatedAt,
+	)
+	return err
+}
+
 func scanAPIEndpoint(row interface{ Scan(...any) error }) (catalog.APIEndpoint, error) {
 	var e catalog.APIEndpoint
 	var tags pq.StringArray

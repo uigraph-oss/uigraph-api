@@ -54,7 +54,11 @@ func (h *Handler) CreateAPIGroup(w http.ResponseWriter, r *http.Request) {
 	if body.Protocol == "" {
 		body.Protocol = "REST"
 	}
-	if body.Version == "" {
+	var label *string
+	if body.Version != "" {
+		v := body.Version
+		label = &v
+	} else {
 		body.Version = "v1"
 	}
 
@@ -79,36 +83,20 @@ func (h *Handler) CreateAPIGroup(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt: now,
 	}
 
-	if specContent != "" && h.storage != nil {
-		key := storage.APIGroupSpecKey(orgID, serviceID, id)
-		if err := h.uploadSpec(r.Context(), key, specContent); err != nil {
-			httputil.Error(w, r, err)
-			return
-		}
-		hash := specHash(specContent)
-		g.SpecKey = &key
-		g.SpecHash = &hash
-	}
-
 	if err := h.store.CreateAPIGroup(r.Context(), g); err != nil {
 		httputil.Error(w, r, err)
 		return
 	}
 
-	// Auto-version 1 — created after the parent row is committed.
-	if specContent != "" {
-		hash := specHash(specContent)
-		h.importSpecEndpoints(r.Context(), specContent, body.Protocol, id, serviceID, orgID, p.UserID, now)
-		versionID := uuid.NewString()
-		vKey := storage.APIGroupVersionSpecKey(orgID, serviceID, id, versionID)
-		if err := h.uploadSpec(r.Context(), vKey, specContent); err == nil {
-			if err := h.store.CreateAPIGroupVersion(r.Context(), catalogpkg.APIGroupVersion{
-				ID: versionID, APIGroupID: id, VersionNumber: 1,
-				SpecKey: vKey, SpecHash: hash, IsAutoVersion: true,
-				CreatedBy: p.UserID, CreatedAt: now,
-			}); err == nil {
-				_ = h.store.CopyEndpointsForVersion(r.Context(), id, versionID, p.UserID)
-			}
+	// Auto-version 1 — created atomically after the parent row is committed.
+	if specContent != "" && h.storage != nil {
+		g.UpdatedBy = &p.UserID
+		if _, err := h.publishAPIGroupVersion(r.Context(), publishParams{
+			group: &g, serviceID: serviceID, spec: specContent,
+			label: label, isAuto: true, actorID: p.UserID,
+		}); err != nil {
+			httputil.Error(w, r, err)
+			return
 		}
 	}
 
@@ -176,7 +164,6 @@ func (h *Handler) GetAPIGroupSpec(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UpdateAPIGroup(w http.ResponseWriter, r *http.Request) {
-	orgID := r.PathValue("orgID")
 	serviceID := r.PathValue("serviceID")
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {
@@ -232,31 +219,26 @@ func (h *Handler) UpdateAPIGroup(w http.ResponseWriter, r *http.Request) {
 		if specContent != "" {
 			newHash := specHash(specContent)
 			if g.SpecHash == nil || newHash != *g.SpecHash {
-				key := storage.APIGroupSpecKey(orgID, serviceID, g.ID)
-				if err := h.uploadSpec(r.Context(), key, specContent); err != nil {
+				// New spec → atomically import endpoints and snapshot a version.
+				// publishAPIGroupVersion also persists the working-copy row.
+				var label *string
+				if body.Version != nil && *body.Version != "" {
+					label = body.Version
+				}
+				if _, err := h.publishAPIGroupVersion(r.Context(), publishParams{
+					group: g, serviceID: serviceID, spec: specContent,
+					label: label, isAuto: true, actorID: p.UserID,
+				}); err != nil {
 					httputil.Error(w, r, err)
 					return
 				}
-				g.SpecKey = &key
-				g.SpecHash = &newHash
-
-				latestVer, _ := h.store.LatestAPIGroupVersionNumber(r.Context(), g.ID)
-				versionID := uuid.NewString()
-				vKey := storage.APIGroupVersionSpecKey(orgID, serviceID, g.ID, versionID)
-				h.importSpecEndpoints(r.Context(), specContent, g.Protocol, g.ID, serviceID, orgID, p.UserID, time.Now().UTC())
-				if err := h.uploadSpec(r.Context(), vKey, specContent); err == nil {
-					if err := h.store.CreateAPIGroupVersion(r.Context(), catalogpkg.APIGroupVersion{
-						ID: versionID, APIGroupID: g.ID, VersionNumber: latestVer + 1,
-						SpecKey: vKey, SpecHash: newHash, IsAutoVersion: true,
-						CreatedBy: p.UserID, CreatedAt: time.Now().UTC(),
-					}); err == nil {
-						_ = h.store.CopyEndpointsForVersion(r.Context(), g.ID, versionID, p.UserID)
-					}
-				}
+				httputil.JSON(w, http.StatusOK, g)
+				return
 			}
 		}
 	}
 
+	// No spec change: persist metadata edits only.
 	if err := h.store.UpdateAPIGroup(r.Context(), *g); err != nil {
 		httputil.Error(w, r, err)
 		return
@@ -307,8 +289,10 @@ func (h *Handler) SyncAPIGroup(w http.ResponseWriter, r *http.Request) {
 	if body.Protocol == "" {
 		body.Protocol = "REST"
 	}
-	if body.Version == "" {
-		body.Version = "v1"
+	var label *string
+	if body.Version != "" {
+		v := body.Version
+		label = &v
 	}
 
 	specContent, err := h.resolveSpec(r.Context(), body.Spec, body.SpecAssetID)
@@ -330,39 +314,29 @@ func (h *Handler) SyncAPIGroup(w http.ResponseWriter, r *http.Request) {
 			httputil.Error(w, r, storepkg.ErrNotFound)
 			return
 		}
+		// Unchanged spec → no-op, the existing version stands.
 		if specContent != "" && g.SpecHash != nil && newHash == *g.SpecHash {
 			httputil.JSON(w, http.StatusOK, map[string]any{"apiGroupId": g.ID, "versionCreated": false})
 			return
 		}
+		g.Name = body.Name
+		g.Protocol = body.Protocol
+		g.UpdatedBy = &p.UserID
+		if label != nil {
+			g.Version = *label
+		}
+
 		versionCreated := false
 		if specContent != "" && h.storage != nil {
-			key := storage.APIGroupSpecKey(orgID, serviceID, g.ID)
-			if err := h.uploadSpec(r.Context(), key, specContent); err != nil {
+			if _, err := h.publishAPIGroupVersion(r.Context(), publishParams{
+				group: g, serviceID: serviceID, spec: specContent,
+				label: label, isAuto: true, actorID: p.UserID,
+			}); err != nil {
 				httputil.Error(w, r, err)
 				return
 			}
-			g.SpecKey = &key
-			g.SpecHash = &newHash
-			h.importSpecEndpoints(r.Context(), specContent, body.Protocol, g.ID, serviceID, orgID, p.UserID, time.Now().UTC())
-			latestVer, _ := h.store.LatestAPIGroupVersionNumber(r.Context(), g.ID)
-			versionID := uuid.NewString()
-			vKey := storage.APIGroupVersionSpecKey(orgID, serviceID, g.ID, versionID)
-			if err := h.uploadSpec(r.Context(), vKey, specContent); err == nil {
-				if err := h.store.CreateAPIGroupVersion(r.Context(), catalogpkg.APIGroupVersion{
-					ID: versionID, APIGroupID: g.ID, VersionNumber: latestVer + 1,
-					SpecKey: vKey, SpecHash: newHash, IsAutoVersion: true,
-					CreatedBy: p.UserID, CreatedAt: time.Now().UTC(),
-				}); err == nil {
-					_ = h.store.CopyEndpointsForVersion(r.Context(), g.ID, versionID, p.UserID)
-					versionCreated = true
-				}
-			}
-		}
-		g.Name = body.Name
-		g.Version = body.Version
-		g.Protocol = body.Protocol
-		g.UpdatedBy = &p.UserID
-		if err := h.store.UpdateAPIGroup(r.Context(), *g); err != nil {
+			versionCreated = true
+		} else if err := h.store.UpdateAPIGroup(r.Context(), *g); err != nil {
 			httputil.Error(w, r, err)
 			return
 		}
@@ -375,39 +349,28 @@ func (h *Handler) SyncAPIGroup(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
 	g := catalogpkg.APIGroup{
 		ID: id, ServiceID: serviceID, OrgID: orgID,
-		Name: body.Name, Version: body.Version, Protocol: body.Protocol,
-		CreatedBy: p.UserID, CreatedAt: now, UpdatedAt: now,
+		Name: body.Name, Version: "v1", Protocol: body.Protocol,
+		CreatedBy: p.UserID, UpdatedBy: &p.UserID, CreatedAt: now, UpdatedAt: now,
 	}
-	uploadedSpec := false
-	if specContent != "" && h.storage != nil {
-		key := storage.APIGroupSpecKey(orgID, serviceID, id)
-		if err := h.uploadSpec(r.Context(), key, specContent); err != nil {
-			httputil.Error(w, r, err)
-			return
-		}
-		g.SpecKey = &key
-		g.SpecHash = &newHash
-		uploadedSpec = true
+	if label != nil {
+		g.Version = *label
 	}
 	if err := h.store.CreateAPIGroup(r.Context(), g); err != nil {
 		httputil.Error(w, r, err)
 		return
 	}
-	if uploadedSpec {
-		h.importSpecEndpoints(r.Context(), specContent, body.Protocol, id, serviceID, orgID, p.UserID, now)
-		versionID := uuid.NewString()
-		vKey := storage.APIGroupVersionSpecKey(orgID, serviceID, id, versionID)
-		if err := h.uploadSpec(r.Context(), vKey, specContent); err == nil {
-			if err := h.store.CreateAPIGroupVersion(r.Context(), catalogpkg.APIGroupVersion{
-				ID: versionID, APIGroupID: id, VersionNumber: 1,
-				SpecKey: vKey, SpecHash: newHash, IsAutoVersion: true,
-				CreatedBy: p.UserID, CreatedAt: now,
-			}); err == nil {
-				_ = h.store.CopyEndpointsForVersion(r.Context(), id, versionID, p.UserID)
-			}
+	versionCreated := false
+	if specContent != "" && h.storage != nil {
+		if _, err := h.publishAPIGroupVersion(r.Context(), publishParams{
+			group: &g, serviceID: serviceID, spec: specContent,
+			label: label, isAuto: true, actorID: p.UserID,
+		}); err != nil {
+			httputil.Error(w, r, err)
+			return
 		}
+		versionCreated = true
 	}
-	httputil.JSON(w, http.StatusCreated, map[string]any{"apiGroupId": id, "versionCreated": uploadedSpec})
+	httputil.JSON(w, http.StatusCreated, map[string]any{"apiGroupId": id, "versionCreated": versionCreated})
 }
 
 // ListAPIGroupVersions handles GET /api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/versions

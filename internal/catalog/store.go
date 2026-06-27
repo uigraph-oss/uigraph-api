@@ -37,11 +37,13 @@ type Store interface {
 	GetAPIGroupVersion(ctx context.Context, id string) (*APIGroupVersion, error)
 	ListAPIGroupVersions(ctx context.Context, apiGroupID string) ([]APIGroupVersion, error)
 	LatestAPIGroupVersionNumber(ctx context.Context, apiGroupID string) (int, error)
+	PublishAPIGroupVersion(ctx context.Context, in PublishAPIGroupVersionInput) (APIGroupVersion, error)
 
 	// API endpoints
 	CreateAPIEndpoint(ctx context.Context, e APIEndpoint) error
 	GetAPIEndpoint(ctx context.Context, id string) (*APIEndpoint, error)
 	ListAPIEndpoints(ctx context.Context, apiGroupID string) ([]APIEndpoint, error)
+	ListAPIEndpointsForVersion(ctx context.Context, apiGroupID, versionID string) ([]APIEndpoint, error)
 	UpdateAPIEndpoint(ctx context.Context, e APIEndpoint) error
 	SoftDeleteAPIEndpoint(ctx context.Context, id, deletedBy string) error
 	SoftDeleteCurrentAPIEndpoints(ctx context.Context, apiGroupID, deletedBy string) error

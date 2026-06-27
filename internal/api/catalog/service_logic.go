@@ -42,6 +42,100 @@ func (h *Handler) resolveSpec(ctx context.Context, spec string, specAssetID *str
 	return string(data), nil
 }
 
+func (h *Handler) downloadSpec(ctx context.Context, key string) (string, error) {
+	rc, err := h.storage.Download(ctx, key)
+	if err != nil {
+		return "", err
+	}
+	defer rc.Close()
+	b, err := io.ReadAll(rc)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+// publishParams drives publishAPIGroupVersion.
+type publishParams struct {
+	group     *catalogpkg.APIGroup
+	serviceID string
+	// spec is the spec content written for both the working-copy blob and the new
+	// version snapshot. When empty, the current working-copy blob is reused (the
+	// working copy is snapshotted as-is).
+	spec string
+	// endpoints, when non-nil, become the new working-copy endpoints. When nil and
+	// spec is non-empty, endpoints are parsed from spec.
+	endpoints []catalogpkg.APIEndpoint
+	label     *string
+	isAuto    bool
+	actorID   string
+}
+
+// publishAPIGroupVersion uploads the spec blobs and atomically snapshots a new
+// version (see store.PublishAPIGroupVersion). It mutates p.group in place with the
+// resolved spec key/hash and version label. Any failure surfaces as an error so
+// the working copy is never left mutated without a matching snapshot.
+func (h *Handler) publishAPIGroupVersion(ctx context.Context, p publishParams) (catalogpkg.APIGroupVersion, error) {
+	g := p.group
+	now := time.Now().UTC()
+	versionID := uuid.NewString()
+	vKey := storage.APIGroupVersionSpecKey(g.OrgID, p.serviceID, g.ID, versionID)
+
+	in := catalogpkg.PublishAPIGroupVersionInput{ActorID: p.actorID}
+	in.Version = catalogpkg.APIGroupVersion{
+		ID: versionID, APIGroupID: g.ID, Label: p.label,
+		IsAutoVersion: p.isAuto, CreatedBy: p.actorID, CreatedAt: now,
+	}
+
+	if p.spec != "" {
+		hash := specHash(p.spec)
+		wcKey := storage.APIGroupSpecKey(g.OrgID, p.serviceID, g.ID)
+		if err := h.uploadSpec(ctx, wcKey, p.spec); err != nil {
+			return in.Version, err
+		}
+		if err := h.uploadSpec(ctx, vKey, p.spec); err != nil {
+			return in.Version, err
+		}
+		g.SpecKey, g.SpecHash = &wcKey, &hash
+		in.Version.SpecKey, in.Version.SpecHash = vKey, hash
+
+		eps := p.endpoints
+		if eps == nil {
+			parsed, err := parseSpecEndpointsForProtocol(p.spec, g.Protocol, g.ID, p.serviceID, g.OrgID, p.actorID, now)
+			if err != nil {
+				return in.Version, err
+			}
+			eps = parsed
+		}
+		in.ReplaceEndpoints = true
+		in.NewEndpoints = eps
+	} else {
+		if g.SpecKey == nil || g.SpecHash == nil {
+			return in.Version, fmt.Errorf("api group %s has no spec to version", g.ID)
+		}
+		content, err := h.downloadSpec(ctx, *g.SpecKey)
+		if err != nil {
+			return in.Version, err
+		}
+		if err := h.uploadSpec(ctx, vKey, content); err != nil {
+			return in.Version, err
+		}
+		in.Version.SpecKey, in.Version.SpecHash = vKey, *g.SpecHash
+		if p.endpoints != nil {
+			in.ReplaceEndpoints = true
+			in.NewEndpoints = p.endpoints
+		}
+	}
+
+	in.Group = *g
+	v, err := h.store.PublishAPIGroupVersion(ctx, in)
+	if err != nil {
+		return v, err
+	}
+	g.Version = *v.Label
+	return v, nil
+}
+
 func specHash(s string) string {
 	sum := sha256.Sum256([]byte(s))
 	return fmt.Sprintf("%x", sum)
@@ -67,26 +161,17 @@ func (h *Handler) ensureServiceInOrg(w http.ResponseWriter, r *http.Request, ser
 
 var httpMethods = []string{"get", "post", "put", "delete", "patch", "head", "options", "trace"}
 
-// importSpecEndpoints replaces the current working-copy endpoints for an API group.
-// Versioned snapshot endpoints (api_group_version_id IS NOT NULL) are never touched.
-// The protocol determines which spec format the content is parsed as.
-func (h *Handler) importSpecEndpoints(ctx context.Context, spec, protocol, apiGroupID, serviceID, orgID, actorID string, now time.Time) {
-	var endpoints []catalogpkg.APIEndpoint
-	var err error
+// parseSpecEndpointsForProtocol parses a spec into working-copy endpoints for the
+// given protocol. It performs no I/O so callers can snapshot the result inside a
+// transaction.
+func parseSpecEndpointsForProtocol(spec, protocol, apiGroupID, serviceID, orgID, actorID string, now time.Time) ([]catalogpkg.APIEndpoint, error) {
 	switch normalizeProtocol(protocol) {
 	case "graphql":
-		endpoints, err = parseGraphQLSpecEndpoints(spec, apiGroupID, serviceID, orgID, actorID, now)
+		return parseGraphQLSpecEndpoints(spec, apiGroupID, serviceID, orgID, actorID, now)
 	case "grpc":
-		endpoints, err = parseGrpcSpecEndpoints(spec, apiGroupID, serviceID, orgID, actorID, now)
+		return parseGrpcSpecEndpoints(spec, apiGroupID, serviceID, orgID, actorID, now)
 	default:
-		endpoints, err = parseSpecEndpoints(spec, apiGroupID, serviceID, orgID, actorID, now)
-	}
-	if err != nil || len(endpoints) == 0 {
-		return
-	}
-	_ = h.store.SoftDeleteCurrentAPIEndpoints(ctx, apiGroupID, actorID)
-	for _, e := range endpoints {
-		_ = h.store.CreateAPIEndpoint(ctx, e)
+		return parseSpecEndpoints(spec, apiGroupID, serviceID, orgID, actorID, now)
 	}
 }
 
