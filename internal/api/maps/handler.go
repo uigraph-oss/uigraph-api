@@ -44,6 +44,7 @@ type store interface {
 	GetFocalPointMeta(ctx context.Context, id string) (*uimap.FocalPointMeta, error)
 	ListFocalPointMeta(ctx context.Context, focalPointID string) ([]uimap.FocalPointMeta, error)
 	ListFocalPointMetaByLink(ctx context.Context, orgID, linkID string) ([]uimap.FocalPointMeta, error)
+	ListComponentLinkUsages(ctx context.Context, orgID, linkID string) ([]uimap.ComponentLinkUsage, error)
 	UpdateFocalPointMeta(ctx context.Context, m uimap.FocalPointMeta) error
 	SoftDeleteFocalPointMeta(ctx context.Context, id, deletedBy string) error
 
@@ -102,6 +103,7 @@ func Register(
 
 	// Focal Point Meta
 	requireScope("maps:read", "GET", "/api/v1/orgs/{orgID}/focal-point-meta", h.ListMetaByLink)
+	requireScope("maps:read", "GET", "/api/v1/orgs/{orgID}/component-link-usages", h.ListComponentLinkUsages)
 	requireScope("maps:read", "GET", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta", h.ListMeta)
 	requireScope("maps:write", "POST", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta", h.CreateMeta)
 	requireScope("maps:write", "PUT", "/api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta/{metaID}", h.UpdateMeta)

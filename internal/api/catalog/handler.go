@@ -53,11 +53,14 @@ type store interface {
 	UpdateAPIGroup(ctx context.Context, g catalogpkg.APIGroup) error
 	SoftDeleteAPIGroup(ctx context.Context, id, actorID string) error
 	ListAPIGroupVersions(ctx context.Context, apiGroupID string) ([]catalogpkg.APIGroupVersion, error)
+	GetAPIGroupVersion(ctx context.Context, id string) (*catalogpkg.APIGroupVersion, error)
 	CreateAPIGroupVersion(ctx context.Context, v catalogpkg.APIGroupVersion) error
 	LatestAPIGroupVersionNumber(ctx context.Context, apiGroupID string) (int, error)
+	PublishAPIGroupVersion(ctx context.Context, in catalogpkg.PublishAPIGroupVersionInput) (catalogpkg.APIGroupVersion, error)
 
 	// API Endpoints
 	ListAPIEndpoints(ctx context.Context, apiGroupID string) ([]catalogpkg.APIEndpoint, error)
+	ListAPIEndpointsForVersion(ctx context.Context, apiGroupID, versionID string) ([]catalogpkg.APIEndpoint, error)
 	GetAPIEndpoint(ctx context.Context, id string) (*catalogpkg.APIEndpoint, error)
 	CreateAPIEndpoint(ctx context.Context, e catalogpkg.APIEndpoint) error
 	UpdateAPIEndpoint(ctx context.Context, e catalogpkg.APIEndpoint) error
@@ -162,6 +165,8 @@ func Register(
 	requireScope("services:write", "PUT", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}", h.UpdateAPIGroup)
 	requireScope("services:write", "DELETE", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}", h.DeleteAPIGroup)
 	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/versions", h.ListAPIGroupVersions)
+	requireScope("services:write", "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/versions", h.CreateAPIGroupVersion)
+	requireScope("services:write", "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/versions/{versionID}/restore", h.RestoreAPIGroupVersion)
 	// API endpoints
 	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/endpoints", h.ListAPIEndpoints)
 	requireScope("services:write", "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/endpoints", h.CreateAPIEndpoint)

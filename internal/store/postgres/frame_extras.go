@@ -320,6 +320,45 @@ func (d *DB) ListFocalPointMetaByLink(ctx context.Context, orgID, linkID string)
 	return out, rows.Err()
 }
 
+// ListComponentLinkUsages returns the maps, frames (screens), and focal points
+// that reference linkID through their focal point meta. It walks meta → focal
+// point → frame → map in a single join so callers don't have to fan out.
+func (d *DB) ListComponentLinkUsages(ctx context.Context, orgID, linkID string) ([]uimap.ComponentLinkUsage, error) {
+	const q = `
+		SELECT m.id, m.org_id, m.component_id,
+		       mp.id, mp.name,
+		       fr.id, fr.name, fr.screenshot_asset_id,
+		       fp.id, fp.name, fp.location_x, fp.location_y
+		FROM focal_point_meta m
+		JOIN focal_points fp ON fp.id = m.focal_point_id AND fp.deleted_at IS NULL
+		JOIN frames fr ON fr.id = m.frame_id AND fr.deleted_at IS NULL
+		JOIN maps mp ON mp.id = fr.map_id AND mp.deleted_at IS NULL
+		WHERE m.org_id = $1 AND m.deleted_at IS NULL
+		  AND $2::uuid IN (m.component_link_diagram_id, m.component_link_api_endpoint_id,
+		                   m.component_link_test_pack_id, m.component_link_service_doc_id)
+		ORDER BY mp.name ASC, fr.ord ASC, fp.name ASC`
+	rows, err := d.db.QueryContext(ctx, q, orgID, linkID)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: ListComponentLinkUsages: %w", err)
+	}
+	defer rows.Close()
+
+	var out []uimap.ComponentLinkUsage
+	for rows.Next() {
+		var u uimap.ComponentLinkUsage
+		if err := rows.Scan(
+			&u.MetaID, &u.OrgID, &u.ComponentID,
+			&u.MapID, &u.MapName,
+			&u.FrameID, &u.FrameName, &u.ScreenshotAssetID,
+			&u.FocalPointID, &u.FocalPointName, &u.LocationX, &u.LocationY,
+		); err != nil {
+			return nil, fmt.Errorf("postgres: ListComponentLinkUsages scan: %w", err)
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
 func (d *DB) UpdateFocalPointMeta(ctx context.Context, m uimap.FocalPointMeta) error {
 	const q = `
 		UPDATE focal_point_meta

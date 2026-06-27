@@ -15,8 +15,19 @@ import (
 
 // ── API Endpoints ─────────────────────────────────────────────────────────────
 
+// ListAPIEndpoints returns the working-copy endpoints, or a specific version's
+// snapshot when ?versionId= is supplied.
 func (h *Handler) ListAPIEndpoints(w http.ResponseWriter, r *http.Request) {
-	endpoints, err := h.store.ListAPIEndpoints(r.Context(), r.PathValue("apiGroupID"))
+	apiGroupID := r.PathValue("apiGroupID")
+	var (
+		endpoints []catalogpkg.APIEndpoint
+		err       error
+	)
+	if versionID := r.URL.Query().Get("versionId"); versionID != "" {
+		endpoints, err = h.store.ListAPIEndpointsForVersion(r.Context(), apiGroupID, versionID)
+	} else {
+		endpoints, err = h.store.ListAPIEndpoints(r.Context(), apiGroupID)
+	}
 	if err != nil {
 		httputil.Error(w, r, err)
 		return

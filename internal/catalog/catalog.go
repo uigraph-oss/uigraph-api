@@ -85,6 +85,30 @@ type APIGroupVersion struct {
 	CreatedAt     time.Time `json:"createdAt"`
 }
 
+// PublishAPIGroupVersionInput drives an atomic API-group version snapshot.
+//
+// The entire operation runs in a single transaction: optionally replacing the
+// working-copy endpoints, assigning the next version number, inserting the
+// immutable version row, copying the working-copy endpoints into that version,
+// and updating the api_groups working-copy row. Either all of it commits or none
+// of it does, so the working copy is never mutated without a matching snapshot.
+type PublishAPIGroupVersionInput struct {
+	// Group is the working-copy row to persist (spec key/hash, name, version
+	// label, protocol, updatedBy). Its Version field is overwritten with the
+	// resolved version label.
+	Group APIGroup
+	// ReplaceEndpoints replaces the working-copy endpoints with NewEndpoints
+	// before snapshotting (used when a new spec is imported). When false the
+	// current working copy is snapshotted as-is (explicit publish / restore).
+	ReplaceEndpoints bool
+	NewEndpoints     []APIEndpoint
+	// Version is the snapshot row to insert. VersionNumber <= 0 auto-assigns the
+	// next number (MAX+1). When Label is nil, a "v{N}" label is derived and also
+	// applied to Group.Version.
+	Version APIGroupVersion
+	ActorID string
+}
+
 // ── API Endpoint ──────────────────────────────────────────────────────────────
 
 // APIEndpoint is a single operation within an API group.
