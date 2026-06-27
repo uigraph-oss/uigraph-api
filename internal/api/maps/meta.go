@@ -38,6 +38,22 @@ func (h *Handler) ListMetaByLink(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"meta": metas})
 }
 
+// ListComponentLinkUsages handles GET /api/v1/orgs/{orgID}/component-link-usages?linkId=...
+// It returns the maps, screens, and focal points that reference the given link.
+func (h *Handler) ListComponentLinkUsages(w http.ResponseWriter, r *http.Request) {
+	linkID := r.URL.Query().Get("linkId")
+	if linkID == "" {
+		httputil.BadRequest(w, "linkId is required")
+		return
+	}
+	usages, err := h.store.ListComponentLinkUsages(r.Context(), r.PathValue("orgID"), linkID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{"usages": usages})
+}
+
 // CreateMeta handles POST /api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta
 func (h *Handler) CreateMeta(w http.ResponseWriter, r *http.Request) {
 	fpID := r.PathValue("fpID")

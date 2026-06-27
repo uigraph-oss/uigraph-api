@@ -125,6 +125,25 @@ type FocalPointMeta struct {
 	DeletedBy                  *string         `json:"deletedBy,omitempty"`
 }
 
+// ComponentLinkUsage is an aggregated, read-only view of where a component link
+// (diagram, API endpoint, test pack, or service doc) is referenced. It joins a
+// focal point meta record up to its focal point, frame (screen), and map so a
+// single query answers "where is this used?".
+type ComponentLinkUsage struct {
+	MetaID            string  `json:"metaId"`
+	OrgID             string  `json:"orgId"`
+	ComponentID       string  `json:"componentId"`
+	MapID             string  `json:"mapId"`
+	MapName           string  `json:"mapName"`
+	FrameID           string  `json:"frameId"`
+	FrameName         string  `json:"frameName"`
+	ScreenshotAssetID *string `json:"screenshotAssetId,omitempty"`
+	FocalPointID      string  `json:"focalPointId"`
+	FocalPointName    string  `json:"focalPointName"`
+	LocationX         float64 `json:"locationX"`
+	LocationY         float64 `json:"locationY"`
+}
+
 type FramePosition struct {
 	X float64 `json:"x"`
 	Y float64 `json:"y"`
@@ -185,6 +204,7 @@ type Store interface {
 	GetFocalPointMeta(ctx context.Context, id string) (*FocalPointMeta, error)
 	ListFocalPointMeta(ctx context.Context, focalPointID string) ([]FocalPointMeta, error)
 	ListFocalPointMetaByLink(ctx context.Context, orgID, linkID string) ([]FocalPointMeta, error)
+	ListComponentLinkUsages(ctx context.Context, orgID, linkID string) ([]ComponentLinkUsage, error)
 	UpdateFocalPointMeta(ctx context.Context, m FocalPointMeta) error
 	SoftDeleteFocalPointMeta(ctx context.Context, id, deletedBy string) error
 
