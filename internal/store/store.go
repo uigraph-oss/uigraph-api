@@ -30,6 +30,7 @@ type Store interface {
 	identity.SessionStore
 	identity.ProviderStore
 	identity.ServiceAccountStore
+	identity.FigmaAuthStore
 	org.UserStore
 	org.OrgStore
 	org.MemberStore
