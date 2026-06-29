@@ -62,6 +62,10 @@ type Config struct {
 	// Empty lets chromedp auto-detect chromium/chrome on PATH.
 	ChromiumPath string
 
+	FigmaClientID     string
+	FigmaClientSecret string
+	FigmaRedirectURI  string
+
 	// Migrations
 	MigrationsDir string // path to SQL files; defaults to embedded
 }
@@ -93,6 +97,9 @@ func Load() (*Config, error) {
 		PublicURL:             env("UIGRAPH_PUBLIC_URL", "http://localhost:8080"),
 		FrontendURL:           env("UIGRAPH_FRONTEND_URL", ""),
 		ChromiumPath:          env("UIGRAPH_CHROMIUM_PATH", ""),
+		FigmaClientID:         env("FIGMA_CLIENT_ID", ""),
+		FigmaClientSecret:     env("FIGMA_CLIENT_SECRET", ""),
+		FigmaRedirectURI:      env("FIGMA_REDIRECT_URI", ""),
 		MigrationsDir:         env("MIGRATIONS_DIR", ""),
 	}
 

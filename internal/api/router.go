@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strings"
 
 	authmw "github.com/uigraph/app/internal/middleware"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/uigraph/app/internal/api/component"
 	"github.com/uigraph/app/internal/api/diagram"
 	docsapi "github.com/uigraph/app/internal/api/docs"
+	figmaapi "github.com/uigraph/app/internal/api/figma"
 	"github.com/uigraph/app/internal/api/folder"
 	"github.com/uigraph/app/internal/api/health"
 	llmapi "github.com/uigraph/app/internal/api/llm"
@@ -23,6 +25,8 @@ import (
 	"github.com/uigraph/app/internal/authz"
 	"github.com/uigraph/app/internal/cache"
 	"github.com/uigraph/app/internal/config"
+	"github.com/uigraph/app/internal/crypto"
+	"github.com/uigraph/app/internal/figma"
 	"github.com/uigraph/app/internal/identity"
 	"github.com/uigraph/app/internal/queue"
 	"github.com/uigraph/app/internal/storage"
@@ -235,6 +239,16 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 
 	// ── Docs ──────────────────────────────────────────────────────────────
 	docsapi.Register(mux, s, st, scopeFn)
+
+	figmaRedirect := cfg.FigmaRedirectURI
+	if figmaRedirect == "" {
+		figmaRedirect = strings.TrimRight(cfg.PublicURL, "/") + "/api/v1/figma/callback"
+	}
+	if cipher, err := crypto.NewCipher(cfg.SecretKey); err == nil {
+		figmaClient := figma.New(cfg.FigmaClientID, cfg.FigmaClientSecret, figmaRedirect)
+		figmaH := figmaapi.New(s, figmaClient, cipher, cfg.PublicURL, cfg.FrontendURL)
+		figmaapi.Register(mux, figmaH, protected)
+	}
 
 	// ── Component palettes + icons ────────────────────────────────────────
 	component.Register(mux, s, st, protected, scopeFn)
