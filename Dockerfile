@@ -5,9 +5,6 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /uigraph-api ./cmd/api
 
-# go-rod downloads a glibc Chrome at runtime, so the runtime stage is Debian-based
-# (musl/Alpine can't run the downloaded binary) and ships only Chrome's shared-lib
-# dependencies — not Chrome itself.
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
