@@ -2,18 +2,18 @@ package catalog
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/google/uuid"
 
-	authmw "github.com/uigraph/app/internal/middleware"
 	catalogpkg "github.com/uigraph/app/internal/catalog"
 	"github.com/uigraph/app/internal/httputil"
+	authmw "github.com/uigraph/app/internal/middleware"
 	storepkg "github.com/uigraph/app/internal/store"
 )
-
-// ── Services ──────────────────────────────────────────────────────────────────
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
@@ -135,6 +135,10 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt:       now,
 	}
 	if err := h.store.CreateService(r.Context(), svc); err != nil {
+		if errors.Is(err, storepkg.ErrTeamNotFound) {
+			httputil.BadRequest(w, fmt.Sprintf("team %q does not exist", body.TeamName))
+			return
+		}
 		httputil.Error(w, r, err)
 		return
 	}
@@ -250,6 +254,10 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	svc.UpdatedBy = &p.UserID
 
 	if err := h.store.UpdateService(r.Context(), *svc); err != nil {
+		if errors.Is(err, storepkg.ErrTeamNotFound) {
+			httputil.BadRequest(w, fmt.Sprintf("team %q does not exist", svc.TeamName))
+			return
+		}
 		httputil.Error(w, r, err)
 		return
 	}

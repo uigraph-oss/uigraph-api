@@ -1,6 +1,3 @@
-// Package store defines the aggregate Store interface for the UIGraph application.
-// Domain types and sub-store interfaces live in their own packages (authz, identity, org).
-// The postgres implementation lives in store/postgres.
 package store
 
 import (
@@ -20,11 +17,12 @@ import (
 	"github.com/uigraph/app/internal/uimap"
 )
 
-var ErrNotFound = errors.New("not found")
-var ErrConflict = errors.New("conflict")
+var (
+	ErrNotFound     = errors.New("not found")
+	ErrConflict     = errors.New("conflict")
+	ErrTeamNotFound = errors.New("team not found")
+)
 
-// Store is the single persistence interface passed to the entire application.
-// It composes every domain store interface; the postgres.DB implements all of them.
 type Store interface {
 	authz.RBACStore
 	identity.SessionStore
