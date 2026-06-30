@@ -8,6 +8,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /uigraph-api ./cmd/api
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
+    wget \
     fonts-liberation \
     chromium \
     && rm -rf /var/lib/apt/lists/*
