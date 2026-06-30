@@ -498,10 +498,6 @@ type sessionTokenResponse struct {
 	ExpiresAt time.Time `json:"expiresAt"`
 }
 
-// SessionToken mints a new session token for the already-authenticated user and
-// returns it in the body without setting a cookie. Used by the MCP login broker
-// flow to hand a Bearer token back to a CLI client.
-// POST /api/v1/auth/session-token
 func (h *SessionHandler) SessionToken(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok || p.Kind != identity.PrincipalUser {
