@@ -128,6 +128,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 
 	// Session
 	protected("POST", "/api/v1/auth/logout", sessionH.Logout)
+	protected("POST", "/api/v1/auth/session-token", sessionH.SessionToken)
 	protected("GET", "/api/v1/auth/me", sessionH.Me)
 	protected("GET", "/api/v1/auth/orgs", sessionH.MyOrgs)
 

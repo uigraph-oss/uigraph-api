@@ -14,6 +14,13 @@ import (
 	"time"
 )
 
+// Preview screenshot generation statuses.
+const (
+	PreviewStatusPending = "pending"
+	PreviewStatusSuccess = "success"
+	PreviewStatusFailed  = "failed"
+)
+
 // Diagram is the metadata record stored in Postgres.
 // The actual ReactFlow JSON content lives in object storage.
 type Diagram struct {
@@ -27,6 +34,7 @@ type Diagram struct {
 	ContentTokenCount int        `json:"contentTokenCount"`
 	PreviewAssetID     *string    `json:"previewAssetId,omitempty"`
 	PreviewContentHash *string    `json:"previewContentHash,omitempty"`
+	PreviewStatus      string     `json:"previewStatus"`
 	Source             *string    `json:"source,omitempty"`
 	CreatedBy          string     `json:"createdBy"`
 	UpdatedBy          *string    `json:"updatedBy,omitempty"`
@@ -76,6 +84,7 @@ type Store interface {
 	GetDiagram(ctx context.Context, id string) (*Diagram, error)
 	ListDiagrams(ctx context.Context, orgID string, p ListParams) ([]Diagram, int, error)
 	UpdateDiagram(ctx context.Context, d Diagram) error
+	SetDiagramPreviewStatus(ctx context.Context, id, status string) error
 	SoftDeleteDiagram(ctx context.Context, id, deletedBy string) error
 
 	CreateDiagramVersion(ctx context.Context, v Version) error

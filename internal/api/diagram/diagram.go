@@ -517,6 +517,10 @@ func (h *Handler) enqueueScreenshot(ctx context.Context, orgID, diagramID string
 	}
 	if err := h.queue.EnqueueScreenshot(ctx, queue.ScreenshotJob{OrgID: orgID, DiagramID: diagramID}); err != nil {
 		slog.WarnContext(ctx, "enqueue screenshot job failed", "diagramId", diagramID, "err", err)
+		return
+	}
+	if err := h.store.SetDiagramPreviewStatus(ctx, diagramID, diagrampkg.PreviewStatusPending); err != nil {
+		slog.WarnContext(ctx, "set diagram preview status pending failed", "diagramId", diagramID, "err", err)
 	}
 }
 

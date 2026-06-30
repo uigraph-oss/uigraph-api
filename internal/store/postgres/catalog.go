@@ -14,16 +14,12 @@ import (
 	"github.com/uigraph/app/internal/store"
 )
 
-// ── Services ──────────────────────────────────────────────────────────────────
-
-// resolveTeamID maps a team name to its id within an org. It returns
-// store.ErrNotFound when no team matches, so callers surface a 404.
 func (d *DB) resolveTeamID(ctx context.Context, orgID, name string) (string, error) {
 	const q = `SELECT id FROM teams WHERE org_id = $1 AND name = $2`
 	var id string
 	err := d.db.QueryRowContext(ctx, q, orgID, name).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", store.ErrNotFound
+		return "", store.ErrTeamNotFound
 	}
 	if err != nil {
 		return "", fmt.Errorf("postgres: resolveTeamID: %w", err)
@@ -62,7 +58,8 @@ func (d *DB) CreateService(ctx context.Context, s catalog.Service) error {
 	if labels == nil {
 		labels = []string{}
 	}
-	_, err := d.db.ExecContext(ctx, q,
+	_, err := d.db.ExecContext(
+		ctx, q,
 		s.ID, s.OrgID, s.FolderID, s.TeamID,
 		s.Name, s.Slug, s.Description,
 		s.Status, s.Tier, s.Category, s.Language,
@@ -416,7 +413,8 @@ func (d *DB) UpdateService(ctx context.Context, s catalog.Service) error {
 	if labels == nil {
 		labels = []string{}
 	}
-	_, err := d.db.ExecContext(ctx, q,
+	_, err := d.db.ExecContext(
+		ctx, q,
 		s.Name, s.Slug, s.Description, s.Status, s.Tier, s.Category, s.Language,
 		s.GitRepoURL, s.JiraProjectURL, s.SlackChannelURL, s.LastCommitSha,
 		pq.Array(labels), meta, s.FolderID, s.TeamID,
@@ -458,8 +456,6 @@ func scanService(row interface{ Scan(...any) error }) (catalog.Service, error) {
 	return s, nil
 }
 
-// ── API Groups ────────────────────────────────────────────────────────────────
-
 func (d *DB) CreateAPIGroup(ctx context.Context, g catalog.APIGroup) error {
 	const q = `
 		INSERT INTO api_groups
@@ -473,7 +469,8 @@ func (d *DB) CreateAPIGroup(ctx context.Context, g catalog.APIGroup) error {
 	if g.UpdatedAt.IsZero() {
 		g.UpdatedAt = now
 	}
-	_, err := d.db.ExecContext(ctx, q,
+	_, err := d.db.ExecContext(
+		ctx, q,
 		g.ID, g.ServiceID, g.OrgID,
 		g.Name, g.Version, g.Label, g.Protocol,
 		g.SpecKey, g.SpecHash,
@@ -528,7 +525,8 @@ func (d *DB) UpdateAPIGroup(ctx context.Context, g catalog.APIGroup) error {
 		    spec_key=$5, spec_hash=$6,
 		    updated_by=$7, updated_at=$8
 		WHERE id=$9 AND deleted_at IS NULL`
-	_, err := d.db.ExecContext(ctx, q,
+	_, err := d.db.ExecContext(
+		ctx, q,
 		g.Name, g.Version, g.Label, g.Protocol,
 		g.SpecKey, g.SpecHash,
 		g.UpdatedBy, time.Now().UTC(), g.ID,
@@ -553,8 +551,6 @@ func scanAPIGroup(row interface{ Scan(...any) error }) (catalog.APIGroup, error)
 	)
 }
 
-// ── API Group Versions ────────────────────────────────────────────────────────
-
 func (d *DB) CreateAPIGroupVersion(ctx context.Context, v catalog.APIGroupVersion) error {
 	const q = `
 		INSERT INTO api_group_versions
@@ -564,7 +560,8 @@ func (d *DB) CreateAPIGroupVersion(ctx context.Context, v catalog.APIGroupVersio
 	if v.CreatedAt.IsZero() {
 		v.CreatedAt = time.Now().UTC()
 	}
-	_, err := d.db.ExecContext(ctx, q,
+	_, err := d.db.ExecContext(
+		ctx, q,
 		v.ID, v.APIGroupID, v.VersionNumber, v.Label,
 		v.SpecKey, v.SpecHash, v.IsAutoVersion,
 		v.CreatedBy, v.CreatedAt,
@@ -624,8 +621,6 @@ func (d *DB) LatestAPIGroupVersionNumber(ctx context.Context, apiGroupID string)
 	return n, d.db.QueryRowContext(ctx, q, apiGroupID).Scan(&n)
 }
 
-// ── API Endpoints ─────────────────────────────────────────────────────────────
-
 func (d *DB) CreateAPIEndpoint(ctx context.Context, e catalog.APIEndpoint) error {
 	const q = `
 		INSERT INTO api_endpoints
@@ -666,7 +661,8 @@ func (d *DB) CreateAPIEndpoint(ctx context.Context, e catalog.APIEndpoint) error
 	if exampleResps == nil {
 		exampleResps = json.RawMessage("[]")
 	}
-	_, err := d.db.ExecContext(ctx, q,
+	_, err := d.db.ExecContext(
+		ctx, q,
 		e.ID, e.APIGroupID, e.APIGroupVersionID, e.ServiceID, e.OrgID,
 		e.OperationID, e.Method, e.Path, e.Summary, e.Description,
 		pq.Array(tags), e.TokenCount, params, reqBody, resps, exampleReqs, exampleResps, e.Order,
@@ -693,7 +689,6 @@ func (d *DB) GetAPIEndpoint(ctx context.Context, id string) (*catalog.APIEndpoin
 	return &e, nil
 }
 
-// ListAPIEndpoints returns the current working-copy endpoints (api_group_version_id IS NULL).
 func (d *DB) ListAPIEndpoints(ctx context.Context, apiGroupID string) ([]catalog.APIEndpoint, error) {
 	const q = `
 		SELECT id, api_group_id, api_group_version_id, service_id, org_id,
@@ -732,7 +727,8 @@ func (d *DB) UpdateAPIEndpoint(ctx context.Context, e catalog.APIEndpoint) error
 	if tags == nil {
 		tags = []string{}
 	}
-	_, err := d.db.ExecContext(ctx, q,
+	_, err := d.db.ExecContext(
+		ctx, q,
 		e.OperationID, e.Method, e.Path, e.Summary, e.Description,
 		pq.Array(tags), e.TokenCount, e.Parameters, e.RequestBody, e.Responses,
 		e.ExampleRequests, e.ExampleResponses, e.Order,
@@ -747,8 +743,6 @@ func (d *DB) SoftDeleteAPIEndpoint(ctx context.Context, id, deletedBy string) er
 	return wrapErr("SoftDeleteAPIEndpoint", err)
 }
 
-// SoftDeleteCurrentAPIEndpoints soft-deletes only the working-copy endpoints (api_group_version_id IS NULL).
-// Versioned snapshot endpoints are never touched.
 func (d *DB) SoftDeleteCurrentAPIEndpoints(ctx context.Context, apiGroupID, deletedBy string) error {
 	const q = `UPDATE api_endpoints SET deleted_at=$1, deleted_by=$2
 	            WHERE api_group_id=$3 AND api_group_version_id IS NULL AND deleted_at IS NULL`
@@ -756,7 +750,6 @@ func (d *DB) SoftDeleteCurrentAPIEndpoints(ctx context.Context, apiGroupID, dele
 	return wrapErr("SoftDeleteCurrentAPIEndpoints", err)
 }
 
-// CopyEndpointsForVersion snapshots the current working-copy endpoints into versioned rows.
 func (d *DB) CopyEndpointsForVersion(ctx context.Context, apiGroupID, versionID, actorID string) error {
 	const q = `
 		INSERT INTO api_endpoints
@@ -776,7 +769,6 @@ func (d *DB) CopyEndpointsForVersion(ctx context.Context, apiGroupID, versionID,
 	return wrapErr("CopyEndpointsForVersion", err)
 }
 
-// ListAPIEndpointsForVersion returns the endpoints snapshotted into a specific version.
 func (d *DB) ListAPIEndpointsForVersion(ctx context.Context, apiGroupID, versionID string) ([]catalog.APIEndpoint, error) {
 	const q = `
 		SELECT id, api_group_id, api_group_version_id, service_id, org_id,
@@ -803,24 +795,19 @@ func (d *DB) ListAPIEndpointsForVersion(ctx context.Context, apiGroupID, version
 	return out, rows.Err()
 }
 
-// PublishAPIGroupVersion atomically snapshots an API group version. See
-// catalog.PublishAPIGroupVersionInput for the semantics. It returns the created
-// version row with its resolved VersionNumber and Label. The whole sequence runs
-// in one transaction, so a failure never leaves the working copy mutated without
-// a matching snapshot.
 func (d *DB) PublishAPIGroupVersion(ctx context.Context, in catalog.PublishAPIGroupVersionInput) (catalog.APIGroupVersion, error) {
 	v := in.Version
 	tx, err := d.db.BeginTx(ctx, nil)
 	if err != nil {
 		return v, fmt.Errorf("postgres: PublishAPIGroupVersion begin: %w", err)
 	}
-	defer tx.Rollback() //nolint:errcheck // no-op after a successful Commit
+	defer tx.Rollback()
 
 	now := time.Now().UTC()
 
-	// 1. Replace working-copy endpoints when importing a new spec.
 	if in.ReplaceEndpoints {
-		if _, err := tx.ExecContext(ctx,
+		if _, err := tx.ExecContext(
+			ctx,
 			`UPDATE api_endpoints SET deleted_at=$1, deleted_by=$2
 			 WHERE api_group_id=$3 AND api_group_version_id IS NULL AND deleted_at IS NULL`,
 			now, in.ActorID, in.Group.ID,
@@ -834,9 +821,9 @@ func (d *DB) PublishAPIGroupVersion(ctx context.Context, in catalog.PublishAPIGr
 		}
 	}
 
-	// 2. Assign the next version number atomically when not provided.
 	if v.VersionNumber <= 0 {
-		if err := tx.QueryRowContext(ctx,
+		if err := tx.QueryRowContext(
+			ctx,
 			`SELECT COALESCE(MAX(version_number),0)+1 FROM api_group_versions WHERE api_group_id=$1`,
 			in.Group.ID,
 		).Scan(&v.VersionNumber); err != nil {
@@ -844,7 +831,6 @@ func (d *DB) PublishAPIGroupVersion(ctx context.Context, in catalog.PublishAPIGr
 		}
 	}
 
-	// 3. Derive a "v{N}" label when none was supplied, and reflect it on the group.
 	if v.Label == nil {
 		label := fmt.Sprintf("v%d", v.VersionNumber)
 		v.Label = &label
@@ -854,8 +840,8 @@ func (d *DB) PublishAPIGroupVersion(ctx context.Context, in catalog.PublishAPIGr
 		v.CreatedAt = now
 	}
 
-	// 4. Insert the immutable version row.
-	if _, err := tx.ExecContext(ctx,
+	if _, err := tx.ExecContext(
+		ctx,
 		`INSERT INTO api_group_versions
 			(id, api_group_id, version_number, label, spec_key, spec_hash,
 			 is_auto_version, created_by, created_at)
@@ -866,8 +852,8 @@ func (d *DB) PublishAPIGroupVersion(ctx context.Context, in catalog.PublishAPIGr
 		return v, fmt.Errorf("postgres: PublishAPIGroupVersion insert version: %w", err)
 	}
 
-	// 5. Copy the current working-copy endpoints into the version snapshot.
-	if _, err := tx.ExecContext(ctx,
+	if _, err := tx.ExecContext(
+		ctx,
 		`INSERT INTO api_endpoints
 			(id, api_group_id, api_group_version_id, service_id, org_id,
 			 operation_id, method, path, summary, description,
@@ -886,8 +872,8 @@ func (d *DB) PublishAPIGroupVersion(ctx context.Context, in catalog.PublishAPIGr
 		return v, fmt.Errorf("postgres: PublishAPIGroupVersion copy endpoints: %w", err)
 	}
 
-	// 6. Persist the working-copy row (spec key/hash, version label, …).
-	if _, err := tx.ExecContext(ctx,
+	if _, err := tx.ExecContext(
+		ctx,
 		`UPDATE api_groups
 		 SET name=$1, version=$2, label=$3, protocol=$4,
 		     spec_key=$5, spec_hash=$6, updated_by=$7, updated_at=$8
@@ -904,7 +890,6 @@ func (d *DB) PublishAPIGroupVersion(ctx context.Context, in catalog.PublishAPIGr
 	return v, nil
 }
 
-// insertAPIEndpointTx inserts a single working-copy endpoint within a transaction.
 func insertAPIEndpointTx(ctx context.Context, tx *sql.Tx, e catalog.APIEndpoint) error {
 	now := time.Now().UTC()
 	if e.CreatedAt.IsZero() {
@@ -937,7 +922,8 @@ func insertAPIEndpointTx(ctx context.Context, tx *sql.Tx, e catalog.APIEndpoint)
 	if exampleResps == nil {
 		exampleResps = json.RawMessage("[]")
 	}
-	_, err := tx.ExecContext(ctx,
+	_, err := tx.ExecContext(
+		ctx,
 		`INSERT INTO api_endpoints
 			(id, api_group_id, api_group_version_id, service_id, org_id,
 			 operation_id, method, path, summary, description,
@@ -979,7 +965,6 @@ func scanAPIEndpoint(row interface{ Scan(...any) error }) (catalog.APIEndpoint, 
 	return e, nil
 }
 
-// wrapErr wraps a postgres error with a method name prefix; nil passes through.
 func wrapErr(method string, err error) error {
 	if err == nil {
 		return nil
