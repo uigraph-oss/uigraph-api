@@ -631,9 +631,10 @@ func (d *DB) CreateAPIEndpoint(ctx context.Context, e catalog.APIEndpoint) error
 		INSERT INTO api_endpoints
 			(id, api_group_id, api_group_version_id, service_id, org_id,
 			 operation_id, method, path, summary, description,
-			 tags, token_count, parameters, request_body, responses, ord,
+			 tags, token_count, parameters, request_body, responses,
+			 example_requests, example_responses, ord,
 			 created_by, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`
 	now := time.Now().UTC()
 	if e.CreatedAt.IsZero() {
 		e.CreatedAt = now
@@ -657,10 +658,18 @@ func (d *DB) CreateAPIEndpoint(ctx context.Context, e catalog.APIEndpoint) error
 	if resps == nil {
 		resps = json.RawMessage("{}")
 	}
+	exampleReqs := e.ExampleRequests
+	if exampleReqs == nil {
+		exampleReqs = json.RawMessage("[]")
+	}
+	exampleResps := e.ExampleResponses
+	if exampleResps == nil {
+		exampleResps = json.RawMessage("[]")
+	}
 	_, err := d.db.ExecContext(ctx, q,
 		e.ID, e.APIGroupID, e.APIGroupVersionID, e.ServiceID, e.OrgID,
 		e.OperationID, e.Method, e.Path, e.Summary, e.Description,
-		pq.Array(tags), e.TokenCount, params, reqBody, resps, e.Order,
+		pq.Array(tags), e.TokenCount, params, reqBody, resps, exampleReqs, exampleResps, e.Order,
 		e.CreatedBy, e.CreatedAt, e.UpdatedAt,
 	)
 	return wrapErr("CreateAPIEndpoint", err)
@@ -670,7 +679,8 @@ func (d *DB) GetAPIEndpoint(ctx context.Context, id string) (*catalog.APIEndpoin
 	const q = `
 		SELECT id, api_group_id, api_group_version_id, service_id, org_id,
 		       operation_id, method, path, summary, description,
-		       tags, token_count, parameters, request_body, responses, ord,
+		       tags, token_count, parameters, request_body, responses,
+		       example_requests, example_responses, ord,
 		       created_by, updated_by, created_at, updated_at, deleted_at, deleted_by
 		FROM api_endpoints WHERE id = $1`
 	e, err := scanAPIEndpoint(d.db.QueryRowContext(ctx, q, id))
@@ -688,7 +698,8 @@ func (d *DB) ListAPIEndpoints(ctx context.Context, apiGroupID string) ([]catalog
 	const q = `
 		SELECT id, api_group_id, api_group_version_id, service_id, org_id,
 		       operation_id, method, path, summary, description,
-		       tags, token_count, parameters, request_body, responses, ord,
+		       tags, token_count, parameters, request_body, responses,
+		       example_requests, example_responses, ord,
 		       created_by, updated_by, created_at, updated_at, deleted_at, deleted_by
 		FROM api_endpoints
 		WHERE api_group_id = $1 AND api_group_version_id IS NULL AND deleted_at IS NULL
@@ -713,16 +724,18 @@ func (d *DB) UpdateAPIEndpoint(ctx context.Context, e catalog.APIEndpoint) error
 	const q = `
 		UPDATE api_endpoints
 		SET operation_id=$1, method=$2, path=$3, summary=$4, description=$5,
-		    tags=$6, token_count=$7, parameters=$8, request_body=$9, responses=$10, ord=$11,
-		    updated_by=$12, updated_at=$13
-		WHERE id=$14 AND deleted_at IS NULL`
+		    tags=$6, token_count=$7, parameters=$8, request_body=$9, responses=$10,
+		    example_requests=$11, example_responses=$12, ord=$13,
+		    updated_by=$14, updated_at=$15
+		WHERE id=$16 AND deleted_at IS NULL`
 	tags := e.Tags
 	if tags == nil {
 		tags = []string{}
 	}
 	_, err := d.db.ExecContext(ctx, q,
 		e.OperationID, e.Method, e.Path, e.Summary, e.Description,
-		pq.Array(tags), e.TokenCount, e.Parameters, e.RequestBody, e.Responses, e.Order,
+		pq.Array(tags), e.TokenCount, e.Parameters, e.RequestBody, e.Responses,
+		e.ExampleRequests, e.ExampleResponses, e.Order,
 		e.UpdatedBy, time.Now().UTC(), e.ID,
 	)
 	return wrapErr("UpdateAPIEndpoint", err)
@@ -749,11 +762,13 @@ func (d *DB) CopyEndpointsForVersion(ctx context.Context, apiGroupID, versionID,
 		INSERT INTO api_endpoints
 			(id, api_group_id, api_group_version_id, service_id, org_id,
 			 operation_id, method, path, summary, description,
-			 tags, token_count, parameters, request_body, responses, ord,
+			 tags, token_count, parameters, request_body, responses,
+			 example_requests, example_responses, ord,
 			 created_by, updated_by, created_at, updated_at)
 		SELECT gen_random_uuid(), api_group_id, $2, service_id, org_id,
 		       operation_id, method, path, summary, description,
-		       tags, token_count, parameters, request_body, responses, ord,
+		       tags, token_count, parameters, request_body, responses,
+		       example_requests, example_responses, ord,
 		       created_by, $3, created_at, NOW()
 		FROM api_endpoints
 		WHERE api_group_id = $1 AND api_group_version_id IS NULL AND deleted_at IS NULL`
@@ -766,7 +781,8 @@ func (d *DB) ListAPIEndpointsForVersion(ctx context.Context, apiGroupID, version
 	const q = `
 		SELECT id, api_group_id, api_group_version_id, service_id, org_id,
 		       operation_id, method, path, summary, description,
-		       tags, token_count, parameters, request_body, responses, ord,
+		       tags, token_count, parameters, request_body, responses,
+		       example_requests, example_responses, ord,
 		       created_by, updated_by, created_at, updated_at, deleted_at, deleted_by
 		FROM api_endpoints
 		WHERE api_group_id = $1 AND api_group_version_id = $2 AND deleted_at IS NULL
@@ -855,11 +871,13 @@ func (d *DB) PublishAPIGroupVersion(ctx context.Context, in catalog.PublishAPIGr
 		`INSERT INTO api_endpoints
 			(id, api_group_id, api_group_version_id, service_id, org_id,
 			 operation_id, method, path, summary, description,
-			 tags, token_count, parameters, request_body, responses, ord,
+			 tags, token_count, parameters, request_body, responses,
+			 example_requests, example_responses, ord,
 			 created_by, updated_by, created_at, updated_at)
 		 SELECT gen_random_uuid(), api_group_id, $2, service_id, org_id,
 		        operation_id, method, path, summary, description,
-		        tags, token_count, parameters, request_body, responses, ord,
+		        tags, token_count, parameters, request_body, responses,
+		        example_requests, example_responses, ord,
 		        created_by, $3, created_at, NOW()
 		 FROM api_endpoints
 		 WHERE api_group_id = $1 AND api_group_version_id IS NULL AND deleted_at IS NULL`,
@@ -911,16 +929,25 @@ func insertAPIEndpointTx(ctx context.Context, tx *sql.Tx, e catalog.APIEndpoint)
 	if resps == nil {
 		resps = json.RawMessage("{}")
 	}
+	exampleReqs := e.ExampleRequests
+	if exampleReqs == nil {
+		exampleReqs = json.RawMessage("[]")
+	}
+	exampleResps := e.ExampleResponses
+	if exampleResps == nil {
+		exampleResps = json.RawMessage("[]")
+	}
 	_, err := tx.ExecContext(ctx,
 		`INSERT INTO api_endpoints
 			(id, api_group_id, api_group_version_id, service_id, org_id,
 			 operation_id, method, path, summary, description,
-			 tags, token_count, parameters, request_body, responses, ord,
+			 tags, token_count, parameters, request_body, responses,
+			 example_requests, example_responses, ord,
 			 created_by, created_at, updated_at)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
 		e.ID, e.APIGroupID, e.APIGroupVersionID, e.ServiceID, e.OrgID,
 		e.OperationID, e.Method, e.Path, e.Summary, e.Description,
-		pq.Array(tags), e.TokenCount, params, reqBody, resps, e.Order,
+		pq.Array(tags), e.TokenCount, params, reqBody, resps, exampleReqs, exampleResps, e.Order,
 		e.CreatedBy, e.CreatedAt, e.UpdatedAt,
 	)
 	return err
@@ -929,11 +956,11 @@ func insertAPIEndpointTx(ctx context.Context, tx *sql.Tx, e catalog.APIEndpoint)
 func scanAPIEndpoint(row interface{ Scan(...any) error }) (catalog.APIEndpoint, error) {
 	var e catalog.APIEndpoint
 	var tags pq.StringArray
-	var params, reqBody, resps []byte
+	var params, reqBody, resps, exampleReqs, exampleResps []byte
 	err := row.Scan(
 		&e.ID, &e.APIGroupID, &e.APIGroupVersionID, &e.ServiceID, &e.OrgID,
 		&e.OperationID, &e.Method, &e.Path, &e.Summary, &e.Description,
-		&tags, &e.TokenCount, &params, &reqBody, &resps, &e.Order,
+		&tags, &e.TokenCount, &params, &reqBody, &resps, &exampleReqs, &exampleResps, &e.Order,
 		&e.CreatedBy, &e.UpdatedBy,
 		&e.CreatedAt, &e.UpdatedAt, &e.DeletedAt, &e.DeletedBy,
 	)
@@ -947,6 +974,8 @@ func scanAPIEndpoint(row interface{ Scan(...any) error }) (catalog.APIEndpoint, 
 	e.Parameters = params
 	e.RequestBody = reqBody
 	e.Responses = resps
+	e.ExampleRequests = exampleReqs
+	e.ExampleResponses = exampleResps
 	return e, nil
 }
 

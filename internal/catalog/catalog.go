@@ -129,6 +129,8 @@ type APIEndpoint struct {
 	Parameters         json.RawMessage `json:"parameters"`
 	RequestBody        json.RawMessage `json:"requestBody"`
 	Responses          json.RawMessage `json:"responses"`
+	ExampleRequests    json.RawMessage `json:"exampleRequests"`
+	ExampleResponses   json.RawMessage `json:"exampleResponses"`
 	Order              float64         `json:"order"`
 	CreatedBy          string          `json:"createdBy"`
 	UpdatedBy          *string         `json:"updatedBy,omitempty"`

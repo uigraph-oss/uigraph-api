@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -199,14 +200,41 @@ func parseSpecEndpoints(spec, apiGroupID, serviceID, orgID, actorID string, now 
 	}
 
 	rawPaths, _ := doc["paths"].(map[string]interface{})
+	if rawPaths == nil {
+		return nil, nil
+	}
+
+	pathOrder, methodsByPath, orderErr := parseOpenAPIDocumentOrder(spec)
+	if orderErr != nil {
+		pathOrder = sortedPathKeys(rawPaths)
+		methodsByPath = map[string][]string{}
+	} else {
+		seen := make(map[string]bool, len(pathOrder))
+		for _, path := range pathOrder {
+			seen[path] = true
+		}
+		var extras []string
+		for path := range rawPaths {
+			if !seen[path] {
+				extras = append(extras, path)
+			}
+		}
+		sort.Strings(extras)
+		pathOrder = append(pathOrder, extras...)
+	}
+
 	var endpoints []catalogpkg.APIEndpoint
 	order := 0.0
-	for path, pathItem := range rawPaths {
+	for _, path := range pathOrder {
+		pathItem, ok := rawPaths[path]
+		if !ok {
+			continue
+		}
 		item, ok := pathItem.(map[string]interface{})
 		if !ok {
 			continue
 		}
-		for _, method := range httpMethods {
+		for _, method := range methodsForPathItem(path, item, methodsByPath) {
 			op, ok := item[method].(map[string]interface{})
 			if !ok {
 				continue
@@ -226,8 +254,12 @@ func parseSpecEndpoints(spec, apiGroupID, serviceID, orgID, actorID string, now 
 			}
 
 			params, _ := json.Marshal(op["parameters"])
-			reqBody, _ := json.Marshal(op["requestBody"])
-			responses, _ := json.Marshal(op["responses"])
+			resolvedReqBody := resolveRefsInDoc(doc, op["requestBody"])
+			resolvedResponses := resolveRefsInDoc(doc, op["responses"])
+			normalizedReqBody := normalizeRequestBodyForStorage(resolvedReqBody)
+			normalizedResponses := normalizeResponsesForStorage(resolvedResponses)
+			reqBody, _ := json.Marshal(normalizedReqBody)
+			responses, _ := json.Marshal(normalizedResponses)
 
 			if operationID == "" {
 				operationID = strings.ToUpper(method) + " " + path
@@ -244,10 +276,12 @@ func parseSpecEndpoints(spec, apiGroupID, serviceID, orgID, actorID string, now 
 				Summary:     summary,
 				Description: description,
 				Tags:        tags,
-				Parameters:  params,
-				RequestBody: reqBody,
-				Responses:   responses,
-				Order:       order,
+				Parameters:       params,
+				RequestBody:      reqBody,
+				Responses:        responses,
+				ExampleRequests:  seedExampleSamplesJSON(reqBody),
+				ExampleResponses: seedExampleSamplesJSON(responses),
+				Order:            order,
 				CreatedBy:   actorID,
 				CreatedAt:   now,
 				UpdatedAt:   now,
@@ -289,10 +323,12 @@ func parseGraphQLSpecEndpoints(spec, apiGroupID, serviceID, orgID, actorID strin
 			Path:        op.Signature,
 			Description: op.Description,
 			Tags:        op.Tags,
-			Parameters:  parameters,
-			RequestBody: requestBody,
-			Responses:   responses,
-			Order:       float64(i),
+			Parameters:       parameters,
+			RequestBody:      requestBody,
+			Responses:        responses,
+			ExampleRequests:  seedExampleSamplesJSON(requestBody),
+			ExampleResponses: seedExampleSamplesJSON(responses),
+			Order:            float64(i),
 			CreatedBy:   actorID,
 			CreatedAt:   now,
 			UpdatedAt:   now,
@@ -345,10 +381,12 @@ func parseGrpcSpecEndpoints(spec, apiGroupID, serviceID, orgID, actorID string, 
 			Summary:     m.ProtoSnippet,
 			Description: m.Description,
 			Tags:        m.Tags,
-			Parameters:  grpcMeta,
-			RequestBody: requestExample,
-			Responses:   responseExample,
-			Order:       float64(i),
+			Parameters:       grpcMeta,
+			RequestBody:      requestExample,
+			Responses:        responseExample,
+			ExampleRequests:  seedExampleSamplesJSON(requestExample),
+			ExampleResponses: seedExampleSamplesJSON(responseExample),
+			Order:            float64(i),
 			CreatedBy:   actorID,
 			CreatedAt:   now,
 			UpdatedAt:   now,

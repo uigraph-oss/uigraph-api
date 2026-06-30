@@ -52,10 +52,12 @@ func (h *Handler) CreateAPIEndpoint(w http.ResponseWriter, r *http.Request) {
 		Summary     string          `json:"summary"`
 		Description string          `json:"description"`
 		Tags        []string        `json:"tags"`
-		Parameters  json.RawMessage `json:"parameters"`
-		RequestBody json.RawMessage `json:"requestBody"`
-		Responses   json.RawMessage `json:"responses"`
-		Order       float64         `json:"order"`
+		Parameters        json.RawMessage `json:"parameters"`
+		RequestBody       json.RawMessage `json:"requestBody"`
+		Responses         json.RawMessage `json:"responses"`
+		ExampleRequests   json.RawMessage `json:"exampleRequests"`
+		ExampleResponses  json.RawMessage `json:"exampleResponses"`
+		Order             float64         `json:"order"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -78,10 +80,12 @@ func (h *Handler) CreateAPIEndpoint(w http.ResponseWriter, r *http.Request) {
 		Summary:     body.Summary,
 		Description: body.Description,
 		Tags:        body.Tags,
-		Parameters:  body.Parameters,
-		RequestBody: body.RequestBody,
-		Responses:   body.Responses,
-		Order:       body.Order,
+		Parameters:       normalizeStoredJSON(body.Parameters),
+		RequestBody:      normalizeStoredJSON(body.RequestBody),
+		Responses:        normalizeStoredJSON(body.Responses),
+		ExampleRequests:  normalizeStoredJSON(body.ExampleRequests),
+		ExampleResponses: normalizeStoredJSON(body.ExampleResponses),
+		Order:            body.Order,
 		CreatedBy:   p.UserID,
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -129,10 +133,12 @@ func (h *Handler) UpdateAPIEndpoint(w http.ResponseWriter, r *http.Request) {
 		Summary     *string         `json:"summary"`
 		Description *string         `json:"description"`
 		Tags        []string        `json:"tags"`
-		Parameters  json.RawMessage `json:"parameters"`
-		RequestBody json.RawMessage `json:"requestBody"`
-		Responses   json.RawMessage `json:"responses"`
-		Order       *float64        `json:"order"`
+		Parameters       json.RawMessage `json:"parameters"`
+		RequestBody      json.RawMessage `json:"requestBody"`
+		Responses        json.RawMessage `json:"responses"`
+		ExampleRequests  json.RawMessage `json:"exampleRequests"`
+		ExampleResponses json.RawMessage `json:"exampleResponses"`
+		Order            *float64        `json:"order"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -157,13 +163,19 @@ func (h *Handler) UpdateAPIEndpoint(w http.ResponseWriter, r *http.Request) {
 		e.Tags = body.Tags
 	}
 	if body.Parameters != nil {
-		e.Parameters = body.Parameters
+		e.Parameters = normalizeStoredJSON(body.Parameters)
 	}
 	if body.RequestBody != nil {
-		e.RequestBody = body.RequestBody
+		e.RequestBody = normalizeStoredJSON(body.RequestBody)
 	}
 	if body.Responses != nil {
-		e.Responses = body.Responses
+		e.Responses = normalizeStoredJSON(body.Responses)
+	}
+	if body.ExampleRequests != nil {
+		e.ExampleRequests = normalizeStoredJSON(body.ExampleRequests)
+	}
+	if body.ExampleResponses != nil {
+		e.ExampleResponses = normalizeStoredJSON(body.ExampleResponses)
 	}
 	if body.Order != nil {
 		e.Order = *body.Order
