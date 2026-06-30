@@ -1,8 +1,8 @@
 // Package screenshot runs an in-process worker that regenerates diagram preview
 // thumbnails by rendering the SPA's headless screenshot route via go-rod.
 //
-// The browser binary is downloaded on first use (and cached) rather than bundled
-// into the image. Set UIGRAPH_CHROMIUM_PATH to use a preinstalled browser instead.
+// Docker images ship Chromium via UIGRAPH_CHROMIUM_PATH. When unset, go-rod
+// downloads and caches a browser binary on first use.
 //
 // Auth: the worker mints a short-lived service-account token (scope diagrams:read)
 // per job and injects it as the X-API-Key header on the headless browser, so no

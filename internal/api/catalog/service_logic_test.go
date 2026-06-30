@@ -295,3 +295,46 @@ func TestParseGrpcSpecEndpoints_invalidProtoReturnsError(t *testing.T) {
 		t.Fatal("expected an error for an invalid proto file")
 	}
 }
+
+// ── parseSpecEndpoints / $ref resolution ─────────────────────────────────────
+
+const testOpenAPISpecWithRef = `{
+  "openapi": "3.0.0",
+  "components": {
+    "schemas": {
+      "Order": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "total_amount": {"type": "number"}
+        }
+      }
+    }
+  },
+  "paths": {
+    "/checkout": {
+      "post": {
+        "operationId": "createOrder",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {"$ref": "#/components/schemas/Order"}
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Order created",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Order"}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}`
