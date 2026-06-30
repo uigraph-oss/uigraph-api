@@ -461,6 +461,51 @@ func (h *SessionHandler) MyOrgs(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"orgs": orgs})
 }
 
+type sessionTokenResponse struct {
+	Token     string    `json:"token"`
+	ExpiresAt time.Time `json:"expiresAt"`
+}
+
+// SessionToken mints a new session token for the already-authenticated user and
+// returns it in the body without setting a cookie. Used by the MCP login broker
+// flow to hand a Bearer token back to a CLI client.
+// POST /api/v1/auth/session-token
+func (h *SessionHandler) SessionToken(w http.ResponseWriter, r *http.Request) {
+	p, ok := authmw.PrincipalFromCtx(r.Context())
+	if !ok || p.Kind != identity.PrincipalUser {
+		httputil.Unauthorized(w)
+		return
+	}
+
+	plaintext, hash, err := generateSessionToken()
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+
+	sess := identity.Session{
+		ID:           newID(),
+		UserID:       p.UserID,
+		TokenHash:    hash,
+		UserAgent:    r.UserAgent(),
+		ClientIP:     r.RemoteAddr,
+		CreatedAt:    time.Now().UTC(),
+		ExpiresAt:    time.Now().UTC().Add(30 * 24 * time.Hour),
+		LastActiveAt: time.Now().UTC(),
+		RotatedAt:    time.Now().UTC(),
+		AuthProvider: p.AuthProvider,
+	}
+	if err := h.store.CreateSession(r.Context(), sess); err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+
+	httputil.JSON(w, http.StatusOK, sessionTokenResponse{
+		Token:     plaintext,
+		ExpiresAt: sess.ExpiresAt,
+	})
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 func generateSessionToken() (plaintext, hash string, err error) {
