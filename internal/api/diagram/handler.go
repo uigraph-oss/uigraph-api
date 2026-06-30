@@ -17,6 +17,7 @@ type store interface {
 	GetDiagram(ctx context.Context, id string) (*diagrampkg.Diagram, error)
 	ListDiagrams(ctx context.Context, orgID string, p diagrampkg.ListParams) ([]diagrampkg.Diagram, int, error)
 	UpdateDiagram(ctx context.Context, d diagrampkg.Diagram) error
+	SetDiagramPreviewStatus(ctx context.Context, id, status string) error
 	SoftDeleteDiagram(ctx context.Context, id, deletedBy string) error
 
 	CreateDiagramVersion(ctx context.Context, v diagrampkg.Version) error

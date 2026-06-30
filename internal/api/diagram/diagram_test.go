@@ -47,6 +47,9 @@ func (f *fakeDiagramStore) CreateDiagram(ctx context.Context, d diagrampkg.Diagr
 func (f *fakeDiagramStore) UpdateDiagram(ctx context.Context, d diagrampkg.Diagram) error {
 	return f.updateDiagramFn(ctx, d)
 }
+func (f *fakeDiagramStore) SetDiagramPreviewStatus(ctx context.Context, id, status string) error {
+	return nil
+}
 func (f *fakeDiagramStore) SoftDeleteDiagram(ctx context.Context, id, deletedBy string) error {
 	return f.softDeleteDiagramFn(ctx, id, deletedBy)
 }

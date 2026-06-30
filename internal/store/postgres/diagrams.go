@@ -17,8 +17,8 @@ func (d *DB) CreateDiagram(ctx context.Context, dg diagram.Diagram) error {
 	const q = `
 		INSERT INTO diagrams
 			(id, org_id, folder_id, team_id, name, content_key, content_hash, content_token_count,
-			 preview_asset_id, preview_content_hash, source, created_by, updated_by, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`
+			 preview_asset_id, preview_content_hash, preview_status, source, created_by, updated_by, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`
 	now := time.Now().UTC()
 	if dg.CreatedAt.IsZero() {
 		dg.CreatedAt = now
@@ -26,9 +26,12 @@ func (d *DB) CreateDiagram(ctx context.Context, dg diagram.Diagram) error {
 	if dg.UpdatedAt.IsZero() {
 		dg.UpdatedAt = now
 	}
+	if dg.PreviewStatus == "" {
+		dg.PreviewStatus = diagram.PreviewStatusPending
+	}
 	_, err := d.db.ExecContext(ctx, q,
 		dg.ID, dg.OrgID, dg.FolderID, dg.TeamID, dg.Name, dg.ContentKey, dg.ContentHash, dg.ContentTokenCount,
-		dg.PreviewAssetID, dg.PreviewContentHash, dg.Source, dg.CreatedBy, dg.UpdatedBy, dg.CreatedAt, dg.UpdatedAt,
+		dg.PreviewAssetID, dg.PreviewContentHash, dg.PreviewStatus, dg.Source, dg.CreatedBy, dg.UpdatedBy, dg.CreatedAt, dg.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("postgres: CreateDiagram: %w", err)
@@ -39,7 +42,7 @@ func (d *DB) CreateDiagram(ctx context.Context, dg diagram.Diagram) error {
 func (d *DB) GetDiagram(ctx context.Context, id string) (*diagram.Diagram, error) {
 	const q = `
 		SELECT id, org_id, folder_id, team_id, name, content_key, content_hash, content_token_count,
-		       preview_asset_id, preview_content_hash, source, created_by, updated_by,
+		       preview_asset_id, preview_content_hash, preview_status, source, created_by, updated_by,
 		       created_at, updated_at, deleted_at, deleted_by
 		FROM diagrams WHERE id = $1`
 	dg, err := scanDiagram(d.db.QueryRowContext(ctx, q, id))
@@ -85,7 +88,7 @@ func (d *DB) ListDiagrams(ctx context.Context, orgID string, p diagram.ListParam
 
 	q := `
 		SELECT id, org_id, folder_id, team_id, name, content_key, content_hash, content_token_count,
-		       preview_asset_id, preview_content_hash, source, created_by, updated_by,
+		       preview_asset_id, preview_content_hash, preview_status, source, created_by, updated_by,
 		       created_at, updated_at, deleted_at, deleted_by
 		FROM diagrams` + where + fmt.Sprintf(" ORDER BY %s %s", col, dir)
 	if p.Limit > 0 {
@@ -116,14 +119,23 @@ func (d *DB) UpdateDiagram(ctx context.Context, dg diagram.Diagram) error {
 	const q = `
 		UPDATE diagrams
 		SET name=$1, folder_id=$2, team_id=$3, content_key=$4, content_hash=$5, content_token_count=$6,
-		    preview_asset_id=$7, preview_content_hash=$8, source=$9, updated_by=$10, updated_at=$11
-		WHERE id=$12 AND deleted_at IS NULL`
+		    preview_asset_id=$7, preview_content_hash=$8, preview_status=$9, source=$10, updated_by=$11, updated_at=$12
+		WHERE id=$13 AND deleted_at IS NULL`
 	_, err := d.db.ExecContext(ctx, q,
 		dg.Name, dg.FolderID, dg.TeamID, dg.ContentKey, dg.ContentHash, dg.ContentTokenCount,
-		dg.PreviewAssetID, dg.PreviewContentHash, dg.Source, dg.UpdatedBy, time.Now().UTC(), dg.ID,
+		dg.PreviewAssetID, dg.PreviewContentHash, dg.PreviewStatus, dg.Source, dg.UpdatedBy, time.Now().UTC(), dg.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("postgres: UpdateDiagram: %w", err)
+	}
+	return nil
+}
+
+func (d *DB) SetDiagramPreviewStatus(ctx context.Context, id, status string) error {
+	const q = `UPDATE diagrams SET preview_status=$1 WHERE id=$2 AND deleted_at IS NULL`
+	_, err := d.db.ExecContext(ctx, q, status, id)
+	if err != nil {
+		return fmt.Errorf("postgres: SetDiagramPreviewStatus: %w", err)
 	}
 	return nil
 }
@@ -255,7 +267,7 @@ func scanDiagram(row interface{ Scan(...any) error }) (diagram.Diagram, error) {
 	return dg, row.Scan(
 		&dg.ID, &dg.OrgID, &dg.FolderID, &dg.TeamID, &dg.Name,
 		&dg.ContentKey, &dg.ContentHash, &dg.ContentTokenCount, &dg.PreviewAssetID, &dg.PreviewContentHash,
-		&dg.Source, &dg.CreatedBy, &dg.UpdatedBy,
+		&dg.PreviewStatus, &dg.Source, &dg.CreatedBy, &dg.UpdatedBy,
 		&dg.CreatedAt, &dg.UpdatedAt, &dg.DeletedAt, &dg.DeletedBy,
 	)
 }

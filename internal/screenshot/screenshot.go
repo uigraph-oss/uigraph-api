@@ -45,6 +45,7 @@ const (
 type store interface {
 	GetDiagram(ctx context.Context, id string) (*diagrampkg.Diagram, error)
 	UpdateDiagram(ctx context.Context, d diagrampkg.Diagram) error
+	SetDiagramPreviewStatus(ctx context.Context, id, status string) error
 }
 
 type objectStore interface {
@@ -141,6 +142,14 @@ func (w *Worker) Run(ctx context.Context) {
 }
 
 func (w *Worker) process(browser *rod.Browser, job queue.ScreenshotJob) error {
+	err := w.generate(browser, job)
+	if err != nil {
+		_ = w.store.SetDiagramPreviewStatus(context.Background(), job.DiagramID, diagrampkg.PreviewStatusFailed)
+	}
+	return err
+}
+
+func (w *Worker) generate(browser *rod.Browser, job queue.ScreenshotJob) error {
 	png, err := w.capture(browser, job)
 	if err != nil {
 		return err
@@ -163,6 +172,7 @@ func (w *Worker) process(browser *rod.Browser, job queue.ScreenshotJob) error {
 	hash := sha256Hex(png)
 	dg.PreviewAssetID = &assetID
 	dg.PreviewContentHash = &hash
+	dg.PreviewStatus = diagrampkg.PreviewStatusSuccess
 	if err := w.store.UpdateDiagram(bgCtx, *dg); err != nil {
 		return fmt.Errorf("update diagram: %w", err)
 	}
