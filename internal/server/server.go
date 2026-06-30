@@ -87,11 +87,15 @@ func Run(ctx context.Context, cfg *config.Config) error {
 		}
 	}
 
-	if jobQueue != nil && cfg.FrontendURL != "" {
-		worker := screenshot.New(jobQueue, db, db, storageClient, cacheClient, cfg.FrontendURL, cfg.ChromiumPath)
+	workerURL := cfg.InternalFrontendURL
+	if workerURL == "" {
+		workerURL = cfg.FrontendURL
+	}
+	if jobQueue != nil && workerURL != "" {
+		worker := screenshot.New(jobQueue, db, db, storageClient, cacheClient, workerURL, cfg.ChromiumPath)
 		go worker.Run(ctx)
 	} else {
-		slog.InfoContext(ctx, "screenshot worker disabled — requires REDIS_URL and UIGRAPH_FRONTEND_URL")
+		slog.InfoContext(ctx, "screenshot worker disabled — requires REDIS_URL and one of UIGRAPH_INTERNAL_FRONTEND_URL / UIGRAPH_FRONTEND_URL")
 	}
 
 	bearer := authmw.NewSessionVerifier(db, db)

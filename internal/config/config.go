@@ -55,8 +55,13 @@ type Config struct {
 
 	// FrontendURL is the SPA base URL the backend redirects to after handling an
 	// OAuth callback. When empty it falls back to PublicURL (same-origin prod).
-	// Also used as the base URL the screenshot worker navigates to.
 	FrontendURL string
+
+	// InternalFrontendURL is the SPA base URL the screenshot worker's headless
+	// browser navigates to from inside the network. When empty it falls back to
+	// FrontendURL. Set this when the browser-facing URL is not reachable from the
+	// backend (e.g. localhost in docker-compose).
+	InternalFrontendURL string
 
 	// ChromiumPath overrides the headless browser binary the screenshot worker uses.
 	// Empty lets chromedp auto-detect chromium/chrome on PATH.
@@ -96,6 +101,7 @@ func Load() (*Config, error) {
 		LicenseKey:            env("UIGRAPH_LICENSE_KEY", ""),
 		PublicURL:             env("UIGRAPH_PUBLIC_URL", "http://localhost:8080"),
 		FrontendURL:           env("UIGRAPH_FRONTEND_URL", ""),
+		InternalFrontendURL:   env("UIGRAPH_INTERNAL_FRONTEND_URL", ""),
 		ChromiumPath:          env("UIGRAPH_CHROMIUM_PATH", ""),
 		FigmaClientID:         env("FIGMA_CLIENT_ID", ""),
 		FigmaClientSecret:     env("FIGMA_CLIENT_SECRET", ""),
