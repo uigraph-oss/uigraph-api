@@ -440,7 +440,39 @@ func (h *SessionHandler) Me(w http.ResponseWriter, r *http.Request) {
 // GET /api/v1/auth/orgs
 func (h *SessionHandler) MyOrgs(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
-	if !ok || p.Kind != identity.PrincipalUser {
+	if !ok {
+		httputil.Unauthorized(w)
+		return
+	}
+
+	if p.Kind == identity.PrincipalServiceAccount {
+		sa, err := h.store.GetServiceAccount(r.Context(), p.ServiceAccountID)
+		if err != nil {
+			httputil.Error(w, r, err)
+			return
+		}
+		if sa == nil {
+			httputil.Error(w, r, store.ErrNotFound)
+			return
+		}
+		o, err := h.store.GetOrg(r.Context(), sa.OrgID)
+		if err != nil {
+			httputil.Error(w, r, err)
+			return
+		}
+		if o == nil {
+			httputil.Error(w, r, store.ErrNotFound)
+			return
+		}
+		httputil.JSON(w, http.StatusOK, map[string]any{"orgs": []myOrg{{
+			ID:      o.ID,
+			Name:    o.Name,
+			LogoURL: h.avatarURL(r, o.LogoAssetID),
+		}}})
+		return
+	}
+
+	if p.Kind != identity.PrincipalUser {
 		httputil.Unauthorized(w)
 		return
 	}
