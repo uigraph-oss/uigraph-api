@@ -79,6 +79,20 @@ type store interface {
 	CreateServiceDBVersion(ctx context.Context, v catalogpkg.ServiceDBVersion) error
 	LatestServiceDBVersionNumber(ctx context.Context, dbID string) (int, error)
 
+	// Saved query folders
+	ListSavedQueryFolders(ctx context.Context, serviceDBID string, scope catalogpkg.SavedQueryScope, ownerUserID *string) ([]catalogpkg.SavedQueryFolder, error)
+	GetSavedQueryFolder(ctx context.Context, id string) (*catalogpkg.SavedQueryFolder, error)
+	CreateSavedQueryFolder(ctx context.Context, f catalogpkg.SavedQueryFolder) error
+	SoftDeleteSavedQueryFolder(ctx context.Context, id, actorID string) error
+
+	// Saved queries
+	ListSavedQueries(ctx context.Context, serviceDBID string, scope catalogpkg.SavedQueryScope, ownerUserID *string) ([]catalogpkg.SavedQuery, error)
+	GetSavedQuery(ctx context.Context, id string) (*catalogpkg.SavedQuery, error)
+	CreateSavedQuery(ctx context.Context, q catalogpkg.SavedQuery) error
+	UpdateSavedQuery(ctx context.Context, q catalogpkg.SavedQuery) error
+	SoftDeleteSavedQuery(ctx context.Context, id, actorID string) error
+	UpsertSavedQueryBySourceRef(ctx context.Context, q catalogpkg.SavedQuery) (catalogpkg.SavedQuery, bool, error)
+
 	// Test packs
 	ListTestPacks(ctx context.Context, serviceID string) ([]catalogpkg.TestPack, error)
 	GetTestPack(ctx context.Context, id string) (*catalogpkg.TestPack, error)
@@ -190,6 +204,15 @@ func Register(
 	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs/{dbID}/versions", h.ListDBVersions)
 	requireScope("services:write", "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs/{dbID}/versions", h.CreateDBVersion)
 	requireScope("services:write", "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs/{dbID}/versions/{versionID}/restore", h.RestoreDBVersion)
+	// Saved queries
+	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs/{dbID}/query-folders", h.ListSavedQueryFolders)
+	requireScope("services:write", "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs/{dbID}/query-folders", h.CreateSavedQueryFolder)
+	requireScope("services:write", "DELETE", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs/{dbID}/query-folders/{folderID}", h.DeleteSavedQueryFolder)
+	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs/{dbID}/queries", h.ListSavedQueries)
+	requireScope("services:write", "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs/{dbID}/queries", h.CreateSavedQuery)
+	requireScope("services:write", "PUT", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs/{dbID}/queries/{queryID}", h.UpdateSavedQuery)
+	requireScope("services:write", "DELETE", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs/{dbID}/queries/{queryID}", h.DeleteSavedQuery)
+	requireScope("services:write", "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/dbs/{dbID}/queries/sync", h.SyncSavedQuery)
 	// Test packs/cases/runs
 	requireScope("services:write", "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/test-pack", h.CreateTestPack)
 	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/test-packs", h.ListTestPacks)
