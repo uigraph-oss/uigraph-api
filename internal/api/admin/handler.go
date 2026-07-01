@@ -34,7 +34,15 @@ type overviewResponse struct {
 	TotalOrgs   int `json:"totalOrgs"`
 }
 
-// Overview handles GET /api/v1/server/overview
+// @Summary  Overview
+// @Tags     server
+// @Security BearerAuth
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /server/overview [get]
 func (h *Handler) Overview(w http.ResponseWriter, r *http.Request) {
 	totalUsers, err := h.store.CountAllUsers(r.Context())
 	if err != nil {
@@ -68,7 +76,15 @@ type configResponse struct {
 	EmbeddingModel   string `json:"embeddingModel"`
 }
 
-// Config handles GET /api/v1/server/config
+// @Summary  Config
+// @Tags     server
+// @Security BearerAuth
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /server/config [get]
 func (h *Handler) Config(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, configResponse{
 		StorageBackend:   h.cfg.StorageBackend,

@@ -15,6 +15,18 @@ import (
 	"github.com/uigraph/app/internal/storage"
 )
 
+// ListImages
+// @Summary  ListImages
+// @Tags     diagrams
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    diagramID  path  string  true  "diagramID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/diagrams/{diagramID}/images [get]
 func (h *Handler) ListImages(w http.ResponseWriter, r *http.Request) {
 	images, err := h.store.ListDiagramImages(r.Context(), r.PathValue("diagramID"))
 	if err != nil {
@@ -24,6 +36,19 @@ func (h *Handler) ListImages(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"images": images})
 }
 
+// CreateImage
+// @Summary  CreateImage
+// @Tags     diagrams
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    diagramID  path  string  true  "diagramID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/diagrams/{diagramID}/images [post]
 func (h *Handler) CreateImage(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	diagramID := r.PathValue("diagramID")

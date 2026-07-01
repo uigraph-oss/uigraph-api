@@ -14,6 +14,18 @@ import (
 	"github.com/uigraph/app/internal/storage"
 )
 
+// ListVersions
+// @Summary  ListVersions
+// @Tags     diagrams
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    diagramID  path  string  true  "diagramID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/diagrams/{diagramID}/versions [get]
 func (h *Handler) ListVersions(w http.ResponseWriter, r *http.Request) {
 	versions, err := h.store.ListDiagramVersions(r.Context(), r.PathValue("diagramID"))
 	if err != nil {
@@ -23,6 +35,19 @@ func (h *Handler) ListVersions(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"versions": versions})
 }
 
+// CreateVersion
+// @Summary  CreateVersion
+// @Tags     diagrams
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    diagramID  path  string  true  "diagramID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/diagrams/{diagramID}/versions [post]
 func (h *Handler) CreateVersion(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("diagramID")
 	orgID := r.PathValue("orgID")
@@ -80,6 +105,19 @@ func (h *Handler) CreateVersion(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusCreated, v)
 }
 
+// GetVersionContent
+// @Summary  GetVersionContent
+// @Tags     diagrams
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    diagramID  path  string  true  "diagramID"
+// @Param    versionID  path  string  true  "versionID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/diagrams/{diagramID}/versions/{versionID}/content [get]
 func (h *Handler) GetVersionContent(w http.ResponseWriter, r *http.Request) {
 	v, err := h.store.GetDiagramVersion(r.Context(), r.PathValue("versionID"))
 	if err != nil {
@@ -98,6 +136,20 @@ func (h *Handler) GetVersionContent(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"versionId": v.ID, "content": content})
 }
 
+// RestoreVersion
+// @Summary  RestoreVersion
+// @Tags     diagrams
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    diagramID  path  string  true  "diagramID"
+// @Param    versionID  path  string  true  "versionID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/diagrams/{diagramID}/versions/{versionID}/restore [post]
 func (h *Handler) RestoreVersion(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("diagramID")
 	orgID := r.PathValue("orgID")

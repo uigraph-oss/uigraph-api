@@ -12,6 +12,17 @@ import (
 	storepkg "github.com/uigraph/app/internal/store"
 )
 
+// List
+// @Summary  List
+// @Tags     comments
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/comments [get]
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	resourceID := r.URL.Query().Get("resourceId")
 	if resourceID == "" {
@@ -26,6 +37,18 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"comments": comments})
 }
 
+// Create
+// @Summary  Create
+// @Tags     comments
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/comments [post]
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	p, ok := authmw.PrincipalFromCtx(r.Context())
@@ -66,6 +89,19 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusCreated, c)
 }
 
+// Update
+// @Summary  Update
+// @Tags     comments
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    commentID  path  string  true  "commentID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/comments/{commentID} [put]
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {
@@ -100,6 +136,18 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, c)
 }
 
+// Delete
+// @Summary  Delete
+// @Tags     comments
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    commentID  path  string  true  "commentID"
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/comments/{commentID} [delete]
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {

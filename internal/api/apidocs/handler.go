@@ -1,5 +1,5 @@
-// Package docs provides HTTP handlers for org-level documentation CRUD.
-package docs
+// Package apidocs provides HTTP handlers for org-level documentation CRUD.
+package apidocs
 
 import (
 	"context"

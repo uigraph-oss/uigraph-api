@@ -12,7 +12,18 @@ import (
 	"github.com/uigraph/app/internal/uimap"
 )
 
-// ListLinks handles GET /api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/links
+// @Summary  ListLinks
+// @Tags     maps
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    mapID  path  string  true  "mapID"
+// @Param    frameID  path  string  true  "frameID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/maps/{mapID}/frames/{frameID}/links [get]
 func (h *Handler) ListLinks(w http.ResponseWriter, r *http.Request) {
 	links, err := h.store.ListFrameLinks(r.Context(), r.PathValue("frameID"))
 	if err != nil {
@@ -22,7 +33,19 @@ func (h *Handler) ListLinks(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"links": links})
 }
 
-// CreateLink handles POST /api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/links
+// @Summary  CreateLink
+// @Tags     maps
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    mapID  path  string  true  "mapID"
+// @Param    frameID  path  string  true  "frameID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/maps/{mapID}/frames/{frameID}/links [post]
 func (h *Handler) CreateLink(w http.ResponseWriter, r *http.Request) {
 	frameID := r.PathValue("frameID")
 	orgID := r.PathValue("orgID")
@@ -73,7 +96,20 @@ func (h *Handler) CreateLink(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusCreated, l)
 }
 
-// UpdateLink handles PUT /api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/links/{linkID}
+// @Summary  UpdateLink
+// @Tags     maps
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    mapID  path  string  true  "mapID"
+// @Param    frameID  path  string  true  "frameID"
+// @Param    linkID  path  string  true  "linkID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/maps/{mapID}/frames/{frameID}/links/{linkID} [put]
 func (h *Handler) UpdateLink(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {
@@ -133,7 +169,19 @@ func (h *Handler) UpdateLink(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, l)
 }
 
-// DeleteLink handles DELETE /api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/links/{linkID}
+// @Summary  DeleteLink
+// @Tags     maps
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    mapID  path  string  true  "mapID"
+// @Param    frameID  path  string  true  "frameID"
+// @Param    linkID  path  string  true  "linkID"
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/maps/{mapID}/frames/{frameID}/links/{linkID} [delete]
 func (h *Handler) DeleteLink(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {

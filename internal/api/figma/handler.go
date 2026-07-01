@@ -61,6 +61,16 @@ func (h *Handler) secureCookies() bool {
 	return strings.HasPrefix(h.publicURL, "https://")
 }
 
+// Connect
+// @Summary  Connect
+// @Tags     figma
+// @Security BearerAuth
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /figma/connect [get]
 func (h *Handler) Connect(w http.ResponseWriter, r *http.Request) {
 	if !h.client.Configured() {
 		httputil.JSON(w, http.StatusServiceUnavailable, map[string]string{"code": "not_configured", "message": "Figma integration is not configured"})
@@ -79,6 +89,16 @@ func (h *Handler) Connect(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, h.client.AuthorizeURL(state), http.StatusFound)
 }
 
+// Callback
+// @Summary  Callback
+// @Tags     figma
+// @Security BearerAuth
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /figma/callback [get]
 func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {
@@ -131,6 +151,16 @@ func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) {
 	h.respondPopup(w, true, "")
 }
 
+// Status
+// @Summary  Status
+// @Tags     figma
+// @Security BearerAuth
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /figma/status [get]
 func (h *Handler) Status(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {
@@ -149,6 +179,17 @@ func (h *Handler) Status(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"connected": auth != nil, "configured": true})
 }
 
+// Disconnect
+// @Summary  Disconnect
+// @Tags     figma
+// @Security BearerAuth
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /figma/disconnect [post]
 func (h *Handler) Disconnect(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {
@@ -162,6 +203,16 @@ func (h *Handler) Disconnect(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// NodeInfo
+// @Summary  NodeInfo
+// @Tags     figma
+// @Security BearerAuth
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /figma/node-info [get]
 func (h *Handler) NodeInfo(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {

@@ -10,6 +10,18 @@ import (
 	storepkg "github.com/uigraph/app/internal/store"
 )
 
+// Create
+// @Summary  Create
+// @Tags     components
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/components [post]
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	var body customComponentBody
@@ -39,6 +51,19 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusCreated, componentlib.ToFocalPointComponent(*saved, ""))
 }
 
+// Update
+// @Summary  Update
+// @Tags     components
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    componentID  path  string  true  "componentID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/components/{componentID} [put]
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	id := r.PathValue("componentID")
@@ -77,6 +102,18 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, componentlib.ToFocalPointComponent(*saved, ""))
 }
 
+// Delete
+// @Summary  Delete
+// @Tags     components
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    componentID  path  string  true  "componentID"
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/components/{componentID} [delete]
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	if err := h.store.DeleteComponent(r.Context(), r.PathValue("componentID")); err != nil {
 		httputil.Error(w, r, err)

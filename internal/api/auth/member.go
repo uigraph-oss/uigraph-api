@@ -61,6 +61,16 @@ type updateMemberRequest struct {
 
 // List returns all members of an org with their roles.
 // GET /api/v1/orgs/{orgID}/members
+// @Summary  List
+// @Tags     members
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/members [get]
 func (h *MemberHandler) List(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	members, err := h.members.ListMembers(r.Context(), orgID)
@@ -77,6 +87,17 @@ func (h *MemberHandler) List(w http.ResponseWriter, r *http.Request) {
 
 // Add creates a new user and grants them membership in an org.
 // POST /api/v1/orgs/{orgID}/members
+// @Summary  Add
+// @Tags     members
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/members [post]
 func (h *MemberHandler) Add(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	var req addMemberRequest
@@ -126,6 +147,18 @@ func (h *MemberHandler) Add(w http.ResponseWriter, r *http.Request) {
 
 // UpdateMember updates a member's name, email, org role, and team assignment.
 // PUT /api/v1/orgs/{orgID}/members/{userID}
+// @Summary  UpdateMember
+// @Tags     members
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    userID  path  string  true  "userID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/members/{userID} [put]
 func (h *MemberHandler) UpdateMember(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	userID := r.PathValue("userID")
@@ -193,6 +226,17 @@ func (h *MemberHandler) UpdateMember(w http.ResponseWriter, r *http.Request) {
 
 // Remove revokes a user's membership.
 // DELETE /api/v1/orgs/{orgID}/members/{userID}
+// @Summary  Remove
+// @Tags     members
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    userID  path  string  true  "userID"
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/members/{userID} [delete]
 func (h *MemberHandler) Remove(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	userID := r.PathValue("userID")

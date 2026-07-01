@@ -12,7 +12,16 @@ import (
 	"github.com/uigraph/app/internal/uimap"
 )
 
-// ListMaps handles GET /api/v1/orgs/{orgID}/maps
+// @Summary  ListMaps
+// @Tags     maps
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/maps [get]
 func (h *Handler) ListMaps(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	q := r.URL.Query()
@@ -41,7 +50,17 @@ func (h *Handler) ListMaps(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"maps": maps, "total": total})
 }
 
-// CreateMap handles POST /api/v1/orgs/{orgID}/maps
+// @Summary  CreateMap
+// @Tags     maps
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/maps [post]
 func (h *Handler) CreateMap(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	p, ok := authmw.PrincipalFromCtx(r.Context())
@@ -85,7 +104,17 @@ func (h *Handler) CreateMap(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusCreated, m)
 }
 
-// GetMap handles GET /api/v1/orgs/{orgID}/maps/{mapID}
+// @Summary  GetMap
+// @Tags     maps
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    mapID  path  string  true  "mapID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/maps/{mapID} [get]
 func (h *Handler) GetMap(w http.ResponseWriter, r *http.Request) {
 	m, err := h.store.GetMap(r.Context(), r.PathValue("mapID"))
 	if err != nil {
@@ -99,7 +128,18 @@ func (h *Handler) GetMap(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, m)
 }
 
-// UpdateMap handles PUT /api/v1/orgs/{orgID}/maps/{mapID}
+// @Summary  UpdateMap
+// @Tags     maps
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    mapID  path  string  true  "mapID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/maps/{mapID} [put]
 func (h *Handler) UpdateMap(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {
@@ -152,7 +192,17 @@ func (h *Handler) UpdateMap(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, m)
 }
 
-// DeleteMap handles DELETE /api/v1/orgs/{orgID}/maps/{mapID}
+// @Summary  DeleteMap
+// @Tags     maps
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    mapID  path  string  true  "mapID"
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/maps/{mapID} [delete]
 func (h *Handler) DeleteMap(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {

@@ -36,6 +36,18 @@ func Register(
 	protected("POST", "/api/v1/orgs/{orgID}/assets", h.CreateUpload)
 }
 
+// CreateUpload
+// @Summary  CreateUpload
+// @Tags     assets
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/assets [post]
 func (h *Handler) CreateUpload(w http.ResponseWriter, r *http.Request) {
 	assetID := storage.NewFileAssetID()
 	url, err := h.storage.PresignPutURL(r.Context(), storage.AssetKey(assetID))
@@ -49,7 +61,16 @@ func (h *Handler) CreateUpload(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Resolve handles GET /api/v1/orgs/{orgID}/assets/urls?ids=a,b,c
+// @Summary  Resolve
+// @Tags     assets
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/assets/urls [get]
 func (h *Handler) Resolve(w http.ResponseWriter, r *http.Request) {
 	raw := r.URL.Query().Get("ids")
 	if raw == "" {

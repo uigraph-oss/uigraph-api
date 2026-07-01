@@ -13,6 +13,18 @@ import (
 	storepkg "github.com/uigraph/app/internal/store"
 )
 
+// ListTestPacks
+// @Summary  ListTestPacks
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/test-packs [get]
 func (h *Handler) ListTestPacks(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	if ok := h.ensureServiceInOrg(w, r, serviceID); !ok {
@@ -26,6 +38,19 @@ func (h *Handler) ListTestPacks(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"testPacks": packs})
 }
 
+// CreateTestPack
+// @Summary  CreateTestPack
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/test-pack [post]
 func (h *Handler) CreateTestPack(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	orgID := r.PathValue("orgID")
@@ -71,6 +96,20 @@ func (h *Handler) CreateTestPack(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusCreated, pack)
 }
 
+// UpdateTestPack
+// @Summary  UpdateTestPack
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    testPackID  path  string  true  "testPackID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/test-pack/{testPackID} [post]
 func (h *Handler) UpdateTestPack(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	testPackID := r.PathValue("testPackID")
@@ -113,6 +152,19 @@ func (h *Handler) UpdateTestPack(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, pack)
 }
 
+// DeleteTestPack
+// @Summary  DeleteTestPack
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    testPackID  path  string  true  "testPackID"
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/test-pack/{testPackID} [delete]
 func (h *Handler) DeleteTestPack(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	testPackID := r.PathValue("testPackID")
@@ -140,6 +192,18 @@ func (h *Handler) DeleteTestPack(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// ListTestCases
+// @Summary  ListTestCases
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/test-cases [get]
 func (h *Handler) ListTestCases(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	if ok := h.ensureServiceInOrg(w, r, serviceID); !ok {
@@ -157,6 +221,19 @@ func (h *Handler) ListTestCases(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"testCases": cases})
 }
 
+// CreateTestCase
+// @Summary  CreateTestCase
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/test-case [post]
 func (h *Handler) CreateTestCase(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	orgID := r.PathValue("orgID")
@@ -207,6 +284,20 @@ func (h *Handler) CreateTestCase(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusCreated, tc)
 }
 
+// UpdateTestCase
+// @Summary  UpdateTestCase
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    testCaseID  path  string  true  "testCaseID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/test-case/{testCaseID} [post]
 func (h *Handler) UpdateTestCase(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	testCaseID := r.PathValue("testCaseID")
@@ -302,6 +393,19 @@ func (h *Handler) UpdateTestCase(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, tc)
 }
 
+// DeleteTestCase
+// @Summary  DeleteTestCase
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    testCaseID  path  string  true  "testCaseID"
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/test-case/{testCaseID} [delete]
 func (h *Handler) DeleteTestCase(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	testCaseID := r.PathValue("testCaseID")
@@ -329,6 +433,19 @@ func (h *Handler) DeleteTestCase(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// CreateTestRun
+// @Summary  CreateTestRun
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/test-run [post]
 func (h *Handler) CreateTestRun(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	orgID := r.PathValue("orgID")
@@ -372,6 +489,19 @@ func (h *Handler) CreateTestRun(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusCreated, tr)
 }
 
+// GetTestRun
+// @Summary  GetTestRun
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    testRunID  path  string  true  "testRunID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/test-run/{testRunID} [get]
 func (h *Handler) GetTestRun(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	testRunID := r.PathValue("testRunID")
@@ -390,6 +520,18 @@ func (h *Handler) GetTestRun(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, tr)
 }
 
+// ListTestRuns
+// @Summary  ListTestRuns
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/test-runs [get]
 func (h *Handler) ListTestRuns(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	if ok := h.ensureServiceInOrg(w, r, serviceID); !ok {
@@ -407,6 +549,18 @@ func (h *Handler) ListTestRuns(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"testRuns": runs})
 }
 
+// ListTestRunsSummary
+// @Summary  ListTestRunsSummary
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/test-runs-summary [get]
 func (h *Handler) ListTestRunsSummary(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	if ok := h.ensureServiceInOrg(w, r, serviceID); !ok {
@@ -444,6 +598,20 @@ func (h *Handler) ListTestRunsSummary(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"testRunsSummary": summary})
 }
 
+// UpdateTestRun
+// @Summary  UpdateTestRun
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    testRunID  path  string  true  "testRunID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/test-run/{testRunID} [post]
 func (h *Handler) UpdateTestRun(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	testRunID := r.PathValue("testRunID")
@@ -492,6 +660,19 @@ func (h *Handler) UpdateTestRun(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, tr)
 }
 
+// CreateTestRunResult
+// @Summary  CreateTestRunResult
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/test-run-result [post]
 func (h *Handler) CreateTestRunResult(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	orgID := r.PathValue("orgID")
@@ -527,6 +708,18 @@ func (h *Handler) CreateTestRunResult(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusCreated, rr)
 }
 
+// ListTestRunResults
+// @Summary  ListTestRunResults
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/test-run-results [get]
 func (h *Handler) ListTestRunResults(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	if ok := h.ensureServiceInOrg(w, r, serviceID); !ok {
@@ -545,6 +738,20 @@ func (h *Handler) ListTestRunResults(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"testRunResults": results})
 }
 
+// UpdateTestRunResult
+// @Summary  UpdateTestRunResult
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    testRunResultID  path  string  true  "testRunResultID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/test-run-result/{testRunResultID} [post]
 func (h *Handler) UpdateTestRunResult(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	resultID := r.PathValue("testRunResultID")

@@ -77,6 +77,16 @@ type updateOrgRequest struct {
 
 // List returns all orgs visible to the caller.
 // GET /api/v1/orgs
+// @Summary  List
+// @Tags     orgs
+// @Security BearerAuth
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs [get]
+// @Router   /server/orgs [get]
 func (h *OrgHandler) List(w http.ResponseWriter, r *http.Request) {
 	orgs, err := h.store.ListOrgs(r.Context())
 	if err != nil {
@@ -93,6 +103,17 @@ func (h *OrgHandler) List(w http.ResponseWriter, r *http.Request) {
 // Create provisions a new org. Any authenticated user may create one; the
 // creating user becomes the org's first admin.
 // POST /api/v1/orgs
+// @Summary  Create
+// @Tags     orgs
+// @Security BearerAuth
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs [post]
+// @Router   /server/orgs [post]
 func (h *OrgHandler) Create(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {
@@ -144,6 +165,17 @@ func allScopeStrings() []string {
 
 // Get returns a single org by ID.
 // GET /api/v1/orgs/{orgID}
+// @Summary  Get
+// @Tags     orgs
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID} [get]
+// @Router   /server/orgs/{orgID} [get]
 func (h *OrgHandler) Get(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	o, err := h.store.GetOrg(r.Context(), orgID)
@@ -160,6 +192,18 @@ func (h *OrgHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 // Update changes an org's name or disabled state.
 // PUT /api/v1/orgs/{orgID}
+// @Summary  Update
+// @Tags     orgs
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID} [put]
+// @Router   /server/orgs/{orgID} [put]
 func (h *OrgHandler) Update(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	var req updateOrgRequest
@@ -192,6 +236,17 @@ func (h *OrgHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 // Delete removes an org and all its data.
 // DELETE /api/v1/orgs/{orgID}
+// @Summary  Delete
+// @Tags     orgs
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID} [delete]
+// @Router   /server/orgs/{orgID} [delete]
 func (h *OrgHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	if err := h.store.DeleteOrg(r.Context(), orgID); err != nil {

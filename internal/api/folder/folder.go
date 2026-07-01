@@ -12,7 +12,16 @@ import (
 	storepkg "github.com/uigraph/app/internal/store"
 )
 
-// List handles GET /api/v1/orgs/{orgID}/folders?type=
+// @Summary  List folders
+// @Tags     folders
+// @Security BearerAuth
+// @Param    orgID  path      string  true   "Org ID"
+// @Param    type   query     string  false  "Filter by folder type"
+// @Success  200    {object}  map[string]interface{}  "envelope: {folders: []folder.Folder}"
+// @Failure  401    {object}  httputil.errorBody
+// @Failure  403    {object}  httputil.errorBody
+// @Failure  500    {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/folders [get]
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	var t *folder.Type
@@ -28,7 +37,17 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"folders": folders})
 }
 
-// Create handles POST /api/v1/orgs/{orgID}/folders
+// @Summary  Create a folder
+// @Tags     folders
+// @Security BearerAuth
+// @Param    orgID  path      string  true  "Org ID"
+// @Param    body   body      object  true  "Folder fields: name, type, parentId, teamId, order"
+// @Success  201    {object}  folder.Folder
+// @Failure  400    {object}  httputil.errorBody
+// @Failure  401    {object}  httputil.errorBody
+// @Failure  403    {object}  httputil.errorBody
+// @Failure  500    {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/folders [post]
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	p, ok := authmw.PrincipalFromCtx(r.Context())
@@ -73,7 +92,16 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusCreated, f)
 }
 
-// Get handles GET /api/v1/orgs/{orgID}/folders/{folderID}
+// @Summary  Get a folder
+// @Tags     folders
+// @Security BearerAuth
+// @Param    orgID     path      string  true  "Org ID"
+// @Param    folderID  path      string  true  "Folder ID"
+// @Success  200       {object}  folder.Folder
+// @Failure  401       {object}  httputil.errorBody
+// @Failure  403       {object}  httputil.errorBody
+// @Failure  404       {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/folders/{folderID} [get]
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	f, err := h.store.GetFolder(r.Context(), r.PathValue("folderID"))
 	if err != nil {
@@ -87,7 +115,18 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, f)
 }
 
-// Update handles PUT /api/v1/orgs/{orgID}/folders/{folderID}
+// @Summary  Update a folder
+// @Tags     folders
+// @Security BearerAuth
+// @Param    orgID     path      string  true  "Org ID"
+// @Param    folderID  path      string  true  "Folder ID"
+// @Param    body      body      object  true  "Updatable fields: name, parentId, teamId, order"
+// @Success  200       {object}  folder.Folder
+// @Failure  400       {object}  httputil.errorBody
+// @Failure  401       {object}  httputil.errorBody
+// @Failure  403       {object}  httputil.errorBody
+// @Failure  404       {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/folders/{folderID} [put]
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	existing, err := h.store.GetFolder(r.Context(), r.PathValue("folderID"))
 	if err != nil {
@@ -129,7 +168,15 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, existing)
 }
 
-// Delete handles DELETE /api/v1/orgs/{orgID}/folders/{folderID}
+// @Summary  Delete a folder
+// @Tags     folders
+// @Security BearerAuth
+// @Param    orgID     path  string  true  "Org ID"
+// @Param    folderID  path  string  true  "Folder ID"
+// @Success  204       "No Content"
+// @Failure  401       {object}  httputil.errorBody
+// @Failure  403       {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/folders/{folderID} [delete]
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {

@@ -11,6 +11,13 @@ import (
 	"github.com/uigraph/app/internal/server"
 )
 
+// @title                       uigraph API
+// @version                     1.0
+// @description                 REST API for uigraph.
+// @BasePath                    /api/v1
+// @securityDefinitions.apikey  BearerAuth
+// @in                          header
+// @name                        Authorization
 func main() {
 	cfg, err := config.Load()
 	if err != nil {

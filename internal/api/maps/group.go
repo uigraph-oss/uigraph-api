@@ -12,7 +12,18 @@ import (
 	"github.com/uigraph/app/internal/uimap"
 )
 
-// ListGroups handles GET /api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/groups
+// @Summary  ListGroups
+// @Tags     maps
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    mapID  path  string  true  "mapID"
+// @Param    frameID  path  string  true  "frameID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/maps/{mapID}/frames/{frameID}/groups [get]
 func (h *Handler) ListGroups(w http.ResponseWriter, r *http.Request) {
 	groups, err := h.store.ListFrameGroups(r.Context(), r.PathValue("frameID"))
 	if err != nil {
@@ -22,7 +33,19 @@ func (h *Handler) ListGroups(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"groups": groups})
 }
 
-// CreateGroup handles POST /api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/groups
+// @Summary  CreateGroup
+// @Tags     maps
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    mapID  path  string  true  "mapID"
+// @Param    frameID  path  string  true  "frameID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/maps/{mapID}/frames/{frameID}/groups [post]
 func (h *Handler) CreateGroup(w http.ResponseWriter, r *http.Request) {
 	frameID := r.PathValue("frameID")
 	orgID := r.PathValue("orgID")
@@ -75,7 +98,20 @@ func (h *Handler) CreateGroup(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusCreated, g)
 }
 
-// UpdateGroup handles PUT /api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/groups/{groupID}
+// @Summary  UpdateGroup
+// @Tags     maps
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    mapID  path  string  true  "mapID"
+// @Param    frameID  path  string  true  "frameID"
+// @Param    groupID  path  string  true  "groupID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/maps/{mapID}/frames/{frameID}/groups/{groupID} [put]
 func (h *Handler) UpdateGroup(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {
@@ -139,7 +175,19 @@ func (h *Handler) UpdateGroup(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, g)
 }
 
-// DeleteGroup handles DELETE /api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/groups/{groupID}
+// @Summary  DeleteGroup
+// @Tags     maps
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    mapID  path  string  true  "mapID"
+// @Param    frameID  path  string  true  "frameID"
+// @Param    groupID  path  string  true  "groupID"
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/maps/{mapID}/frames/{frameID}/groups/{groupID} [delete]
 func (h *Handler) DeleteGroup(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {

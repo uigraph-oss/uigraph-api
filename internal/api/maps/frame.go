@@ -19,7 +19,17 @@ import (
 	"github.com/uigraph/app/internal/uimap"
 )
 
-// ListFrames handles GET /api/v1/orgs/{orgID}/maps/{mapID}/frames
+// @Summary  ListFrames
+// @Tags     maps
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    mapID  path  string  true  "mapID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/maps/{mapID}/frames [get]
 func (h *Handler) ListFrames(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	p := uimap.ListParams{
@@ -41,7 +51,18 @@ func (h *Handler) ListFrames(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"frames": frames, "total": total})
 }
 
-// CreateFrame handles POST /api/v1/orgs/{orgID}/maps/{mapID}/frames
+// @Summary  CreateFrame
+// @Tags     maps
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    mapID  path  string  true  "mapID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/maps/{mapID}/frames [post]
 func (h *Handler) CreateFrame(w http.ResponseWriter, r *http.Request) {
 	mapID := r.PathValue("mapID")
 	orgID := r.PathValue("orgID")
@@ -104,7 +125,19 @@ func (h *Handler) CreateFrame(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusCreated, frame)
 }
 
-// GetFrame handles GET /api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}
+// @Summary  GetFrame
+// @Tags     frames
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    frameID  path  string  true  "frameID"
+// @Param    mapID  path  string  true  "mapID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/frames/{frameID} [get]
+// @Router   /orgs/{orgID}/maps/{mapID}/frames/{frameID} [get]
 func (h *Handler) GetFrame(w http.ResponseWriter, r *http.Request) {
 	f, err := h.store.GetFrame(r.Context(), r.PathValue("frameID"))
 	if err != nil {
@@ -118,7 +151,19 @@ func (h *Handler) GetFrame(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, f)
 }
 
-// UpdateFrame handles PUT /api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}
+// @Summary  UpdateFrame
+// @Tags     maps
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    mapID  path  string  true  "mapID"
+// @Param    frameID  path  string  true  "frameID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/maps/{mapID}/frames/{frameID} [put]
 func (h *Handler) UpdateFrame(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {
@@ -186,7 +231,18 @@ func (h *Handler) UpdateFrame(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, f)
 }
 
-// DeleteFrame handles DELETE /api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}
+// @Summary  DeleteFrame
+// @Tags     maps
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    mapID  path  string  true  "mapID"
+// @Param    frameID  path  string  true  "frameID"
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/maps/{mapID}/frames/{frameID} [delete]
 func (h *Handler) DeleteFrame(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {
@@ -200,7 +256,18 @@ func (h *Handler) DeleteFrame(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// SyncFrames handles POST /api/v1/orgs/{orgID}/maps/{mapID}/frames/sync
+// @Summary  SyncFrames
+// @Tags     maps
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    mapID  path  string  true  "mapID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/maps/{mapID}/frames/sync [post]
 func (h *Handler) SyncFrames(w http.ResponseWriter, r *http.Request) {
 	mapID := r.PathValue("mapID")
 	orgID := r.PathValue("orgID")

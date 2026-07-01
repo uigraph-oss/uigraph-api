@@ -65,6 +65,16 @@ type addTeamMemberRequest struct {
 
 // List returns all teams in an org.
 // GET /api/v1/orgs/{orgID}/teams
+// @Summary  List
+// @Tags     teams
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/teams [get]
 func (h *TeamHandler) List(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	teams, err := h.store.ListTeams(r.Context(), orgID)
@@ -81,6 +91,17 @@ func (h *TeamHandler) List(w http.ResponseWriter, r *http.Request) {
 
 // Create adds a new team to an org.
 // POST /api/v1/orgs/{orgID}/teams
+// @Summary  Create
+// @Tags     teams
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/teams [post]
 func (h *TeamHandler) Create(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	var req createTeamRequest
@@ -107,6 +128,17 @@ func (h *TeamHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 // Get returns a single team.
 // GET /api/v1/orgs/{orgID}/teams/{teamID}
+// @Summary  Get
+// @Tags     teams
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    teamID  path  string  true  "teamID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/teams/{teamID} [get]
 func (h *TeamHandler) Get(w http.ResponseWriter, r *http.Request) {
 	teamID := r.PathValue("teamID")
 	t, err := h.store.GetTeam(r.Context(), teamID)
@@ -123,6 +155,18 @@ func (h *TeamHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 // Update changes a team's name or email.
 // PUT /api/v1/orgs/{orgID}/teams/{teamID}
+// @Summary  Update
+// @Tags     teams
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    teamID  path  string  true  "teamID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/teams/{teamID} [put]
 func (h *TeamHandler) Update(w http.ResponseWriter, r *http.Request) {
 	teamID := r.PathValue("teamID")
 	var req updateTeamRequest
@@ -154,6 +198,17 @@ func (h *TeamHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 // Delete removes a team and its memberships.
 // DELETE /api/v1/orgs/{orgID}/teams/{teamID}
+// @Summary  Delete
+// @Tags     teams
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    teamID  path  string  true  "teamID"
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/teams/{teamID} [delete]
 func (h *TeamHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	teamID := r.PathValue("teamID")
 	if err := h.store.DeleteTeam(r.Context(), teamID); err != nil {
@@ -165,6 +220,17 @@ func (h *TeamHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 // ListMembers returns all members of a team.
 // GET /api/v1/orgs/{orgID}/teams/{teamID}/members
+// @Summary  ListMembers
+// @Tags     teams
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    teamID  path  string  true  "teamID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/teams/{teamID}/members [get]
 func (h *TeamHandler) ListMembers(w http.ResponseWriter, r *http.Request) {
 	teamID := r.PathValue("teamID")
 	members, err := h.store.ListTeamMembers(r.Context(), teamID)
@@ -184,6 +250,18 @@ func (h *TeamHandler) ListMembers(w http.ResponseWriter, r *http.Request) {
 
 // AddMember adds a user to a team.
 // POST /api/v1/orgs/{orgID}/teams/{teamID}/members
+// @Summary  AddMember
+// @Tags     teams
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    teamID  path  string  true  "teamID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/teams/{teamID}/members [post]
 func (h *TeamHandler) AddMember(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	teamID := r.PathValue("teamID")
@@ -212,6 +290,18 @@ func (h *TeamHandler) AddMember(w http.ResponseWriter, r *http.Request) {
 
 // RemoveMember removes a user from a team.
 // DELETE /api/v1/orgs/{orgID}/teams/{teamID}/members/{userID}
+// @Summary  RemoveMember
+// @Tags     teams
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    teamID  path  string  true  "teamID"
+// @Param    userID  path  string  true  "userID"
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/teams/{teamID}/members/{userID} [delete]
 func (h *TeamHandler) RemoveMember(w http.ResponseWriter, r *http.Request) {
 	teamID := r.PathValue("teamID")
 	userID := r.PathValue("userID")

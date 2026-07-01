@@ -110,6 +110,15 @@ type upsertSCIMRequest struct {
 
 // ListOAuthProviders returns all configured OAuth providers (global).
 // GET /api/v1/sso/oauth
+// @Summary  ListOAuthProviders
+// @Tags     sso
+// @Security BearerAuth
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /sso/oauth [get]
 func (h *SSOHandler) ListOAuthProviders(w http.ResponseWriter, r *http.Request) {
 	providers, err := h.store.ListOAuthProviders(r.Context())
 	if err != nil {
@@ -126,6 +135,18 @@ func (h *SSOHandler) ListOAuthProviders(w http.ResponseWriter, r *http.Request) 
 	httputil.JSON(w, http.StatusOK, map[string]any{"providers": providers})
 }
 
+// PutOAuthProviderIcon
+// @Summary  PutOAuthProviderIcon
+// @Tags     sso
+// @Security BearerAuth
+// @Param    provider  path  string  true  "provider"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /sso/oauth/{provider}/icon [put]
 func (h *SSOHandler) PutOAuthProviderIcon(w http.ResponseWriter, r *http.Request) {
 	provider := r.PathValue("provider")
 
@@ -168,6 +189,17 @@ func (h *SSOHandler) PutOAuthProviderIcon(w http.ResponseWriter, r *http.Request
 	httputil.JSON(w, http.StatusOK, map[string]any{"assetId": assetID})
 }
 
+// DeleteOAuthProviderIcon
+// @Summary  DeleteOAuthProviderIcon
+// @Tags     sso
+// @Security BearerAuth
+// @Param    provider  path  string  true  "provider"
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /sso/oauth/{provider}/icon [delete]
 func (h *SSOHandler) DeleteOAuthProviderIcon(w http.ResponseWriter, r *http.Request) {
 	provider := r.PathValue("provider")
 	assetID := storage.OAuthProviderIconAssetID(provider)
@@ -181,6 +213,17 @@ func (h *SSOHandler) DeleteOAuthProviderIcon(w http.ResponseWriter, r *http.Requ
 
 // UpsertOAuthProvider creates or updates an OAuth provider configuration.
 // PUT /api/v1/sso/oauth/{provider}
+// @Summary  UpsertOAuthProvider
+// @Tags     sso
+// @Security BearerAuth
+// @Param    provider  path  string  true  "provider"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /sso/oauth/{provider} [put]
 func (h *SSOHandler) UpsertOAuthProvider(w http.ResponseWriter, r *http.Request) {
 	provider := r.PathValue("provider")
 	var req upsertOAuthRequest
@@ -258,6 +301,16 @@ func (h *SSOHandler) UpsertOAuthProvider(w http.ResponseWriter, r *http.Request)
 
 // DeleteOAuthProvider removes an OAuth provider configuration.
 // DELETE /api/v1/sso/oauth/{provider}
+// @Summary  DeleteOAuthProvider
+// @Tags     sso
+// @Security BearerAuth
+// @Param    provider  path  string  true  "provider"
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /sso/oauth/{provider} [delete]
 func (h *SSOHandler) DeleteOAuthProvider(w http.ResponseWriter, r *http.Request) {
 	provider := r.PathValue("provider")
 	if err := h.store.DeleteOAuthProvider(r.Context(), provider); err != nil {
@@ -271,6 +324,15 @@ func (h *SSOHandler) DeleteOAuthProvider(w http.ResponseWriter, r *http.Request)
 
 // ListMappings returns all SSO claim → role mappings (global).
 // GET /api/v1/sso/role-mappings
+// @Summary  ListMappings
+// @Tags     sso
+// @Security BearerAuth
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /sso/role-mappings [get]
 func (h *SSOHandler) ListMappings(w http.ResponseWriter, r *http.Request) {
 	mappings, err := h.store.ListSSOMappings(r.Context(), "")
 	if err != nil {
@@ -282,6 +344,16 @@ func (h *SSOHandler) ListMappings(w http.ResponseWriter, r *http.Request) {
 
 // CreateMapping adds a claim → role rule evaluated on every SSO login.
 // POST /api/v1/sso/role-mappings
+// @Summary  CreateMapping
+// @Tags     sso
+// @Security BearerAuth
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /sso/role-mappings [post]
 func (h *SSOHandler) CreateMapping(w http.ResponseWriter, r *http.Request) {
 	var req createMappingRequest
 	if err := httputil.Decode(r, &req); err != nil {
@@ -310,6 +382,16 @@ func (h *SSOHandler) CreateMapping(w http.ResponseWriter, r *http.Request) {
 
 // DeleteMapping removes a claim → role mapping.
 // DELETE /api/v1/sso/role-mappings/{mappingID}
+// @Summary  DeleteMapping
+// @Tags     sso
+// @Security BearerAuth
+// @Param    mappingID  path  string  true  "mappingID"
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /sso/role-mappings/{mappingID} [delete]
 func (h *SSOHandler) DeleteMapping(w http.ResponseWriter, r *http.Request) {
 	mappingID := r.PathValue("mappingID")
 	if err := h.store.DeleteSSOMapping(r.Context(), mappingID); err != nil {
@@ -323,6 +405,15 @@ func (h *SSOHandler) DeleteMapping(w http.ResponseWriter, r *http.Request) {
 
 // GetLDAP returns the global LDAP configuration (password masked).
 // GET /api/v1/sso/ldap
+// @Summary  GetLDAP
+// @Tags     sso
+// @Security BearerAuth
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /sso/ldap [get]
 func (h *SSOHandler) GetLDAP(w http.ResponseWriter, r *http.Request) {
 	cfg, err := h.store.GetLDAPConfig(r.Context())
 	if err != nil {
@@ -339,6 +430,16 @@ func (h *SSOHandler) GetLDAP(w http.ResponseWriter, r *http.Request) {
 
 // UpsertLDAP creates or replaces the global LDAP configuration.
 // PUT /api/v1/sso/ldap
+// @Summary  UpsertLDAP
+// @Tags     sso
+// @Security BearerAuth
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /sso/ldap [put]
 func (h *SSOHandler) UpsertLDAP(w http.ResponseWriter, r *http.Request) {
 	var req upsertLDAPRequest
 	if err := httputil.Decode(r, &req); err != nil {
@@ -364,6 +465,15 @@ func (h *SSOHandler) UpsertLDAP(w http.ResponseWriter, r *http.Request) {
 
 // DeleteLDAP removes the global LDAP configuration.
 // DELETE /api/v1/sso/ldap
+// @Summary  DeleteLDAP
+// @Tags     sso
+// @Security BearerAuth
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /sso/ldap [delete]
 func (h *SSOHandler) DeleteLDAP(w http.ResponseWriter, r *http.Request) {
 	if err := h.store.DeleteLDAPConfig(r.Context()); err != nil {
 		httputil.Error(w, r, err)
@@ -376,6 +486,15 @@ func (h *SSOHandler) DeleteLDAP(w http.ResponseWriter, r *http.Request) {
 
 // GetSAML returns the global SAML SP configuration (SP private key masked).
 // GET /api/v1/sso/saml
+// @Summary  GetSAML
+// @Tags     sso
+// @Security BearerAuth
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /sso/saml [get]
 func (h *SSOHandler) GetSAML(w http.ResponseWriter, r *http.Request) {
 	cfg, err := h.store.GetSAMLConfig(r.Context())
 	if err != nil {
@@ -392,6 +511,16 @@ func (h *SSOHandler) GetSAML(w http.ResponseWriter, r *http.Request) {
 
 // UpsertSAML creates or replaces the global SAML configuration.
 // PUT /api/v1/sso/saml
+// @Summary  UpsertSAML
+// @Tags     sso
+// @Security BearerAuth
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /sso/saml [put]
 func (h *SSOHandler) UpsertSAML(w http.ResponseWriter, r *http.Request) {
 	var req upsertSAMLRequest
 	if err := httputil.Decode(r, &req); err != nil {
@@ -417,6 +546,15 @@ func (h *SSOHandler) UpsertSAML(w http.ResponseWriter, r *http.Request) {
 
 // GetSCIM returns the global SCIM provisioning config (token hash masked).
 // GET /api/v1/sso/scim
+// @Summary  GetSCIM
+// @Tags     sso
+// @Security BearerAuth
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /sso/scim [get]
 func (h *SSOHandler) GetSCIM(w http.ResponseWriter, r *http.Request) {
 	cfg, err := h.store.GetSCIMConfig(r.Context())
 	if err != nil {
@@ -433,6 +571,16 @@ func (h *SSOHandler) GetSCIM(w http.ResponseWriter, r *http.Request) {
 
 // UpsertSCIM enables or reconfigures global SCIM provisioning.
 // PUT /api/v1/sso/scim
+// @Summary  UpsertSCIM
+// @Tags     sso
+// @Security BearerAuth
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /sso/scim [put]
 func (h *SSOHandler) UpsertSCIM(w http.ResponseWriter, r *http.Request) {
 	var req upsertSCIMRequest
 	if err := httputil.Decode(r, &req); err != nil {
@@ -445,6 +593,16 @@ func (h *SSOHandler) UpsertSCIM(w http.ResponseWriter, r *http.Request) {
 // RotateSCIMToken generates a new SCIM bearer token, stores its hash, and
 // returns the plaintext once.
 // POST /api/v1/sso/scim/rotate-token
+// @Summary  RotateSCIMToken
+// @Tags     sso
+// @Security BearerAuth
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /sso/scim/rotate-token [post]
 func (h *SSOHandler) RotateSCIMToken(w http.ResponseWriter, r *http.Request) {
 	// TODO: generate token, hash it, call store.RotateSCIMToken, return plaintext
 	httputil.NotImplemented(w)

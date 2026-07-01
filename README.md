@@ -73,6 +73,21 @@ TEST_POSTGRES_URL=postgres://uigraph:devpassword@localhost:5432/uigraph?sslmode=
   go test ./tests/... -v -count=1
 ```
 
+## OpenAPI spec
+
+The REST API is documented with [swaggo/swag](https://github.com/swaggo/swag) annotations
+on the handlers. The generated spec lives in `openapi/` (`openapi.yaml` + `openapi.json`).
+
+```bash
+# One-time: install the swag CLI (build-time only, not a module dependency)
+go install github.com/swaggo/swag/cmd/swag@latest
+
+# Regenerate the spec after changing handlers or annotations
+make openapi
+```
+
+Day-to-day loop: add/change a handler → update its `// @...` annotations → `make openapi` → commit.
+
 ## License
 
 This project is licensed under the [Business Source License 1.1](LICENSE) (BUSL-1.1).

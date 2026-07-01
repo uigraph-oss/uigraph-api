@@ -12,7 +12,18 @@ import (
 	"github.com/uigraph/app/internal/uimap"
 )
 
-// ListFocalPoints handles GET /api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points
+// @Summary  ListFocalPoints
+// @Tags     maps
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    mapID  path  string  true  "mapID"
+// @Param    frameID  path  string  true  "frameID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points [get]
 func (h *Handler) ListFocalPoints(w http.ResponseWriter, r *http.Request) {
 	fps, err := h.store.ListFocalPoints(r.Context(), r.PathValue("frameID"))
 	if err != nil {
@@ -22,7 +33,19 @@ func (h *Handler) ListFocalPoints(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"focalPoints": fps})
 }
 
-// CreateFocalPoint handles POST /api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points
+// @Summary  CreateFocalPoint
+// @Tags     maps
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    mapID  path  string  true  "mapID"
+// @Param    frameID  path  string  true  "frameID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points [post]
 func (h *Handler) CreateFocalPoint(w http.ResponseWriter, r *http.Request) {
 	frameID := r.PathValue("frameID")
 	orgID := r.PathValue("orgID")
@@ -72,7 +95,19 @@ func (h *Handler) CreateFocalPoint(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusCreated, fp)
 }
 
-// GetFocalPoint handles GET /api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}
+// @Summary  GetFocalPoint
+// @Tags     maps
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    mapID  path  string  true  "mapID"
+// @Param    frameID  path  string  true  "frameID"
+// @Param    fpID  path  string  true  "fpID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID} [get]
 func (h *Handler) GetFocalPoint(w http.ResponseWriter, r *http.Request) {
 	fp, err := h.store.GetFocalPoint(r.Context(), r.PathValue("fpID"))
 	if err != nil {
@@ -86,7 +121,20 @@ func (h *Handler) GetFocalPoint(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, fp)
 }
 
-// UpdateFocalPoint handles PUT /api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}
+// @Summary  UpdateFocalPoint
+// @Tags     maps
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    mapID  path  string  true  "mapID"
+// @Param    frameID  path  string  true  "frameID"
+// @Param    fpID  path  string  true  "fpID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID} [put]
 func (h *Handler) UpdateFocalPoint(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {
@@ -139,7 +187,19 @@ func (h *Handler) UpdateFocalPoint(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, fp)
 }
 
-// DeleteFocalPoint handles DELETE /api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}
+// @Summary  DeleteFocalPoint
+// @Tags     maps
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    mapID  path  string  true  "mapID"
+// @Param    frameID  path  string  true  "frameID"
+// @Param    fpID  path  string  true  "fpID"
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID} [delete]
 func (h *Handler) DeleteFocalPoint(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {

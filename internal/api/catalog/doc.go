@@ -21,6 +21,18 @@ import (
 
 // ── Service docs ──────────────────────────────────────────────────────────────
 
+// ListDocs
+// @Summary  ListDocs
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/docs [get]
 func (h *Handler) ListDocs(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	if ok := h.ensureServiceInOrg(w, r, serviceID); !ok {
@@ -34,6 +46,19 @@ func (h *Handler) ListDocs(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"docs": docs})
 }
 
+// CreateDoc
+// @Summary  CreateDoc
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/docs [post]
 func (h *Handler) CreateDoc(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	serviceID := r.PathValue("serviceID")
@@ -143,6 +168,19 @@ func (h *Handler) CreateDoc(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusCreated, link)
 }
 
+// DeleteDoc
+// @Summary  DeleteDoc
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    docID  path  string  true  "docID"
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/docs/{docID} [delete]
 func (h *Handler) DeleteDoc(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	docID := r.PathValue("docID")
@@ -183,6 +221,18 @@ func nonEmptyPtr(s *string) *string {
 
 // ── Service diagrams ──────────────────────────────────────────────────────────
 
+// ListDiagrams
+// @Summary  ListDiagrams
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/diagrams [get]
 func (h *Handler) ListDiagrams(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	if ok := h.ensureServiceInOrg(w, r, serviceID); !ok {
@@ -196,6 +246,19 @@ func (h *Handler) ListDiagrams(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"diagrams": diagrams})
 }
 
+// CreateDiagram
+// @Summary  CreateDiagram
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/diagrams [post]
 func (h *Handler) CreateDiagram(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	serviceID := r.PathValue("serviceID")
@@ -311,6 +374,19 @@ func (h *Handler) CreateDiagram(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusCreated, link)
 }
 
+// DeleteDiagram
+// @Summary  DeleteDiagram
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    diagramID  path  string  true  "diagramID"
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/diagrams/{diagramID} [delete]
 func (h *Handler) DeleteDiagram(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	diagramID := r.PathValue("diagramID")

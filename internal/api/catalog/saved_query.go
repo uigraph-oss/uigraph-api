@@ -40,6 +40,19 @@ func parseSavedQueryScope(w http.ResponseWriter, r *http.Request) (catalogpkg.Sa
 	}
 }
 
+// ListSavedQueryFolders
+// @Summary  ListSavedQueryFolders
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    dbID  path  string  true  "dbID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/dbs/{dbID}/query-folders [get]
 func (h *Handler) ListSavedQueryFolders(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	dbID := r.PathValue("dbID")
@@ -70,6 +83,20 @@ func (h *Handler) ListSavedQueryFolders(w http.ResponseWriter, r *http.Request) 
 	httputil.JSON(w, http.StatusOK, map[string]any{"folders": folders})
 }
 
+// CreateSavedQueryFolder
+// @Summary  CreateSavedQueryFolder
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    dbID  path  string  true  "dbID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/dbs/{dbID}/query-folders [post]
 func (h *Handler) CreateSavedQueryFolder(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	orgID := r.PathValue("orgID")
@@ -125,6 +152,20 @@ func (h *Handler) CreateSavedQueryFolder(w http.ResponseWriter, r *http.Request)
 	httputil.JSON(w, http.StatusCreated, folder)
 }
 
+// DeleteSavedQueryFolder
+// @Summary  DeleteSavedQueryFolder
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    dbID  path  string  true  "dbID"
+// @Param    folderID  path  string  true  "folderID"
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/dbs/{dbID}/query-folders/{folderID} [delete]
 func (h *Handler) DeleteSavedQueryFolder(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	dbID := r.PathValue("dbID")
@@ -160,6 +201,19 @@ func (h *Handler) DeleteSavedQueryFolder(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// ListSavedQueries
+// @Summary  ListSavedQueries
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    dbID  path  string  true  "dbID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/dbs/{dbID}/queries [get]
 func (h *Handler) ListSavedQueries(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	dbID := r.PathValue("dbID")
@@ -190,6 +244,20 @@ func (h *Handler) ListSavedQueries(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"queries": queries})
 }
 
+// CreateSavedQuery
+// @Summary  CreateSavedQuery
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    dbID  path  string  true  "dbID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/dbs/{dbID}/queries [post]
 func (h *Handler) CreateSavedQuery(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	orgID := r.PathValue("orgID")
@@ -255,6 +323,21 @@ func (h *Handler) CreateSavedQuery(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusCreated, q)
 }
 
+// UpdateSavedQuery
+// @Summary  UpdateSavedQuery
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    dbID  path  string  true  "dbID"
+// @Param    queryID  path  string  true  "queryID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/dbs/{dbID}/queries/{queryID} [put]
 func (h *Handler) UpdateSavedQuery(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	dbID := r.PathValue("dbID")
@@ -317,6 +400,20 @@ func (h *Handler) UpdateSavedQuery(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, q)
 }
 
+// DeleteSavedQuery
+// @Summary  DeleteSavedQuery
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    dbID  path  string  true  "dbID"
+// @Param    queryID  path  string  true  "queryID"
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/dbs/{dbID}/queries/{queryID} [delete]
 func (h *Handler) DeleteSavedQuery(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	dbID := r.PathValue("dbID")
@@ -357,6 +454,19 @@ func (h *Handler) DeleteSavedQuery(w http.ResponseWriter, r *http.Request) {
 // team-scoped, org-shared, source="ci" row and relies on a real Postgres
 // unique constraint on (service_db_id, source_ref) to stay duplicate-free
 // even under concurrent syncs.
+// @Summary  SyncSavedQuery
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    dbID  path  string  true  "dbID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/dbs/{dbID}/queries/sync [post]
 func (h *Handler) SyncSavedQuery(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	orgID := r.PathValue("orgID")

@@ -7,7 +7,16 @@ import (
 	"github.com/uigraph/app/internal/storage"
 )
 
-// GetIcon handles GET /api/v1/component-icons/{slug}
+// @Summary  GetIcon
+// @Tags     component-icons
+// @Security BearerAuth
+// @Param    slug  path  string  true  "slug"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /component-icons/{slug} [get]
 func (h *Handler) GetIcon(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("slug")
 	if slug == "" {

@@ -7,7 +7,16 @@ import (
 	"github.com/uigraph/app/internal/httputil"
 )
 
-// ListFlow handles GET /api/v1/orgs/{orgID}/flow-diagram-components
+// @Summary  ListFlow
+// @Tags     flow-diagram-components
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/flow-diagram-components [get]
 func (h *Handler) ListFlow(w http.ResponseWriter, r *http.Request) {
 	comps, err := h.store.ListComponentsByKind(r.Context(), componentlib.KindFlowDiagram)
 	if err != nil {

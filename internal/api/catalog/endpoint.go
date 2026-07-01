@@ -17,6 +17,18 @@ import (
 
 // ListAPIEndpoints returns the working-copy endpoints, or a specific version's
 // snapshot when ?versionId= is supplied.
+// @Summary  ListAPIEndpoints
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    apiGroupID  path  string  true  "apiGroupID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/endpoints [get]
 func (h *Handler) ListAPIEndpoints(w http.ResponseWriter, r *http.Request) {
 	apiGroupID := r.PathValue("apiGroupID")
 	var (
@@ -35,6 +47,20 @@ func (h *Handler) ListAPIEndpoints(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"endpoints": endpoints})
 }
 
+// CreateAPIEndpoint
+// @Summary  CreateAPIEndpoint
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    apiGroupID  path  string  true  "apiGroupID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/endpoints [post]
 func (h *Handler) CreateAPIEndpoint(w http.ResponseWriter, r *http.Request) {
 	apiGroupID := r.PathValue("apiGroupID")
 	serviceID := r.PathValue("serviceID")
@@ -97,6 +123,20 @@ func (h *Handler) CreateAPIEndpoint(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusCreated, e)
 }
 
+// GetAPIEndpoint
+// @Summary  GetAPIEndpoint
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    apiGroupID  path  string  true  "apiGroupID"
+// @Param    endpointID  path  string  true  "endpointID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/endpoints/{endpointID} [get]
 func (h *Handler) GetAPIEndpoint(w http.ResponseWriter, r *http.Request) {
 	e, err := h.store.GetAPIEndpoint(r.Context(), r.PathValue("endpointID"))
 	if err != nil {
@@ -110,6 +150,21 @@ func (h *Handler) GetAPIEndpoint(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, e)
 }
 
+// UpdateAPIEndpoint
+// @Summary  UpdateAPIEndpoint
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    apiGroupID  path  string  true  "apiGroupID"
+// @Param    endpointID  path  string  true  "endpointID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/endpoints/{endpointID} [put]
 func (h *Handler) UpdateAPIEndpoint(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {
@@ -189,6 +244,20 @@ func (h *Handler) UpdateAPIEndpoint(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, e)
 }
 
+// DeleteAPIEndpoint
+// @Summary  DeleteAPIEndpoint
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    apiGroupID  path  string  true  "apiGroupID"
+// @Param    endpointID  path  string  true  "endpointID"
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/endpoints/{endpointID} [delete]
 func (h *Handler) DeleteAPIEndpoint(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {

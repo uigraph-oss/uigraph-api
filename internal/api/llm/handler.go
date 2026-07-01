@@ -32,6 +32,16 @@ func Register(mux *http.ServeMux, s store, authenticated func(method, pattern st
 	serverAdmin("DELETE", "/api/v1/llm/models/{modelID}", h.Deactivate)
 }
 
+// List
+// @Summary  List
+// @Tags     llm
+// @Security BearerAuth
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /llm/models [get]
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	models, err := h.store.ListLLMModels(r.Context())
 	if err != nil {
@@ -44,6 +54,17 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"models": models})
 }
 
+// Create
+// @Summary  Create
+// @Tags     llm
+// @Security BearerAuth
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /llm/models [post]
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		ModelID              string  `json:"modelId"`
@@ -79,6 +100,18 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusCreated, m)
 }
 
+// Update
+// @Summary  Update
+// @Tags     llm
+// @Security BearerAuth
+// @Param    modelID  path  string  true  "modelID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /llm/models/{modelID} [put]
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	existing, err := h.store.GetLLMModel(r.Context(), r.PathValue("modelID"))
 	if err != nil {
@@ -115,6 +148,17 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, existing)
 }
 
+// Deactivate
+// @Summary  Deactivate
+// @Tags     llm
+// @Security BearerAuth
+// @Param    modelID  path  string  true  "modelID"
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /llm/models/{modelID} [delete]
 func (h *Handler) Deactivate(w http.ResponseWriter, r *http.Request) {
 	existing, err := h.store.GetLLMModel(r.Context(), r.PathValue("modelID"))
 	if err != nil {

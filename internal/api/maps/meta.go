@@ -13,7 +13,19 @@ import (
 	"github.com/uigraph/app/internal/uimap"
 )
 
-// ListMeta handles GET /api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta
+// @Summary  ListMeta
+// @Tags     maps
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    mapID  path  string  true  "mapID"
+// @Param    frameID  path  string  true  "frameID"
+// @Param    fpID  path  string  true  "fpID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta [get]
 func (h *Handler) ListMeta(w http.ResponseWriter, r *http.Request) {
 	metas, err := h.store.ListFocalPointMeta(r.Context(), r.PathValue("fpID"))
 	if err != nil {
@@ -23,7 +35,16 @@ func (h *Handler) ListMeta(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"meta": metas})
 }
 
-// ListMetaByLink handles GET /api/v1/orgs/{orgID}/focal-point-meta?linkId=...
+// @Summary  ListMetaByLink
+// @Tags     focal-point-meta
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/focal-point-meta [get]
 func (h *Handler) ListMetaByLink(w http.ResponseWriter, r *http.Request) {
 	linkID := r.URL.Query().Get("linkId")
 	if linkID == "" {
@@ -38,8 +59,17 @@ func (h *Handler) ListMetaByLink(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"meta": metas})
 }
 
-// ListComponentLinkUsages handles GET /api/v1/orgs/{orgID}/component-link-usages?linkId=...
 // It returns the maps, screens, and focal points that reference the given link.
+// @Summary  ListComponentLinkUsages
+// @Tags     component-link-usages
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/component-link-usages [get]
 func (h *Handler) ListComponentLinkUsages(w http.ResponseWriter, r *http.Request) {
 	linkID := r.URL.Query().Get("linkId")
 	if linkID == "" {
@@ -54,7 +84,20 @@ func (h *Handler) ListComponentLinkUsages(w http.ResponseWriter, r *http.Request
 	httputil.JSON(w, http.StatusOK, map[string]any{"usages": usages})
 }
 
-// CreateMeta handles POST /api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta
+// @Summary  CreateMeta
+// @Tags     maps
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    mapID  path  string  true  "mapID"
+// @Param    frameID  path  string  true  "frameID"
+// @Param    fpID  path  string  true  "fpID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta [post]
 func (h *Handler) CreateMeta(w http.ResponseWriter, r *http.Request) {
 	fpID := r.PathValue("fpID")
 	frameID := r.PathValue("frameID")
@@ -101,7 +144,21 @@ func (h *Handler) CreateMeta(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusCreated, m)
 }
 
-// UpdateMeta handles PUT /api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta/{metaID}
+// @Summary  UpdateMeta
+// @Tags     maps
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    mapID  path  string  true  "mapID"
+// @Param    frameID  path  string  true  "frameID"
+// @Param    fpID  path  string  true  "fpID"
+// @Param    metaID  path  string  true  "metaID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta/{metaID} [put]
 func (h *Handler) UpdateMeta(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {
@@ -157,7 +214,20 @@ func (h *Handler) UpdateMeta(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, m)
 }
 
-// DeleteMeta handles DELETE /api/v1/orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta/{metaID}
+// @Summary  DeleteMeta
+// @Tags     maps
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    mapID  path  string  true  "mapID"
+// @Param    frameID  path  string  true  "frameID"
+// @Param    fpID  path  string  true  "fpID"
+// @Param    metaID  path  string  true  "metaID"
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points/{fpID}/meta/{metaID} [delete]
 func (h *Handler) DeleteMeta(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {

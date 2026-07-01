@@ -7,6 +7,17 @@ import (
 	mcppkg "github.com/uigraph/app/internal/mcpusage"
 )
 
+// Timeseries
+// @Summary  Timeseries
+// @Tags     mcp
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/mcp/savings/timeseries [get]
 func (h *Handler) Timeseries(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	modelID := q.Get("model_id")
@@ -23,6 +34,17 @@ func (h *Handler) Timeseries(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"timeseries": rows})
 }
 
+// ByTool
+// @Summary  ByTool
+// @Tags     mcp
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/mcp/savings/by-tool [get]
 func (h *Handler) ByTool(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	modelID := q.Get("model_id")
@@ -39,6 +61,17 @@ func (h *Handler) ByTool(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"byTool": rows})
 }
 
+// ByModel
+// @Summary  ByModel
+// @Tags     mcp
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/mcp/savings/by-model [get]
 func (h *Handler) ByModel(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	_, since := parsePeriod(q.Get("period"))
@@ -54,6 +87,17 @@ func (h *Handler) ByModel(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"byModel": rows})
 }
 
+// ByUser
+// @Summary  ByUser
+// @Tags     mcp
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/mcp/savings/by-user [get]
 func (h *Handler) ByUser(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	modelID := q.Get("model_id")

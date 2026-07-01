@@ -12,6 +12,18 @@ import (
 	authmw "github.com/uigraph/app/internal/middleware"
 )
 
+// Record
+// @Summary  Record
+// @Tags     mcp
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/mcp/usage [post]
 func (h *Handler) Record(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {
@@ -62,6 +74,17 @@ func (h *Handler) Record(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusCreated, e)
 }
 
+// List
+// @Summary  List
+// @Tags     mcp
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/mcp/usage [get]
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	f := mcppkg.Filter{}

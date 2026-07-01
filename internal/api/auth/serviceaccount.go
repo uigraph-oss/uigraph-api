@@ -68,6 +68,16 @@ type createTokenResponse struct {
 
 // List returns all active service accounts in an org.
 // GET /api/v1/orgs/{orgID}/service-accounts
+// @Summary  List
+// @Tags     service-accounts
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/service-accounts [get]
 func (h *ServiceAccountHandler) List(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	accounts, err := h.store.ListServiceAccounts(r.Context(), orgID)
@@ -80,6 +90,17 @@ func (h *ServiceAccountHandler) List(w http.ResponseWriter, r *http.Request) {
 
 // Create provisions a new service account with an org-level role.
 // POST /api/v1/orgs/{orgID}/service-accounts
+// @Summary  Create
+// @Tags     service-accounts
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/service-accounts [post]
 func (h *ServiceAccountHandler) Create(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	var req createServiceAccountRequest
@@ -107,6 +128,17 @@ func (h *ServiceAccountHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 // Get returns a single service account.
 // GET /api/v1/orgs/{orgID}/service-accounts/{saID}
+// @Summary  Get
+// @Tags     service-accounts
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    saID  path  string  true  "saID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/service-accounts/{saID} [get]
 func (h *ServiceAccountHandler) Get(w http.ResponseWriter, r *http.Request) {
 	saID := r.PathValue("saID")
 	sa, err := h.store.GetServiceAccount(r.Context(), saID)
@@ -123,6 +155,18 @@ func (h *ServiceAccountHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 // Update changes a service account's name, description, or disabled state.
 // PUT /api/v1/orgs/{orgID}/service-accounts/{saID}
+// @Summary  Update
+// @Tags     service-accounts
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    saID  path  string  true  "saID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/service-accounts/{saID} [put]
 func (h *ServiceAccountHandler) Update(w http.ResponseWriter, r *http.Request) {
 	saID := r.PathValue("saID")
 	existing, err := h.store.GetServiceAccount(r.Context(), saID)
@@ -166,6 +210,17 @@ func (h *ServiceAccountHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 // Delete soft-deletes a service account and revokes all its tokens.
 // DELETE /api/v1/orgs/{orgID}/service-accounts/{saID}
+// @Summary  Delete
+// @Tags     service-accounts
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    saID  path  string  true  "saID"
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/service-accounts/{saID} [delete]
 func (h *ServiceAccountHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	saID := r.PathValue("saID")
 	existing, err := h.store.GetServiceAccount(r.Context(), saID)
@@ -193,6 +248,17 @@ func (h *ServiceAccountHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 // ListTokens returns all tokens for a service account (no hashes or plaintexts).
 // GET /api/v1/orgs/{orgID}/service-accounts/{saID}/tokens
+// @Summary  ListTokens
+// @Tags     service-accounts
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    saID  path  string  true  "saID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/service-accounts/{saID}/tokens [get]
 func (h *ServiceAccountHandler) ListTokens(w http.ResponseWriter, r *http.Request) {
 	saID := r.PathValue("saID")
 	tokens, err := h.store.ListTokens(r.Context(), saID)
@@ -205,6 +271,18 @@ func (h *ServiceAccountHandler) ListTokens(w http.ResponseWriter, r *http.Reques
 
 // CreateToken generates a new API token. The plaintext is returned once and never stored.
 // POST /api/v1/orgs/{orgID}/service-accounts/{saID}/tokens
+// @Summary  CreateToken
+// @Tags     service-accounts
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    saID  path  string  true  "saID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/service-accounts/{saID}/tokens [post]
 func (h *ServiceAccountHandler) CreateToken(w http.ResponseWriter, r *http.Request) {
 	saID := r.PathValue("saID")
 	var req createTokenRequest
@@ -253,6 +331,18 @@ func (h *ServiceAccountHandler) CreateToken(w http.ResponseWriter, r *http.Reque
 
 // RevokeToken marks a token as revoked.
 // DELETE /api/v1/orgs/{orgID}/service-accounts/{saID}/tokens/{tokenID}
+// @Summary  RevokeToken
+// @Tags     service-accounts
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    saID  path  string  true  "saID"
+// @Param    tokenID  path  string  true  "tokenID"
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/service-accounts/{saID}/tokens/{tokenID} [delete]
 func (h *ServiceAccountHandler) RevokeToken(w http.ResponseWriter, r *http.Request) {
 	tokenID := r.PathValue("tokenID")
 	if err := h.store.RevokeToken(r.Context(), tokenID); err != nil {
@@ -265,6 +355,16 @@ func (h *ServiceAccountHandler) RevokeToken(w http.ResponseWriter, r *http.Reque
 // ListScopes returns the catalog of grantable scopes, shared by role and
 // service-account assignment.
 // GET /api/v1/orgs/{orgID}/scopes
+// @Summary  ListScopes
+// @Tags     scopes
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/scopes [get]
 func (h *ServiceAccountHandler) ListScopes(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"scopes": authz.AllScopes})
 }

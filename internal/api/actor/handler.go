@@ -37,7 +37,16 @@ func Register(
 	protected("GET", "/api/v1/orgs/{orgID}/actors", h.Resolve)
 }
 
-// Resolve handles GET /api/v1/orgs/{orgID}/actors?ids=a,b,c
+// @Summary  Resolve
+// @Tags     actors
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/actors [get]
 func (h *Handler) Resolve(w http.ResponseWriter, r *http.Request) {
 	raw := r.URL.Query().Get("ids")
 	if raw == "" {

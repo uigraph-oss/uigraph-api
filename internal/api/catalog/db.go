@@ -15,6 +15,18 @@ import (
 	storepkg "github.com/uigraph/app/internal/store"
 )
 
+// ListDBs
+// @Summary  ListDBs
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/dbs [get]
 func (h *Handler) ListDBs(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	if ok := h.ensureServiceInOrg(w, r, serviceID); !ok {
@@ -28,6 +40,19 @@ func (h *Handler) ListDBs(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"dbs": dbs})
 }
 
+// GetDB
+// @Summary  GetDB
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    dbID  path  string  true  "dbID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/dbs/{dbID} [get]
 func (h *Handler) GetDB(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	if ok := h.ensureServiceInOrg(w, r, serviceID); !ok {
@@ -45,6 +70,19 @@ func (h *Handler) GetDB(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, db)
 }
 
+// CreateDB
+// @Summary  CreateDB
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/dbs [post]
 func (h *Handler) CreateDB(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	serviceID := r.PathValue("serviceID")
@@ -100,6 +138,20 @@ func (h *Handler) CreateDB(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusCreated, db)
 }
 
+// UpdateDB
+// @Summary  UpdateDB
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    dbID  path  string  true  "dbID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/dbs/{dbID} [put]
 func (h *Handler) UpdateDB(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	dbID := r.PathValue("dbID")
@@ -160,6 +212,19 @@ func (h *Handler) UpdateDB(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, db)
 }
 
+// DeleteDB
+// @Summary  DeleteDB
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    dbID  path  string  true  "dbID"
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/dbs/{dbID} [delete]
 func (h *Handler) DeleteDB(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	dbID := r.PathValue("dbID")
@@ -187,6 +252,19 @@ func (h *Handler) DeleteDB(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// ListDBVersions
+// @Summary  ListDBVersions
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    dbID  path  string  true  "dbID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/dbs/{dbID}/versions [get]
 func (h *Handler) ListDBVersions(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	dbID := r.PathValue("dbID")
@@ -210,6 +288,20 @@ func (h *Handler) ListDBVersions(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"versions": versions})
 }
 
+// CreateDBVersion
+// @Summary  CreateDBVersion
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    dbID  path  string  true  "dbID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/dbs/{dbID}/versions [post]
 func (h *Handler) CreateDBVersion(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	dbID := r.PathValue("dbID")
@@ -279,6 +371,21 @@ func (h *Handler) CreateDBVersion(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusCreated, version)
 }
 
+// RestoreDBVersion
+// @Summary  RestoreDBVersion
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    dbID  path  string  true  "dbID"
+// @Param    versionID  path  string  true  "versionID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/dbs/{dbID}/versions/{versionID}/restore [post]
 func (h *Handler) RestoreDBVersion(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	dbID := r.PathValue("dbID")

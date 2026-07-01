@@ -34,8 +34,17 @@ func NewAvatarHandler(s avatarStore, st storage.Client, c cache.Client) *AvatarH
 	return &AvatarHandler{store: s, storage: st, cache: c}
 }
 
-// PutUserAvatar handles PUT /api/v1/users/me/avatar — the calling user uploads
 // their own avatar (multipart field "file").
+// @Summary  PutUserAvatar
+// @Tags     users
+// @Security BearerAuth
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /users/me/avatar [put]
 func (h *AvatarHandler) PutUserAvatar(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {
@@ -59,7 +68,15 @@ func (h *AvatarHandler) PutUserAvatar(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"assetId": assetID})
 }
 
-// DeleteUserAvatar handles DELETE /api/v1/users/me/avatar.
+// @Summary  DeleteUserAvatar
+// @Tags     users
+// @Security BearerAuth
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /users/me/avatar [delete]
 func (h *AvatarHandler) DeleteUserAvatar(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {
@@ -84,6 +101,18 @@ func (h *AvatarHandler) DeleteUserAvatar(w http.ResponseWriter, r *http.Request)
 // PutServiceAccountAvatar handles
 // PUT /api/v1/orgs/{orgID}/service-accounts/{saID}/avatar — an admin sets a
 // service account's avatar (multipart field "file").
+// @Summary  PutServiceAccountAvatar
+// @Tags     service-accounts
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    saID  path  string  true  "saID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/service-accounts/{saID}/avatar [put]
 func (h *AvatarHandler) PutServiceAccountAvatar(w http.ResponseWriter, r *http.Request) {
 	saID := r.PathValue("saID")
 
@@ -111,6 +140,17 @@ func (h *AvatarHandler) PutServiceAccountAvatar(w http.ResponseWriter, r *http.R
 
 // DeleteServiceAccountAvatar handles
 // DELETE /api/v1/orgs/{orgID}/service-accounts/{saID}/avatar.
+// @Summary  DeleteServiceAccountAvatar
+// @Tags     service-accounts
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    saID  path  string  true  "saID"
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/service-accounts/{saID}/avatar [delete]
 func (h *AvatarHandler) DeleteServiceAccountAvatar(w http.ResponseWriter, r *http.Request) {
 	saID := r.PathValue("saID")
 
@@ -134,8 +174,19 @@ func (h *AvatarHandler) DeleteServiceAccountAvatar(w http.ResponseWriter, r *htt
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// PutOrgLogo handles PUT /api/v1/orgs/{orgID}/logo — an admin sets the org's
 // logo (multipart field "file").
+// @Summary  PutOrgLogo
+// @Tags     logo
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/logo [put]
+// @Router   /server/orgs/{orgID}/logo [put]
 func (h *AvatarHandler) PutOrgLogo(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 
@@ -161,7 +212,17 @@ func (h *AvatarHandler) PutOrgLogo(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"assetId": assetID})
 }
 
-// DeleteOrgLogo handles DELETE /api/v1/orgs/{orgID}/logo.
+// @Summary  DeleteOrgLogo
+// @Tags     logo
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/logo [delete]
+// @Router   /server/orgs/{orgID}/logo [delete]
 func (h *AvatarHandler) DeleteOrgLogo(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 

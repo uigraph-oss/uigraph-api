@@ -14,7 +14,7 @@ import (
 	commentapi "github.com/uigraph/app/internal/api/comment"
 	"github.com/uigraph/app/internal/api/component"
 	"github.com/uigraph/app/internal/api/diagram"
-	docsapi "github.com/uigraph/app/internal/api/docs"
+	docsapi "github.com/uigraph/app/internal/api/apidocs"
 	figmaapi "github.com/uigraph/app/internal/api/figma"
 	"github.com/uigraph/app/internal/api/folder"
 	"github.com/uigraph/app/internal/api/health"

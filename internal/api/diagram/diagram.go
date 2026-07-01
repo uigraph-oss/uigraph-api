@@ -25,6 +25,17 @@ import (
 
 const diagramCacheTTL = time.Hour
 
+// List
+// @Summary  List
+// @Tags     diagrams
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/diagrams [get]
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	q := r.URL.Query()
@@ -53,6 +64,18 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"diagrams": diagrams, "total": total})
 }
 
+// Create
+// @Summary  Create
+// @Tags     diagrams
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/diagrams [post]
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	p, ok := authmw.PrincipalFromCtx(r.Context())
@@ -131,6 +154,18 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusCreated, dg)
 }
 
+// Get
+// @Summary  Get
+// @Tags     diagrams
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    diagramID  path  string  true  "diagramID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/diagrams/{diagramID} [get]
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	dg, err := h.store.GetDiagram(r.Context(), r.PathValue("diagramID"))
 	if err != nil {
@@ -144,6 +179,19 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, dg)
 }
 
+// UpdateThumbnail
+// @Summary  UpdateThumbnail
+// @Tags     diagrams
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    diagramID  path  string  true  "diagramID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/diagrams/{diagramID}/thumbnail [post]
 func (h *Handler) UpdateThumbnail(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("diagramID")
 	p, ok := authmw.PrincipalFromCtx(r.Context())
@@ -205,6 +253,18 @@ func (h *Handler) UpdateThumbnail(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GetContent
+// @Summary  GetContent
+// @Tags     diagrams
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    diagramID  path  string  true  "diagramID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/diagrams/{diagramID}/content [get]
 func (h *Handler) GetContent(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("diagramID")
 
@@ -234,6 +294,19 @@ func (h *Handler) GetContent(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"diagramId": id, "content": content})
 }
 
+// Update
+// @Summary  Update
+// @Tags     diagrams
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    diagramID  path  string  true  "diagramID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/diagrams/{diagramID} [put]
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("diagramID")
 	p, ok := authmw.PrincipalFromCtx(r.Context())
@@ -302,6 +375,18 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, dg)
 }
 
+// Delete
+// @Summary  Delete
+// @Tags     diagrams
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    diagramID  path  string  true  "diagramID"
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/diagrams/{diagramID} [delete]
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("diagramID")
 	p, ok := authmw.PrincipalFromCtx(r.Context())
@@ -317,9 +402,19 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// Sync handles POST /api/v1/orgs/{orgID}/diagrams/sync
 // Upserts a diagram by name (or diagramId). Creates an auto-version only when
 // content has actually changed (hash comparison — no storage read required).
+// @Summary  Sync
+// @Tags     diagrams
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/diagrams/sync [post]
 func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	p, ok := authmw.PrincipalFromCtx(r.Context())
@@ -524,6 +619,19 @@ func (h *Handler) enqueueScreenshot(ctx context.Context, orgID, diagramID string
 	}
 }
 
+// PrepareThumbnailUpload
+// @Summary  PrepareThumbnailUpload
+// @Tags     diagrams
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    diagramID  path  string  true  "diagramID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/diagrams/{diagramID}/thumbnail/prepare [post]
 func (h *Handler) PrepareThumbnailUpload(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	diagramID := r.PathValue("diagramID")
@@ -560,6 +668,19 @@ func (h *Handler) PrepareThumbnailUpload(w http.ResponseWriter, r *http.Request)
 	})
 }
 
+// ConfirmThumbnailUpload
+// @Summary  ConfirmThumbnailUpload
+// @Tags     diagrams
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    diagramID  path  string  true  "diagramID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/diagrams/{diagramID}/thumbnail/confirm [post]
 func (h *Handler) ConfirmThumbnailUpload(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	diagramID := r.PathValue("diagramID")

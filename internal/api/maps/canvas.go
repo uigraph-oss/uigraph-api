@@ -7,7 +7,17 @@ import (
 	"github.com/uigraph/app/internal/uimap"
 )
 
-// GetCanvas handles GET /api/v1/orgs/{orgID}/maps/{mapID}/canvas
+// @Summary  GetCanvas
+// @Tags     maps
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    mapID  path  string  true  "mapID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/maps/{mapID}/canvas [get]
 func (h *Handler) GetCanvas(w http.ResponseWriter, r *http.Request) {
 	mapID := r.PathValue("mapID")
 	c, err := h.store.GetCanvas(r.Context(), mapID)
@@ -25,7 +35,18 @@ func (h *Handler) GetCanvas(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, c)
 }
 
-// UpsertCanvas handles PUT /api/v1/orgs/{orgID}/maps/{mapID}/canvas
+// @Summary  UpsertCanvas
+// @Tags     maps
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    mapID  path  string  true  "mapID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/maps/{mapID}/canvas [put]
 func (h *Handler) UpsertCanvas(w http.ResponseWriter, r *http.Request) {
 	mapID := r.PathValue("mapID")
 	orgID := r.PathValue("orgID")

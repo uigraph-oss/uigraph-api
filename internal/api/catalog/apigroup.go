@@ -17,6 +17,18 @@ import (
 
 // ── API Groups ────────────────────────────────────────────────────────────────
 
+// ListAPIGroups
+// @Summary  ListAPIGroups
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/api-groups [get]
 func (h *Handler) ListAPIGroups(w http.ResponseWriter, r *http.Request) {
 	groups, err := h.store.ListAPIGroups(r.Context(), r.PathValue("serviceID"))
 	if err != nil {
@@ -26,6 +38,19 @@ func (h *Handler) ListAPIGroups(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"apiGroups": groups})
 }
 
+// CreateAPIGroup
+// @Summary  CreateAPIGroup
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/api-groups [post]
 func (h *Handler) CreateAPIGroup(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	orgID := r.PathValue("orgID")
@@ -103,6 +128,19 @@ func (h *Handler) CreateAPIGroup(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusCreated, g)
 }
 
+// GetAPIGroup
+// @Summary  GetAPIGroup
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    apiGroupID  path  string  true  "apiGroupID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID} [get]
 func (h *Handler) GetAPIGroup(w http.ResponseWriter, r *http.Request) {
 	g, err := h.store.GetAPIGroup(r.Context(), r.PathValue("apiGroupID"))
 	if err != nil {
@@ -116,7 +154,18 @@ func (h *Handler) GetAPIGroup(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, g)
 }
 
-// GetAPIGroupSpec handles GET /api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/spec
+// @Summary  GetAPIGroupSpec
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    apiGroupID  path  string  true  "apiGroupID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/spec [get]
 func (h *Handler) GetAPIGroupSpec(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	serviceID := r.PathValue("serviceID")
@@ -163,6 +212,20 @@ func (h *Handler) GetAPIGroupSpec(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// UpdateAPIGroup
+// @Summary  UpdateAPIGroup
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    apiGroupID  path  string  true  "apiGroupID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID} [put]
 func (h *Handler) UpdateAPIGroup(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	p, ok := authmw.PrincipalFromCtx(r.Context())
@@ -246,6 +309,19 @@ func (h *Handler) UpdateAPIGroup(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, g)
 }
 
+// DeleteAPIGroup
+// @Summary  DeleteAPIGroup
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    apiGroupID  path  string  true  "apiGroupID"
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID} [delete]
 func (h *Handler) DeleteAPIGroup(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {
@@ -259,8 +335,19 @@ func (h *Handler) DeleteAPIGroup(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// SyncAPIGroup handles POST /api/v1/orgs/{orgID}/services/{serviceID}/api-groups/sync
 // CLI upsert: creates or updates an API group, skipping the spec upload when hash is unchanged.
+// @Summary  SyncAPIGroup
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/api-groups/sync [post]
 func (h *Handler) SyncAPIGroup(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("serviceID")
 	orgID := r.PathValue("orgID")
@@ -373,7 +460,18 @@ func (h *Handler) SyncAPIGroup(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusCreated, map[string]any{"apiGroupId": id, "versionCreated": versionCreated})
 }
 
-// ListAPIGroupVersions handles GET /api/v1/orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/versions
+// @Summary  ListAPIGroupVersions
+// @Tags     services
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    apiGroupID  path  string  true  "apiGroupID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/versions [get]
 func (h *Handler) ListAPIGroupVersions(w http.ResponseWriter, r *http.Request) {
 	versions, err := h.store.ListAPIGroupVersions(r.Context(), r.PathValue("apiGroupID"))
 	if err != nil {

@@ -1,4 +1,4 @@
-package docs
+package apidocs
 
 import (
 	"bytes"
@@ -19,7 +19,16 @@ import (
 	"github.com/uigraph/app/internal/storage"
 )
 
-// List handles GET /api/v1/orgs/{orgID}/docs
+// @Summary  List
+// @Tags     docs
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/docs [get]
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	q := r.URL.Query()
@@ -48,7 +57,17 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"docs": list, "total": total})
 }
 
-// Get handles GET /api/v1/orgs/{orgID}/docs/{docID}
+// @Summary  Get
+// @Tags     docs
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    docID  path  string  true  "docID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/docs/{docID} [get]
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	doc, err := h.store.GetDoc(r.Context(), r.PathValue("docID"))
@@ -63,7 +82,17 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, doc)
 }
 
-// Create handles POST /api/v1/orgs/{orgID}/docs
+// @Summary  Create
+// @Tags     docs
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/docs [post]
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	p, ok := authmw.PrincipalFromCtx(r.Context())
@@ -115,7 +144,18 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusCreated, doc)
 }
 
-// Update handles PUT /api/v1/orgs/{orgID}/docs/{docID}
+// @Summary  Update
+// @Tags     docs
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    docID  path  string  true  "docID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/docs/{docID} [put]
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	p, ok := authmw.PrincipalFromCtx(r.Context())
@@ -172,7 +212,17 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, doc)
 }
 
-// Delete handles DELETE /api/v1/orgs/{orgID}/docs/{docID}
+// @Summary  Delete
+// @Tags     docs
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    docID  path  string  true  "docID"
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/docs/{docID} [delete]
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
 	p, ok := authmw.PrincipalFromCtx(r.Context())

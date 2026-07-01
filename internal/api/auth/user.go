@@ -61,6 +61,15 @@ type updateUserRequest struct {
 
 // List returns all users globally (server admin only).
 // GET /api/v1/users
+// @Summary  List
+// @Tags     users
+// @Security BearerAuth
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /users [get]
 func (h *UserHandler) List(w http.ResponseWriter, r *http.Request) {
 	users, err := h.store.ListAllUsers(r.Context())
 	if err != nil {
@@ -76,6 +85,16 @@ func (h *UserHandler) List(w http.ResponseWriter, r *http.Request) {
 
 // Create creates a new user (server admin only).
 // POST /api/v1/users
+// @Summary  Create
+// @Tags     users
+// @Security BearerAuth
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /users [post]
 func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req createUserRequest
 	if err := httputil.Decode(r, &req); err != nil {
@@ -124,6 +143,16 @@ func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 // Get returns a single user by ID.
 // GET /api/v1/users/{userID}
+// @Summary  Get
+// @Tags     users
+// @Security BearerAuth
+// @Param    userID  path  string  true  "userID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /users/{userID} [get]
 func (h *UserHandler) Get(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("userID")
 	u, err := h.store.GetUser(r.Context(), userID)
@@ -140,6 +169,17 @@ func (h *UserHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 // Update changes a user's name, role, or disabled status.
 // PUT /api/v1/users/{userID}
+// @Summary  Update
+// @Tags     users
+// @Security BearerAuth
+// @Param    userID  path  string  true  "userID"
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /users/{userID} [put]
 func (h *UserHandler) Update(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("userID")
 	var req updateUserRequest
@@ -177,6 +217,16 @@ func (h *UserHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 // Disable marks a user as disabled.
 // DELETE /api/v1/users/{userID}
+// @Summary  Disable
+// @Tags     users
+// @Security BearerAuth
+// @Param    userID  path  string  true  "userID"
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /users/{userID} [delete]
 func (h *UserHandler) Disable(w http.ResponseWriter, r *http.Request) {
 	userID := r.PathValue("userID")
 	if err := h.store.DisableUser(r.Context(), userID); err != nil {

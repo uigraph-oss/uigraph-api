@@ -119,6 +119,15 @@ type providerInfo struct {
 
 // Login authenticates with email + password and returns a session token.
 // POST /api/v1/auth/login
+// @Summary  Login
+// @Tags     auth
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /auth/login [post]
 func (h *SessionHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
 	if err := httputil.Decode(r, &req); err != nil {
@@ -180,6 +189,14 @@ func (h *SessionHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 // ListProviders returns all globally configured OAuth providers.
 // GET /api/v1/auth/providers
+// @Summary  ListProviders
+// @Tags     auth
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /auth/providers [get]
 func (h *SessionHandler) ListProviders(w http.ResponseWriter, r *http.Request) {
 	configs, err := h.store.ListOAuthProviders(r.Context())
 	if err != nil {
@@ -205,6 +222,15 @@ func (h *SessionHandler) ListProviders(w http.ResponseWriter, r *http.Request) {
 
 // InitiateOAuth redirects the browser to the IdP authorization endpoint.
 // GET /api/v1/auth/login/{provider}
+// @Summary  InitiateOAuth
+// @Tags     auth
+// @Param    provider  path  string  true  "provider"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /auth/login/{provider} [get]
 func (h *SessionHandler) InitiateOAuth(w http.ResponseWriter, r *http.Request) {
 	cfg, err := h.store.GetOAuthProvider(r.Context(), r.PathValue("provider"))
 	if err != nil {
@@ -240,6 +266,15 @@ func (h *SessionHandler) InitiateOAuth(w http.ResponseWriter, r *http.Request) {
 // token, reads the userinfo claims, provisions a global user, creates a
 // session, sets the session cookie, and redirects to the SPA.
 // GET /api/v1/auth/callback/{provider}?code=...&state=...
+// @Summary  OAuthCallback
+// @Tags     auth
+// @Param    provider  path  string  true  "provider"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /auth/callback/{provider} [get]
 func (h *SessionHandler) OAuthCallback(w http.ResponseWriter, r *http.Request) {
 	cfg, err := h.store.GetOAuthProvider(r.Context(), r.PathValue("provider"))
 	if err != nil {
@@ -356,12 +391,31 @@ func (h *SessionHandler) OAuthCallback(w http.ResponseWriter, r *http.Request) {
 
 // SAMLCallback handles the IdP POST to the ACS endpoint.
 // POST /api/v1/auth/saml/acs
+// @Summary  SAMLCallback
+// @Tags     auth
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /auth/saml/acs [post]
 func (h *SessionHandler) SAMLCallback(w http.ResponseWriter, r *http.Request) {
 	httputil.NotImplemented(w)
 }
 
 // Logout deletes the current session.
 // POST /api/v1/auth/logout
+// @Summary  Logout
+// @Tags     auth
+// @Security BearerAuth
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /auth/logout [post]
 func (h *SessionHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	token := extractBearerToken(r)
 	if token == "" {
@@ -386,6 +440,15 @@ func (h *SessionHandler) Logout(w http.ResponseWriter, r *http.Request) {
 
 // Me returns the authenticated principal's profile and org context.
 // GET /api/v1/auth/me
+// @Summary  Me
+// @Tags     auth
+// @Security BearerAuth
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /auth/me [get]
 func (h *SessionHandler) Me(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {
@@ -438,6 +501,15 @@ func (h *SessionHandler) Me(w http.ResponseWriter, r *http.Request) {
 // MyOrgs returns the orgs the authenticated user is a member of, with the
 // caller's role in each and which one the session is currently scoped to.
 // GET /api/v1/auth/orgs
+// @Summary  MyOrgs
+// @Tags     auth
+// @Security BearerAuth
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /auth/orgs [get]
 func (h *SessionHandler) MyOrgs(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {
@@ -498,6 +570,17 @@ type sessionTokenResponse struct {
 	ExpiresAt time.Time `json:"expiresAt"`
 }
 
+// SessionToken
+// @Summary  SessionToken
+// @Tags     auth
+// @Security BearerAuth
+// @Param    body  body  object  false  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /auth/session-token [post]
 func (h *SessionHandler) SessionToken(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok || p.Kind != identity.PrincipalUser {
