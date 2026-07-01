@@ -51,6 +51,7 @@ definitions:
       message:
         type: string
     type: object
+host: api.uigraph.app
 info:
   contact: {}
   description: REST API for uigraph.
@@ -8869,6 +8870,8 @@ paths:
       summary: PutUserAvatar
       tags:
       - users
+schemes:
+- https
 securityDefinitions:
   BearerAuth:
     in: header

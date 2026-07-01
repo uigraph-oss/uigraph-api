@@ -1,4 +1,7 @@
 {
+    "schemes": [
+        "https"
+    ],
     "swagger": "2.0",
     "info": {
         "description": "REST API for uigraph.",
@@ -6,6 +9,7 @@
         "contact": {},
         "version": "1.0"
     },
+    "host": "api.uigraph.app",
     "basePath": "/api/v1",
     "paths": {
         "/auth/callback/{provider}": {

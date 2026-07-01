@@ -14,6 +14,8 @@ import (
 // @title                       uigraph API
 // @version                     1.0
 // @description                 REST API for uigraph.
+// @host                        api.uigraph.app
+// @schemes                     https
 // @BasePath                    /api/v1
 // @securityDefinitions.apikey  BearerAuth
 // @in                          header
