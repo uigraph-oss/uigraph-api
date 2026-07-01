@@ -204,6 +204,58 @@ type ServiceDBVersion struct {
 	CreatedAt     time.Time       `json:"createdAt"`
 }
 
+// ── Saved Queries ─────────────────────────────────────────────────────────────
+
+type SavedQueryScope string
+
+const (
+	SavedQueryScopePersonal SavedQueryScope = "personal"
+	SavedQueryScopeTeam     SavedQueryScope = "team"
+)
+
+// SavedQueryFolder groups SavedQueries within a service DB, scoped either to a
+// single user (personal) or the whole org/team (team).
+type SavedQueryFolder struct {
+	ID          string          `json:"id"`
+	OrgID       string          `json:"orgId"`
+	ServiceDBID string          `json:"serviceDbId"`
+	Scope       SavedQueryScope `json:"scope"`
+	OwnerUserID *string         `json:"ownerUserId,omitempty"`
+	TeamID      *string         `json:"teamId,omitempty"`
+	Name        string          `json:"name"`
+	CreatedBy   string          `json:"createdBy"`
+	UpdatedBy   *string         `json:"updatedBy,omitempty"`
+	CreatedAt   time.Time       `json:"createdAt"`
+	UpdatedAt   time.Time       `json:"updatedAt"`
+	DeletedAt   *time.Time      `json:"deletedAt,omitempty"`
+	DeletedBy   *string         `json:"deletedBy,omitempty"`
+}
+
+// SavedQuery is a saved SQL/NoSQL query snippet attached to a service DB.
+// CLI/CI-synced rows always have Scope=team, TeamID=nil, Source="ci", and a
+// non-nil SourceRef used to upsert on repeated syncs without duplicating rows.
+type SavedQuery struct {
+	ID          string          `json:"id"`
+	OrgID       string          `json:"orgId"`
+	ServiceDBID string          `json:"serviceDbId"`
+	FolderID    *string         `json:"folderId,omitempty"`
+	Scope       SavedQueryScope `json:"scope"`
+	OwnerUserID *string         `json:"ownerUserId,omitempty"`
+	TeamID      *string         `json:"teamId,omitempty"`
+	Title       string          `json:"title"`
+	Description string          `json:"description"`
+	QueryText   string          `json:"queryText"`
+	Tags        []string        `json:"tags"`
+	Source      *string         `json:"source,omitempty"`
+	SourceRef   *string         `json:"sourceRef,omitempty"`
+	CreatedBy   string          `json:"createdBy"`
+	UpdatedBy   *string         `json:"updatedBy,omitempty"`
+	CreatedAt   time.Time       `json:"createdAt"`
+	UpdatedAt   time.Time       `json:"updatedAt"`
+	DeletedAt   *time.Time      `json:"deletedAt,omitempty"`
+	DeletedBy   *string         `json:"deletedBy,omitempty"`
+}
+
 // ── Service Tests ─────────────────────────────────────────────────────────────
 
 type KeyValue struct {

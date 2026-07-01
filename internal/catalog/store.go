@@ -101,4 +101,21 @@ type Store interface {
 	GetServiceDBVersion(ctx context.Context, id string) (*ServiceDBVersion, error)
 	ListServiceDBVersions(ctx context.Context, serviceDBID string) ([]ServiceDBVersion, error)
 	LatestServiceDBVersionNumber(ctx context.Context, serviceDBID string) (int, error)
+
+	// Saved query folders
+	CreateSavedQueryFolder(ctx context.Context, f SavedQueryFolder) error
+	GetSavedQueryFolder(ctx context.Context, id string) (*SavedQueryFolder, error)
+	ListSavedQueryFolders(ctx context.Context, serviceDBID string, scope SavedQueryScope, ownerUserID *string) ([]SavedQueryFolder, error)
+	SoftDeleteSavedQueryFolder(ctx context.Context, id, deletedBy string) error
+
+	// Saved queries
+	CreateSavedQuery(ctx context.Context, q SavedQuery) error
+	GetSavedQuery(ctx context.Context, id string) (*SavedQuery, error)
+	ListSavedQueries(ctx context.Context, serviceDBID string, scope SavedQueryScope, ownerUserID *string) ([]SavedQuery, error)
+	UpdateSavedQuery(ctx context.Context, q SavedQuery) error
+	SoftDeleteSavedQuery(ctx context.Context, id, deletedBy string) error
+	// UpsertSavedQueryBySourceRef is the CI/CLI-facing entry point: a single
+	// INSERT ... ON CONFLICT (service_db_id, source_ref) DO UPDATE, race-free
+	// under concurrent syncs. created is true when a new row was inserted.
+	UpsertSavedQueryBySourceRef(ctx context.Context, q SavedQuery) (result SavedQuery, created bool, err error)
 }
