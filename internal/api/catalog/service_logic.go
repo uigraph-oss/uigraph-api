@@ -394,19 +394,3 @@ func parseGrpcSpecEndpoints(spec, apiGroupID, serviceID, orgID, actorID string, 
 	}
 	return endpoints, nil
 }
-
-// toSlug converts a name to a URL-safe slug (lowercase, hyphens).
-func toSlug(name string) string {
-	s := strings.ToLower(name)
-	s = strings.Map(func(r rune) rune {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '.' {
-			return r
-		}
-		return '-'
-	}, s)
-	// Collapse consecutive hyphens.
-	for strings.Contains(s, "--") {
-		s = strings.ReplaceAll(s, "--", "-")
-	}
-	return strings.Trim(s, "-")
-}

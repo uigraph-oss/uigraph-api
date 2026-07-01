@@ -9,56 +9,6 @@ import (
 	catalogpkg "github.com/uigraph/app/internal/catalog"
 )
 
-// ── toSlug ────────────────────────────────────────────────────────────────────
-
-func TestToSlug_lowercasesInput(t *testing.T) {
-	if got := toSlug("Hello World"); got != "hello-world" {
-		t.Fatalf("expected hello-world, got %q", got)
-	}
-}
-
-func TestToSlug_replacesSpacesWithHyphens(t *testing.T) {
-	if got := toSlug("my service name"); got != "my-service-name" {
-		t.Fatalf("expected my-service-name, got %q", got)
-	}
-}
-
-func TestToSlug_replacesSpecialChars(t *testing.T) {
-	if got := toSlug("order-service@v2"); got != "order-service-v2" {
-		t.Fatalf("expected order-service-v2, got %q", got)
-	}
-}
-
-func TestToSlug_preservesDotsAndHyphens(t *testing.T) {
-	if got := toSlug("api.v1-service"); got != "api.v1-service" {
-		t.Fatalf("expected api.v1-service, got %q", got)
-	}
-}
-
-func TestToSlug_preservesNumbers(t *testing.T) {
-	if got := toSlug("service123"); got != "service123" {
-		t.Fatalf("expected service123, got %q", got)
-	}
-}
-
-func TestToSlug_collapsesConsecutiveHyphens(t *testing.T) {
-	if got := toSlug("foo  bar"); got != "foo-bar" {
-		t.Fatalf("expected foo-bar (collapsed hyphens), got %q", got)
-	}
-}
-
-func TestToSlug_trimsLeadingAndTrailingHyphens(t *testing.T) {
-	if got := toSlug("@service@"); got != "service" {
-		t.Fatalf("expected service (trimmed), got %q", got)
-	}
-}
-
-func TestToSlug_emptyStringIsEmpty(t *testing.T) {
-	if got := toSlug(""); got != "" {
-		t.Fatalf("expected empty string, got %q", got)
-	}
-}
-
 // ── specHash / sha256Bytes ────────────────────────────────────────────────────
 
 func TestSpecHash_isDeterministic(t *testing.T) {

@@ -19,7 +19,6 @@ type Store interface {
 	// Services
 	CreateService(ctx context.Context, s Service) error
 	GetService(ctx context.Context, id string) (*Service, error)
-	GetServiceBySlug(ctx context.Context, orgID, slug string) (*Service, error)
 	ListServices(ctx context.Context, orgID string, p ListParams) ([]Service, int, error)
 	UpdateService(ctx context.Context, s Service) error
 	SoftDeleteService(ctx context.Context, id, deletedBy string) error

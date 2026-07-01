@@ -38,11 +38,11 @@ func (d *DB) CreateService(ctx context.Context, s catalog.Service) error {
 
 	const q = `
 		INSERT INTO services
-			(id, org_id, folder_id, team_id, name, slug, description,
+			(id, org_id, folder_id, team_id, name, description,
 			 status, tier, category, language,
 			 git_repo_url, jira_project_url, slack_channel_url, last_commit_sha,
 			 labels, metadata, created_by, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`
 	now := time.Now().UTC()
 	if s.CreatedAt.IsZero() {
 		s.CreatedAt = now
@@ -61,7 +61,7 @@ func (d *DB) CreateService(ctx context.Context, s catalog.Service) error {
 	_, err := d.db.ExecContext(
 		ctx, q,
 		s.ID, s.OrgID, s.FolderID, s.TeamID,
-		s.Name, s.Slug, s.Description,
+		s.Name, s.Description,
 		s.Status, s.Tier, s.Category, s.Language,
 		s.GitRepoURL, s.JiraProjectURL, s.SlackChannelURL, s.LastCommitSha,
 		pq.Array(labels), meta,
@@ -75,7 +75,7 @@ func (d *DB) CreateService(ctx context.Context, s catalog.Service) error {
 
 func (d *DB) GetService(ctx context.Context, id string) (*catalog.Service, error) {
 	const q = `
-		SELECT id, org_id, folder_id, team_id, name, slug, description,
+		SELECT id, org_id, folder_id, team_id, name, description,
 		       status, tier, category, language,
 		       git_repo_url, jira_project_url, slack_channel_url, last_commit_sha,
 		       labels, metadata, created_by, updated_by,
@@ -87,24 +87,6 @@ func (d *DB) GetService(ctx context.Context, id string) (*catalog.Service, error
 	}
 	if err != nil {
 		return nil, fmt.Errorf("postgres: GetService: %w", err)
-	}
-	return &s, nil
-}
-
-func (d *DB) GetServiceBySlug(ctx context.Context, orgID, slug string) (*catalog.Service, error) {
-	const q = `
-		SELECT id, org_id, folder_id, team_id, name, slug, description,
-		       status, tier, category, language,
-		       git_repo_url, jira_project_url, slack_channel_url, last_commit_sha,
-		       labels, metadata, created_by, updated_by,
-		       created_at, updated_at, deleted_at, deleted_by
-		FROM services WHERE org_id = $1 AND slug = $2 AND deleted_at IS NULL`
-	s, err := scanService(d.db.QueryRowContext(ctx, q, orgID, slug))
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("postgres: GetServiceBySlug: %w", err)
 	}
 	return &s, nil
 }
@@ -141,7 +123,7 @@ func (d *DB) ListServices(ctx context.Context, orgID string, p catalog.ListParam
 	}
 
 	q := `
-		SELECT id, org_id, folder_id, team_id, name, slug, description,
+		SELECT id, org_id, folder_id, team_id, name, description,
 		       status, tier, category, language,
 		       git_repo_url, jira_project_url, slack_channel_url, last_commit_sha,
 		       labels, metadata, created_by, updated_by,
@@ -400,11 +382,11 @@ func (d *DB) UpdateService(ctx context.Context, s catalog.Service) error {
 	}
 	const q = `
 		UPDATE services
-		SET name=$1, slug=$2, description=$3, status=$4, tier=$5, category=$6, language=$7,
-		    git_repo_url=$8, jira_project_url=$9, slack_channel_url=$10, last_commit_sha=$11,
-		    labels=$12, metadata=$13, folder_id=$14, team_id=$15,
-		    updated_by=$16, updated_at=$17
-		WHERE id=$18 AND deleted_at IS NULL`
+		SET name=$1, description=$2, status=$3, tier=$4, category=$5, language=$6,
+		    git_repo_url=$7, jira_project_url=$8, slack_channel_url=$9, last_commit_sha=$10,
+		    labels=$11, metadata=$12, folder_id=$13, team_id=$14,
+		    updated_by=$15, updated_at=$16
+		WHERE id=$17 AND deleted_at IS NULL`
 	meta := s.Metadata
 	if meta == nil {
 		meta = json.RawMessage("{}")
@@ -415,7 +397,7 @@ func (d *DB) UpdateService(ctx context.Context, s catalog.Service) error {
 	}
 	_, err := d.db.ExecContext(
 		ctx, q,
-		s.Name, s.Slug, s.Description, s.Status, s.Tier, s.Category, s.Language,
+		s.Name, s.Description, s.Status, s.Tier, s.Category, s.Language,
 		s.GitRepoURL, s.JiraProjectURL, s.SlackChannelURL, s.LastCommitSha,
 		pq.Array(labels), meta, s.FolderID, s.TeamID,
 		s.UpdatedBy, time.Now().UTC(), s.ID,
@@ -438,7 +420,7 @@ func scanService(row interface{ Scan(...any) error }) (catalog.Service, error) {
 	var meta []byte
 	err := row.Scan(
 		&s.ID, &s.OrgID, &s.FolderID, &s.TeamID,
-		&s.Name, &s.Slug, &s.Description,
+		&s.Name, &s.Description,
 		&s.Status, &s.Tier, &s.Category, &s.Language,
 		&s.GitRepoURL, &s.JiraProjectURL, &s.SlackChannelURL, &s.LastCommitSha,
 		&labels, &meta,

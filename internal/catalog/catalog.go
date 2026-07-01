@@ -20,7 +20,6 @@ type Service struct {
 	TeamID          *string         `json:"teamId,omitempty"`
 	TeamName        string          `json:"-"`
 	Name            string          `json:"name"`
-	Slug            string          `json:"slug"`
 	Description     string          `json:"description"`
 	Status          string          `json:"status"`
 	Tier            string          `json:"tier"`

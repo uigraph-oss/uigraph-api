@@ -102,7 +102,6 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	var body struct {
 		Name            string          `json:"name"`
-		Slug            string          `json:"slug"`
 		Description     string          `json:"description"`
 		Status          string          `json:"status"`
 		Tier            string          `json:"tier"`
@@ -135,9 +134,6 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		httputil.BadRequest(w, "team is required")
 		return
 	}
-	if body.Slug == "" {
-		body.Slug = toSlug(body.Name)
-	}
 	if body.Status == "" {
 		body.Status = "active"
 	}
@@ -153,7 +149,6 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		TeamID:          body.TeamID,
 		TeamName:        body.TeamName,
 		Name:            body.Name,
-		Slug:            body.Slug,
 		Description:     body.Description,
 		Status:          body.Status,
 		Tier:            body.Tier,
@@ -235,7 +230,6 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 
 	var body struct {
 		Name            *string         `json:"name"`
-		Slug            *string         `json:"slug"`
 		Description     *string         `json:"description"`
 		Status          *string         `json:"status"`
 		Tier            *string         `json:"tier"`
@@ -257,9 +251,6 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Name != nil {
 		svc.Name = *body.Name
-	}
-	if body.Slug != nil {
-		svc.Slug = *body.Slug
 	}
 	if body.Description != nil {
 		svc.Description = *body.Description
