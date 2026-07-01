@@ -95,6 +95,16 @@ func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if role == "" {
 		role = "user"
 	}
+	existing, err := h.store.GetUserByEmail(r.Context(), req.Email)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if existing != nil {
+		httputil.Error(w, r, store.ErrConflict)
+		return
+	}
+	now := time.Now().UTC()
 	u := org.User{
 		ID:           newID(),
 		Email:        req.Email,
@@ -102,6 +112,8 @@ func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Login:        req.Email,
 		PasswordHash: string(hash),
 		Role:         role,
+		CreatedAt:    now,
+		UpdatedAt:    now,
 	}
 	if err := h.store.CreateUser(r.Context(), u); err != nil {
 		httputil.Error(w, r, err)
