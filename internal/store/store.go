@@ -18,9 +18,10 @@ import (
 )
 
 var (
-	ErrNotFound     = errors.New("not found")
-	ErrConflict     = errors.New("conflict")
-	ErrTeamNotFound = errors.New("team not found")
+	ErrNotFound          = errors.New("not found")
+	ErrConflict          = errors.New("conflict")
+	ErrTeamNotFound      = errors.New("team not found")
+	ErrServiceNameExists = errors.New("service name already exists")
 )
 
 type Store interface {

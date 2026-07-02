@@ -68,6 +68,10 @@ func (d *DB) CreateService(ctx context.Context, s catalog.Service) error {
 		s.CreatedBy, s.CreatedAt, s.UpdatedAt,
 	)
 	if err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23505" && pqErr.Constraint == "idx_services_org_name" {
+			return fmt.Errorf("%w: %s", store.ErrServiceNameExists, s.Name)
+		}
 		return fmt.Errorf("postgres: CreateService: %w", err)
 	}
 	return nil
@@ -403,6 +407,10 @@ func (d *DB) UpdateService(ctx context.Context, s catalog.Service) error {
 		s.UpdatedBy, time.Now().UTC(), s.ID,
 	)
 	if err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23505" && pqErr.Constraint == "idx_services_org_name" {
+			return fmt.Errorf("%w: %s", store.ErrServiceNameExists, s.Name)
+		}
 		return fmt.Errorf("postgres: UpdateService: %w", err)
 	}
 	return nil

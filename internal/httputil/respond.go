@@ -34,6 +34,10 @@ func BadRequest(w http.ResponseWriter, msg string) {
 	JSON(w, http.StatusBadRequest, apiError("bad_request", msg))
 }
 
+func Conflict(w http.ResponseWriter, msg string) {
+	JSON(w, http.StatusConflict, apiError("conflict", msg))
+}
+
 func Forbidden(w http.ResponseWriter) {
 	JSON(w, http.StatusForbidden, apiError("forbidden", "insufficient permissions"))
 }

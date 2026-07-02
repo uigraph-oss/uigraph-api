@@ -168,6 +168,10 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			httputil.BadRequest(w, fmt.Sprintf("team %q does not exist", body.TeamName))
 			return
 		}
+		if errors.Is(err, storepkg.ErrServiceNameExists) {
+			httputil.Conflict(w, fmt.Sprintf("a service named %q already exists in this organization", body.Name))
+			return
+		}
 		httputil.Error(w, r, err)
 		return
 	}
@@ -306,6 +310,10 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	if err := h.store.UpdateService(r.Context(), *svc); err != nil {
 		if errors.Is(err, storepkg.ErrTeamNotFound) {
 			httputil.BadRequest(w, fmt.Sprintf("team %q does not exist", svc.TeamName))
+			return
+		}
+		if errors.Is(err, storepkg.ErrServiceNameExists) {
+			httputil.Conflict(w, fmt.Sprintf("a service named %q already exists in this organization", svc.Name))
 			return
 		}
 		httputil.Error(w, r, err)
