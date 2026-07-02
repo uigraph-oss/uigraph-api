@@ -115,6 +115,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		SlackChannelURL *string         `json:"slackChannelUrl"`
 		Labels          []string        `json:"labels"`
 		Metadata        json.RawMessage `json:"metadata"`
+		CommitHash      *string         `json:"commitHash"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -143,25 +144,26 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now().UTC()
 	svc := catalogpkg.Service{
-		ID:              uuid.NewString(),
-		OrgID:           orgID,
-		FolderID:        body.FolderID,
-		TeamID:          body.TeamID,
-		TeamName:        body.TeamName,
-		Name:            body.Name,
-		Description:     body.Description,
-		Status:          body.Status,
-		Tier:            body.Tier,
-		Category:        body.Category,
-		Language:        body.Language,
-		GitRepoURL:      body.GitRepoURL,
-		JiraProjectURL:  body.JiraProjectURL,
-		SlackChannelURL: body.SlackChannelURL,
-		Labels:          body.Labels,
-		Metadata:        body.Metadata,
-		CreatedBy:       p.UserID,
-		CreatedAt:       now,
-		UpdatedAt:       now,
+		ID:                  uuid.NewString(),
+		OrgID:               orgID,
+		FolderID:            body.FolderID,
+		TeamID:              body.TeamID,
+		TeamName:            body.TeamName,
+		Name:                body.Name,
+		Description:         body.Description,
+		Status:              body.Status,
+		Tier:                body.Tier,
+		Category:            body.Category,
+		Language:            body.Language,
+		GitRepoURL:          body.GitRepoURL,
+		JiraProjectURL:      body.JiraProjectURL,
+		SlackChannelURL:     body.SlackChannelURL,
+		Labels:              body.Labels,
+		Metadata:            body.Metadata,
+		CreatedBy:           p.UserID,
+		CreatedByCommitHash: body.CommitHash,
+		CreatedAt:           now,
+		UpdatedAt:           now,
 	}
 	if err := h.store.CreateService(r.Context(), svc); err != nil {
 		if errors.Is(err, storepkg.ErrTeamNotFound) {
@@ -248,6 +250,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		LastCommitSha   *string         `json:"lastCommitSha"`
 		Labels          []string        `json:"labels"`
 		Metadata        json.RawMessage `json:"metadata"`
+		CommitHash      *string         `json:"commitHash"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -306,6 +309,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		svc.Metadata = body.Metadata
 	}
 	svc.UpdatedBy = &p.UserID
+	svc.UpdatedByCommitHash = body.CommitHash
 
 	if err := h.store.UpdateService(r.Context(), *svc); err != nil {
 		if errors.Is(err, storepkg.ErrTeamNotFound) {

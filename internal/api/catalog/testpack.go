@@ -63,8 +63,9 @@ func (h *Handler) CreateTestPack(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Name string `json:"name"`
-		Type string `json:"type"`
+		Name       string  `json:"name"`
+		Type       string  `json:"type"`
+		CommitHash *string `json:"commitHash"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -79,15 +80,16 @@ func (h *Handler) CreateTestPack(w http.ResponseWriter, r *http.Request) {
 	}
 	now := time.Now().UTC()
 	pack := catalogpkg.TestPack{
-		ID:        uuid.NewString(),
-		ServiceID: serviceID,
-		OrgID:     orgID,
-		Name:      body.Name,
-		Type:      body.Type,
-		CreatedBy: p.UserID,
-		UpdatedBy: &p.UserID,
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:                  uuid.NewString(),
+		ServiceID:           serviceID,
+		OrgID:               orgID,
+		Name:                body.Name,
+		Type:                body.Type,
+		CreatedBy:           p.UserID,
+		UpdatedBy:           &p.UserID,
+		CreatedByCommitHash: body.CommitHash,
+		CreatedAt:           now,
+		UpdatedAt:           now,
 	}
 	if err := h.store.CreateTestPack(r.Context(), pack); err != nil {
 		httputil.Error(w, r, err)
@@ -131,8 +133,9 @@ func (h *Handler) UpdateTestPack(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Name *string `json:"name"`
-		Type *string `json:"type"`
+		Name       *string `json:"name"`
+		Type       *string `json:"type"`
+		CommitHash *string `json:"commitHash"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -145,6 +148,7 @@ func (h *Handler) UpdateTestPack(w http.ResponseWriter, r *http.Request) {
 		pack.Type = *body.Type
 	}
 	pack.UpdatedBy = &p.UserID
+	pack.UpdatedByCommitHash = body.CommitHash
 	if err := h.store.UpdateTestPack(r.Context(), *pack); err != nil {
 		httputil.Error(w, r, err)
 		return
@@ -245,11 +249,15 @@ func (h *Handler) CreateTestCase(w http.ResponseWriter, r *http.Request) {
 		httputil.Unauthorized(w)
 		return
 	}
-	var tc catalogpkg.TestCase
-	if err := json.NewDecoder(r.Body).Decode(&tc); err != nil {
+	var reqBody struct {
+		catalogpkg.TestCase
+		CommitHash *string `json:"commitHash"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
 		httputil.BadRequest(w, "invalid request body")
 		return
 	}
+	tc := reqBody.TestCase
 	if tc.TestPackID == "" || tc.Title == "" || tc.Type == "" {
 		httputil.BadRequest(w, "testPackId, title and type are required")
 		return
@@ -269,6 +277,7 @@ func (h *Handler) CreateTestCase(w http.ResponseWriter, r *http.Request) {
 	tc.OrgID = orgID
 	tc.CreatedBy = p.UserID
 	tc.UpdatedBy = &p.UserID
+	tc.CreatedByCommitHash = reqBody.CommitHash
 	tc.CreatedAt = now
 	tc.UpdatedAt = now
 	if tc.Status == "" {
@@ -318,11 +327,15 @@ func (h *Handler) UpdateTestCase(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, r, storepkg.ErrNotFound)
 		return
 	}
-	var body catalogpkg.TestCase
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	var reqBody struct {
+		catalogpkg.TestCase
+		CommitHash *string `json:"commitHash"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
 		httputil.BadRequest(w, "invalid request body")
 		return
 	}
+	body := reqBody.TestCase
 	if body.TestPackID != "" {
 		tc.TestPackID = body.TestPackID
 	}
@@ -386,6 +399,7 @@ func (h *Handler) UpdateTestCase(w http.ResponseWriter, r *http.Request) {
 		tc.Dependencies = body.Dependencies
 	}
 	tc.UpdatedBy = &p.UserID
+	tc.UpdatedByCommitHash = reqBody.CommitHash
 	if err := h.store.UpdateTestCase(r.Context(), *tc); err != nil {
 		httputil.Error(w, r, err)
 		return

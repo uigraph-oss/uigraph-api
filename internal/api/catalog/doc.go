@@ -15,8 +15,8 @@ import (
 	docspkg "github.com/uigraph/app/internal/docs"
 	"github.com/uigraph/app/internal/httputil"
 	authmw "github.com/uigraph/app/internal/middleware"
-	storepkg "github.com/uigraph/app/internal/store"
 	"github.com/uigraph/app/internal/storage"
+	storepkg "github.com/uigraph/app/internal/store"
 )
 
 // ── Service docs ──────────────────────────────────────────────────────────────
@@ -79,6 +79,7 @@ func (h *Handler) CreateDoc(w http.ResponseWriter, r *http.Request) {
 		ContentBase64 *string `json:"contentBase64"`
 		FolderID      *string `json:"folderId"`
 		TeamID        *string `json:"teamId"`
+		CommitHash    *string `json:"commitHash"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -152,14 +153,16 @@ func (h *Handler) CreateDoc(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now().UTC()
 	link := catalogpkg.ServiceDoc{
-		ServiceID: serviceID,
-		DocID:     doc.ID,
-		OrgID:     orgID,
-		CreatedBy: p.UserID,
-		UpdatedBy: &p.UserID,
-		CreatedAt: now,
-		UpdatedAt: now,
-		Doc:       doc,
+		ServiceID:           serviceID,
+		DocID:               doc.ID,
+		OrgID:               orgID,
+		CreatedBy:           p.UserID,
+		UpdatedBy:           &p.UserID,
+		CreatedByCommitHash: body.CommitHash,
+		UpdatedByCommitHash: body.CommitHash,
+		CreatedAt:           now,
+		UpdatedAt:           now,
+		Doc:                 doc,
 	}
 	if err := h.store.CreateServiceDoc(r.Context(), link); err != nil {
 		httputil.Error(w, r, err)
@@ -272,12 +275,13 @@ func (h *Handler) CreateDiagram(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		DiagramID *string `json:"diagramId"`
-		Name      *string `json:"name"`
-		Content   *string `json:"content"`
-		FolderID  *string `json:"folderId"`
-		TeamID    *string `json:"teamId"`
-		Source    *string `json:"source"`
+		DiagramID  *string `json:"diagramId"`
+		Name       *string `json:"name"`
+		Content    *string `json:"content"`
+		FolderID   *string `json:"folderId"`
+		TeamID     *string `json:"teamId"`
+		Source     *string `json:"source"`
+		CommitHash *string `json:"commitHash"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -358,14 +362,16 @@ func (h *Handler) CreateDiagram(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now().UTC()
 	link := catalogpkg.ServiceDiagram{
-		ServiceID: serviceID,
-		DiagramID: dg.ID,
-		OrgID:     orgID,
-		CreatedBy: p.UserID,
-		UpdatedBy: &p.UserID,
-		CreatedAt: now,
-		UpdatedAt: now,
-		Diagram:   dg,
+		ServiceID:           serviceID,
+		DiagramID:           dg.ID,
+		OrgID:               orgID,
+		CreatedBy:           p.UserID,
+		UpdatedBy:           &p.UserID,
+		CreatedByCommitHash: body.CommitHash,
+		UpdatedByCommitHash: body.CommitHash,
+		CreatedAt:           now,
+		UpdatedAt:           now,
+		Diagram:             dg,
 	}
 	if err := h.store.CreateServiceDiagram(r.Context(), link); err != nil {
 		httputil.Error(w, r, err)

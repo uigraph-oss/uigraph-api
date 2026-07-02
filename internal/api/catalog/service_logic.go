@@ -15,8 +15,8 @@ import (
 	catalogpkg "github.com/uigraph/app/internal/catalog"
 	"github.com/uigraph/app/internal/httputil"
 	"github.com/uigraph/app/internal/specparser"
-	storepkg "github.com/uigraph/app/internal/store"
 	"github.com/uigraph/app/internal/storage"
+	storepkg "github.com/uigraph/app/internal/store"
 	"gopkg.in/yaml.v3"
 )
 
@@ -66,10 +66,11 @@ type publishParams struct {
 	spec string
 	// endpoints, when non-nil, become the new working-copy endpoints. When nil and
 	// spec is non-empty, endpoints are parsed from spec.
-	endpoints []catalogpkg.APIEndpoint
-	label     *string
-	isAuto    bool
-	actorID   string
+	endpoints  []catalogpkg.APIEndpoint
+	label      *string
+	isAuto     bool
+	actorID    string
+	commitHash *string
 }
 
 // publishAPIGroupVersion uploads the spec blobs and atomically snapshots a new
@@ -85,7 +86,8 @@ func (h *Handler) publishAPIGroupVersion(ctx context.Context, p publishParams) (
 	in := catalogpkg.PublishAPIGroupVersionInput{ActorID: p.actorID}
 	in.Version = catalogpkg.APIGroupVersion{
 		ID: versionID, APIGroupID: g.ID, Label: p.label,
-		IsAutoVersion: p.isAuto, CreatedBy: p.actorID, CreatedAt: now,
+		IsAutoVersion: p.isAuto, CreatedBy: p.actorID,
+		CreatedByCommitHash: p.commitHash, CreatedAt: now,
 	}
 
 	if p.spec != "" {
@@ -128,6 +130,9 @@ func (h *Handler) publishAPIGroupVersion(ctx context.Context, p publishParams) (
 		}
 	}
 
+	for i := range in.NewEndpoints {
+		in.NewEndpoints[i].CreatedByCommitHash = p.commitHash
+	}
 	in.Group = *g
 	v, err := h.store.PublishAPIGroupVersion(ctx, in)
 	if err != nil {
@@ -266,25 +271,25 @@ func parseSpecEndpoints(spec, apiGroupID, serviceID, orgID, actorID string, now 
 			}
 
 			endpoints = append(endpoints, catalogpkg.APIEndpoint{
-				ID:          uuid.NewString(),
-				APIGroupID:  apiGroupID,
-				ServiceID:   serviceID,
-				OrgID:       orgID,
-				OperationID: operationID,
-				Method:      strings.ToUpper(method),
-				Path:        path,
-				Summary:     summary,
-				Description: description,
-				Tags:        tags,
+				ID:               uuid.NewString(),
+				APIGroupID:       apiGroupID,
+				ServiceID:        serviceID,
+				OrgID:            orgID,
+				OperationID:      operationID,
+				Method:           strings.ToUpper(method),
+				Path:             path,
+				Summary:          summary,
+				Description:      description,
+				Tags:             tags,
 				Parameters:       params,
 				RequestBody:      reqBody,
 				Responses:        responses,
 				ExampleRequests:  seedExampleSamplesJSON(reqBody),
 				ExampleResponses: seedExampleSamplesJSON(responses),
 				Order:            order,
-				CreatedBy:   actorID,
-				CreatedAt:   now,
-				UpdatedAt:   now,
+				CreatedBy:        actorID,
+				CreatedAt:        now,
+				UpdatedAt:        now,
 			})
 			order++
 		}
@@ -314,24 +319,24 @@ func parseGraphQLSpecEndpoints(spec, apiGroupID, serviceID, orgID, actorID strin
 		}
 
 		endpoints = append(endpoints, catalogpkg.APIEndpoint{
-			ID:          uuid.NewString(),
-			APIGroupID:  apiGroupID,
-			ServiceID:   serviceID,
-			OrgID:       orgID,
-			OperationID: op.OperationID,
-			Method:      op.Kind,
-			Path:        op.Signature,
-			Description: op.Description,
-			Tags:        op.Tags,
+			ID:               uuid.NewString(),
+			APIGroupID:       apiGroupID,
+			ServiceID:        serviceID,
+			OrgID:            orgID,
+			OperationID:      op.OperationID,
+			Method:           op.Kind,
+			Path:             op.Signature,
+			Description:      op.Description,
+			Tags:             op.Tags,
 			Parameters:       parameters,
 			RequestBody:      requestBody,
 			Responses:        responses,
 			ExampleRequests:  seedExampleSamplesJSON(requestBody),
 			ExampleResponses: seedExampleSamplesJSON(responses),
 			Order:            float64(i),
-			CreatedBy:   actorID,
-			CreatedAt:   now,
-			UpdatedAt:   now,
+			CreatedBy:        actorID,
+			CreatedAt:        now,
+			UpdatedAt:        now,
 		})
 	}
 	return endpoints, nil
@@ -371,25 +376,25 @@ func parseGrpcSpecEndpoints(spec, apiGroupID, serviceID, orgID, actorID string, 
 		}
 
 		endpoints = append(endpoints, catalogpkg.APIEndpoint{
-			ID:          uuid.NewString(),
-			APIGroupID:  apiGroupID,
-			ServiceID:   serviceID,
-			OrgID:       orgID,
-			OperationID: m.MethodName,
-			Method:      m.StreamingType,
-			Path:        path,
-			Summary:     m.ProtoSnippet,
-			Description: m.Description,
-			Tags:        m.Tags,
+			ID:               uuid.NewString(),
+			APIGroupID:       apiGroupID,
+			ServiceID:        serviceID,
+			OrgID:            orgID,
+			OperationID:      m.MethodName,
+			Method:           m.StreamingType,
+			Path:             path,
+			Summary:          m.ProtoSnippet,
+			Description:      m.Description,
+			Tags:             m.Tags,
 			Parameters:       grpcMeta,
 			RequestBody:      requestExample,
 			Responses:        responseExample,
 			ExampleRequests:  seedExampleSamplesJSON(requestExample),
 			ExampleResponses: seedExampleSamplesJSON(responseExample),
 			Order:            float64(i),
-			CreatedBy:   actorID,
-			CreatedAt:   now,
-			UpdatedAt:   now,
+			CreatedBy:        actorID,
+			CreatedAt:        now,
+			UpdatedAt:        now,
 		})
 	}
 	return endpoints, nil

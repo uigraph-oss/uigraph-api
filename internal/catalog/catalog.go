@@ -14,29 +14,31 @@ import (
 
 // Service is a software service registered in the catalog.
 type Service struct {
-	ID              string          `json:"id"`
-	OrgID           string          `json:"orgId"`
-	FolderID        *string         `json:"folderId,omitempty"`
-	TeamID          *string         `json:"teamId,omitempty"`
-	TeamName        string          `json:"-"`
-	Name            string          `json:"name"`
-	Description     string          `json:"description"`
-	Status          string          `json:"status"`
-	Tier            string          `json:"tier"`
-	Category        string          `json:"category"`
-	Language        string          `json:"language"`
-	GitRepoURL      *string         `json:"gitRepoUrl,omitempty"`
-	JiraProjectURL  *string         `json:"jiraProjectUrl,omitempty"`
-	SlackChannelURL *string         `json:"slackChannelUrl,omitempty"`
-	LastCommitSha   *string         `json:"lastCommitSha,omitempty"`
-	Labels          []string        `json:"labels"`
-	Metadata        json.RawMessage `json:"metadata,omitempty"`
-	CreatedBy       string          `json:"createdBy"`
-	UpdatedBy       *string         `json:"updatedBy,omitempty"`
-	CreatedAt       time.Time       `json:"createdAt"`
-	UpdatedAt       time.Time       `json:"updatedAt"`
-	DeletedAt       *time.Time      `json:"deletedAt,omitempty"`
-	DeletedBy       *string         `json:"deletedBy,omitempty"`
+	ID                  string          `json:"id"`
+	OrgID               string          `json:"orgId"`
+	FolderID            *string         `json:"folderId,omitempty"`
+	TeamID              *string         `json:"teamId,omitempty"`
+	TeamName            string          `json:"-"`
+	Name                string          `json:"name"`
+	Description         string          `json:"description"`
+	Status              string          `json:"status"`
+	Tier                string          `json:"tier"`
+	Category            string          `json:"category"`
+	Language            string          `json:"language"`
+	GitRepoURL          *string         `json:"gitRepoUrl,omitempty"`
+	JiraProjectURL      *string         `json:"jiraProjectUrl,omitempty"`
+	SlackChannelURL     *string         `json:"slackChannelUrl,omitempty"`
+	LastCommitSha       *string         `json:"lastCommitSha,omitempty"`
+	Labels              []string        `json:"labels"`
+	Metadata            json.RawMessage `json:"metadata,omitempty"`
+	CreatedBy           string          `json:"createdBy"`
+	UpdatedBy           *string         `json:"updatedBy,omitempty"`
+	CreatedByCommitHash *string         `json:"createdByCommitHash,omitempty"`
+	UpdatedByCommitHash *string         `json:"updatedByCommitHash,omitempty"`
+	CreatedAt           time.Time       `json:"createdAt"`
+	UpdatedAt           time.Time       `json:"updatedAt"`
+	DeletedAt           *time.Time      `json:"deletedAt,omitempty"`
+	DeletedBy           *string         `json:"deletedBy,omitempty"`
 }
 
 // ServiceStats is a lightweight aggregate for service catalog dashboard counts.
@@ -54,34 +56,37 @@ type ServiceStats struct {
 // APIGroup is a versioned collection of API endpoints for a service.
 // The spec file content lives in object storage; only the key and hash are in Postgres.
 type APIGroup struct {
-	ID        string     `json:"id"`
-	ServiceID string     `json:"serviceId"`
-	OrgID     string     `json:"orgId"`
-	Name      string     `json:"name"`
-	Version   string     `json:"version"`
-	Label     *string    `json:"label,omitempty"`
-	Protocol  string     `json:"protocol"`
-	SpecKey   *string    `json:"specKey,omitempty"`
-	SpecHash  *string    `json:"specHash,omitempty"`
-	CreatedBy string     `json:"createdBy"`
-	UpdatedBy *string    `json:"updatedBy,omitempty"`
-	CreatedAt time.Time  `json:"createdAt"`
-	UpdatedAt time.Time  `json:"updatedAt"`
-	DeletedAt *time.Time `json:"deletedAt,omitempty"`
-	DeletedBy *string    `json:"deletedBy,omitempty"`
+	ID                  string     `json:"id"`
+	ServiceID           string     `json:"serviceId"`
+	OrgID               string     `json:"orgId"`
+	Name                string     `json:"name"`
+	Version             string     `json:"version"`
+	Label               *string    `json:"label,omitempty"`
+	Protocol            string     `json:"protocol"`
+	SpecKey             *string    `json:"specKey,omitempty"`
+	SpecHash            *string    `json:"specHash,omitempty"`
+	CreatedBy           string     `json:"createdBy"`
+	UpdatedBy           *string    `json:"updatedBy,omitempty"`
+	CreatedByCommitHash *string    `json:"createdByCommitHash,omitempty"`
+	UpdatedByCommitHash *string    `json:"updatedByCommitHash,omitempty"`
+	CreatedAt           time.Time  `json:"createdAt"`
+	UpdatedAt           time.Time  `json:"updatedAt"`
+	DeletedAt           *time.Time `json:"deletedAt,omitempty"`
+	DeletedBy           *string    `json:"deletedBy,omitempty"`
 }
 
 // APIGroupVersion is an immutable spec snapshot.
 type APIGroupVersion struct {
-	ID            string    `json:"id"`
-	APIGroupID    string    `json:"apiGroupId"`
-	VersionNumber int       `json:"versionNumber"`
-	Label         *string   `json:"label,omitempty"`
-	SpecKey       string    `json:"specKey"`
-	SpecHash      string    `json:"specHash"`
-	IsAutoVersion bool      `json:"isAutoVersion"`
-	CreatedBy     string    `json:"createdBy"`
-	CreatedAt     time.Time `json:"createdAt"`
+	ID                  string    `json:"id"`
+	APIGroupID          string    `json:"apiGroupId"`
+	VersionNumber       int       `json:"versionNumber"`
+	Label               *string   `json:"label,omitempty"`
+	SpecKey             string    `json:"specKey"`
+	SpecHash            string    `json:"specHash"`
+	IsAutoVersion       bool      `json:"isAutoVersion"`
+	CreatedBy           string    `json:"createdBy"`
+	CreatedByCommitHash *string   `json:"createdByCommitHash,omitempty"`
+	CreatedAt           time.Time `json:"createdAt"`
 }
 
 // PublishAPIGroupVersionInput drives an atomic API-group version snapshot.
@@ -113,94 +118,103 @@ type PublishAPIGroupVersionInput struct {
 // APIEndpoint is a single operation within an API group.
 // APIGroupVersionID is nil for the current working copy; set to the version's ID when snapshotted.
 type APIEndpoint struct {
-	ID                 string          `json:"id"`
-	APIGroupID         string          `json:"apiGroupId"`
-	APIGroupVersionID  *string         `json:"apiGroupVersionId,omitempty"`
-	ServiceID          string          `json:"serviceId"`
-	OrgID              string          `json:"orgId"`
-	OperationID        string          `json:"operationId"`
-	Method             string          `json:"method"`
-	Path               string          `json:"path"`
-	Summary            string          `json:"summary"`
-	Description        string          `json:"description"`
-	Tags               []string        `json:"tags"`
-	TokenCount         int             `json:"tokenCount"`
-	Parameters         json.RawMessage `json:"parameters"`
-	RequestBody        json.RawMessage `json:"requestBody"`
-	Responses          json.RawMessage `json:"responses"`
-	ExampleRequests    json.RawMessage `json:"exampleRequests"`
-	ExampleResponses   json.RawMessage `json:"exampleResponses"`
-	Order              float64         `json:"order"`
-	CreatedBy          string          `json:"createdBy"`
-	UpdatedBy          *string         `json:"updatedBy,omitempty"`
-	CreatedAt          time.Time       `json:"createdAt"`
-	UpdatedAt          time.Time       `json:"updatedAt"`
-	DeletedAt          *time.Time      `json:"deletedAt,omitempty"`
-	DeletedBy          *string         `json:"deletedBy,omitempty"`
+	ID                  string          `json:"id"`
+	APIGroupID          string          `json:"apiGroupId"`
+	APIGroupVersionID   *string         `json:"apiGroupVersionId,omitempty"`
+	ServiceID           string          `json:"serviceId"`
+	OrgID               string          `json:"orgId"`
+	OperationID         string          `json:"operationId"`
+	Method              string          `json:"method"`
+	Path                string          `json:"path"`
+	Summary             string          `json:"summary"`
+	Description         string          `json:"description"`
+	Tags                []string        `json:"tags"`
+	TokenCount          int             `json:"tokenCount"`
+	Parameters          json.RawMessage `json:"parameters"`
+	RequestBody         json.RawMessage `json:"requestBody"`
+	Responses           json.RawMessage `json:"responses"`
+	ExampleRequests     json.RawMessage `json:"exampleRequests"`
+	ExampleResponses    json.RawMessage `json:"exampleResponses"`
+	Order               float64         `json:"order"`
+	CreatedBy           string          `json:"createdBy"`
+	UpdatedBy           *string         `json:"updatedBy,omitempty"`
+	CreatedByCommitHash *string         `json:"createdByCommitHash,omitempty"`
+	UpdatedByCommitHash *string         `json:"updatedByCommitHash,omitempty"`
+	CreatedAt           time.Time       `json:"createdAt"`
+	UpdatedAt           time.Time       `json:"updatedAt"`
+	DeletedAt           *time.Time      `json:"deletedAt,omitempty"`
+	DeletedBy           *string         `json:"deletedBy,omitempty"`
 }
 
 // ── Service Doc ───────────────────────────────────────────────────────────────
 
 // ServiceDoc is a doc linked to a service through a junction row.
 type ServiceDoc struct {
-	ServiceID string     `json:"serviceId"`
-	DocID     string     `json:"docId"`
-	OrgID     string     `json:"orgId"`
-	CreatedBy string     `json:"createdBy"`
-	UpdatedBy *string    `json:"updatedBy,omitempty"`
-	CreatedAt time.Time  `json:"createdAt"`
-	UpdatedAt time.Time  `json:"updatedAt"`
-	DeletedAt *time.Time `json:"deletedAt,omitempty"`
-	Doc       *docs.Doc  `json:"doc,omitempty"`
+	ServiceID           string     `json:"serviceId"`
+	DocID               string     `json:"docId"`
+	OrgID               string     `json:"orgId"`
+	CreatedBy           string     `json:"createdBy"`
+	UpdatedBy           *string    `json:"updatedBy,omitempty"`
+	CreatedByCommitHash *string    `json:"createdByCommitHash,omitempty"`
+	UpdatedByCommitHash *string    `json:"updatedByCommitHash,omitempty"`
+	CreatedAt           time.Time  `json:"createdAt"`
+	UpdatedAt           time.Time  `json:"updatedAt"`
+	DeletedAt           *time.Time `json:"deletedAt,omitempty"`
+	Doc                 *docs.Doc  `json:"doc,omitempty"`
 }
 
 // ServiceDiagram is a diagram linked to a service through a junction row.
 type ServiceDiagram struct {
-	ServiceID string           `json:"serviceId"`
-	DiagramID string           `json:"diagramId"`
-	OrgID     string           `json:"orgId"`
-	CreatedBy string           `json:"createdBy"`
-	UpdatedBy *string          `json:"updatedBy,omitempty"`
-	CreatedAt time.Time        `json:"createdAt"`
-	UpdatedAt time.Time        `json:"updatedAt"`
-	DeletedAt *time.Time       `json:"deletedAt,omitempty"`
-	Diagram   *diagram.Diagram `json:"diagram,omitempty"`
+	ServiceID           string           `json:"serviceId"`
+	DiagramID           string           `json:"diagramId"`
+	OrgID               string           `json:"orgId"`
+	CreatedBy           string           `json:"createdBy"`
+	UpdatedBy           *string          `json:"updatedBy,omitempty"`
+	CreatedByCommitHash *string          `json:"createdByCommitHash,omitempty"`
+	UpdatedByCommitHash *string          `json:"updatedByCommitHash,omitempty"`
+	CreatedAt           time.Time        `json:"createdAt"`
+	UpdatedAt           time.Time        `json:"updatedAt"`
+	DeletedAt           *time.Time       `json:"deletedAt,omitempty"`
+	Diagram             *diagram.Diagram `json:"diagram,omitempty"`
 }
 
 // ── Service DB ────────────────────────────────────────────────────────────────
 
 // ServiceDB is the current database schema attached to a service.
 type ServiceDB struct {
-	ID         string          `json:"id"`
-	ServiceID  string          `json:"serviceId"`
-	OrgID      string          `json:"orgId"`
-	DBName     string          `json:"dbName"`
-	DBType     string          `json:"dbType"`
-	Dialect    string          `json:"dialect"`
-	SchemaJSON json.RawMessage `json:"schemaJson"`
-	Source           *string         `json:"source,omitempty"`
-	SourceTS         *time.Time      `json:"sourceTs,omitempty"`
-	SchemaTokenCount int             `json:"schemaTokenCount"`
-	CreatedBy        string          `json:"createdBy"`
-	UpdatedBy  *string         `json:"updatedBy,omitempty"`
-	CreatedAt  time.Time       `json:"createdAt"`
-	UpdatedAt  time.Time       `json:"updatedAt"`
-	DeletedAt  *time.Time      `json:"deletedAt,omitempty"`
-	DeletedBy  *string         `json:"deletedBy,omitempty"`
+	ID                  string          `json:"id"`
+	ServiceID           string          `json:"serviceId"`
+	OrgID               string          `json:"orgId"`
+	DBName              string          `json:"dbName"`
+	DBType              string          `json:"dbType"`
+	Dialect             string          `json:"dialect"`
+	SchemaJSON          json.RawMessage `json:"schemaJson"`
+	Source              *string         `json:"source,omitempty"`
+	SourceTS            *time.Time      `json:"sourceTs,omitempty"`
+	SchemaTokenCount    int             `json:"schemaTokenCount"`
+	CreatedBy           string          `json:"createdBy"`
+	UpdatedBy           *string         `json:"updatedBy,omitempty"`
+	CreatedByCommitHash *string         `json:"createdByCommitHash,omitempty"`
+	UpdatedByCommitHash *string         `json:"updatedByCommitHash,omitempty"`
+	CreatedAt           time.Time       `json:"createdAt"`
+	UpdatedAt           time.Time       `json:"updatedAt"`
+	DeletedAt           *time.Time      `json:"deletedAt,omitempty"`
+	DeletedBy           *string         `json:"deletedBy,omitempty"`
 }
 
 // ServiceDBVersion is an immutable snapshot of a service DB schema.
 type ServiceDBVersion struct {
-	ID            string          `json:"id"`
-	ServiceDBID   string          `json:"serviceDbId"`
-	VersionNumber int             `json:"versionNumber"`
-	Label         *string         `json:"label,omitempty"`
-	SchemaJSON    json.RawMessage `json:"schemaJson"`
-	Source        *string         `json:"source,omitempty"`
-	SourceTS      *time.Time      `json:"sourceTs,omitempty"`
-	IsAutoVersion bool            `json:"isAutoVersion"`
-	CreatedBy     string          `json:"createdBy"`
-	CreatedAt     time.Time       `json:"createdAt"`
+	ID                  string          `json:"id"`
+	ServiceDBID         string          `json:"serviceDbId"`
+	VersionNumber       int             `json:"versionNumber"`
+	Label               *string         `json:"label,omitempty"`
+	SchemaJSON          json.RawMessage `json:"schemaJson"`
+	Source              *string         `json:"source,omitempty"`
+	SourceTS            *time.Time      `json:"sourceTs,omitempty"`
+	IsAutoVersion       bool            `json:"isAutoVersion"`
+	CreatedBy           string          `json:"createdBy"`
+	CreatedByCommitHash *string         `json:"createdByCommitHash,omitempty"`
+	CreatedAt           time.Time       `json:"createdAt"`
 }
 
 // ── Saved Queries ─────────────────────────────────────────────────────────────
@@ -341,17 +355,19 @@ type GRPCTestCase struct {
 }
 
 type TestPack struct {
-	ID        string     `json:"testPackId"`
-	ServiceID string     `json:"serviceId"`
-	OrgID     string     `json:"orgId"`
-	Name      string     `json:"name"`
-	Type      string     `json:"type"`
-	CreatedBy string     `json:"createdBy"`
-	UpdatedBy *string    `json:"updatedBy,omitempty"`
-	DeletedBy *string    `json:"deletedBy,omitempty"`
-	CreatedAt time.Time  `json:"createdAt"`
-	UpdatedAt time.Time  `json:"updatedAt"`
-	DeletedAt *time.Time `json:"deletedAt,omitempty"`
+	ID                  string     `json:"testPackId"`
+	ServiceID           string     `json:"serviceId"`
+	OrgID               string     `json:"orgId"`
+	Name                string     `json:"name"`
+	Type                string     `json:"type"`
+	CreatedBy           string     `json:"createdBy"`
+	UpdatedBy           *string    `json:"updatedBy,omitempty"`
+	CreatedByCommitHash *string    `json:"createdByCommitHash,omitempty"`
+	UpdatedByCommitHash *string    `json:"updatedByCommitHash,omitempty"`
+	DeletedBy           *string    `json:"deletedBy,omitempty"`
+	CreatedAt           time.Time  `json:"createdAt"`
+	UpdatedAt           time.Time  `json:"updatedAt"`
+	DeletedAt           *time.Time `json:"deletedAt,omitempty"`
 }
 
 type TestCase struct {
@@ -382,6 +398,8 @@ type TestCase struct {
 	Dependencies          []string          `json:"dependencies,omitempty"`
 	CreatedBy             string            `json:"createdBy"`
 	UpdatedBy             *string           `json:"updatedBy,omitempty"`
+	CreatedByCommitHash   *string           `json:"createdByCommitHash,omitempty"`
+	UpdatedByCommitHash   *string           `json:"updatedByCommitHash,omitempty"`
 	DeletedBy             *string           `json:"deletedBy,omitempty"`
 	CreatedAt             time.Time         `json:"createdAt"`
 	UpdatedAt             time.Time         `json:"updatedAt"`
@@ -456,4 +474,3 @@ type TestRunResult struct {
 	UpdatedAt      time.Time  `json:"updatedAt"`
 	DeletedAt      *time.Time `json:"deletedAt,omitempty"`
 }
-

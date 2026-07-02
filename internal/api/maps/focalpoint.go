@@ -6,8 +6,8 @@ import (
 
 	"github.com/google/uuid"
 
-	authmw "github.com/uigraph/app/internal/middleware"
 	"github.com/uigraph/app/internal/httputil"
+	authmw "github.com/uigraph/app/internal/middleware"
 	storepkg "github.com/uigraph/app/internal/store"
 	"github.com/uigraph/app/internal/uimap"
 )
@@ -61,6 +61,7 @@ func (h *Handler) CreateFocalPoint(w http.ResponseWriter, r *http.Request) {
 		LocationY  float64 `json:"locationY"`
 		Visibility string  `json:"visibility"`
 		IsActive   bool    `json:"isActive"`
+		CommitHash *string `json:"commitHash"`
 	}
 	if err := httputil.Decode(r, &body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -76,17 +77,18 @@ func (h *Handler) CreateFocalPoint(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now().UTC()
 	fp := uimap.FocalPoint{
-		ID:         uuid.NewString(),
-		FrameID:    frameID,
-		OrgID:      orgID,
-		Name:       body.Name,
-		LocationX:  body.LocationX,
-		LocationY:  body.LocationY,
-		Visibility: body.Visibility,
-		IsActive:   body.IsActive,
-		CreatedBy:  p.UserID,
-		CreatedAt:  now,
-		UpdatedAt:  now,
+		ID:                  uuid.NewString(),
+		FrameID:             frameID,
+		OrgID:               orgID,
+		Name:                body.Name,
+		LocationX:           body.LocationX,
+		LocationY:           body.LocationY,
+		Visibility:          body.Visibility,
+		IsActive:            body.IsActive,
+		CreatedBy:           p.UserID,
+		CreatedByCommitHash: body.CommitHash,
+		CreatedAt:           now,
+		UpdatedAt:           now,
 	}
 	if err := h.store.CreateFocalPoint(r.Context(), fp); err != nil {
 		httputil.Error(w, r, err)
@@ -158,6 +160,7 @@ func (h *Handler) UpdateFocalPoint(w http.ResponseWriter, r *http.Request) {
 		LocationY  *float64 `json:"locationY"`
 		Visibility *string  `json:"visibility"`
 		IsActive   *bool    `json:"isActive"`
+		CommitHash *string  `json:"commitHash"`
 	}
 	if err := httputil.Decode(r, &body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -179,6 +182,7 @@ func (h *Handler) UpdateFocalPoint(w http.ResponseWriter, r *http.Request) {
 		fp.IsActive = *body.IsActive
 	}
 	fp.UpdatedBy = &p.UserID
+	fp.UpdatedByCommitHash = body.CommitHash
 
 	if err := h.store.UpdateFocalPoint(r.Context(), *fp); err != nil {
 		httputil.Error(w, r, err)

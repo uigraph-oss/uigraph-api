@@ -18,8 +18,8 @@ func (d *DB) CreateMap(ctx context.Context, m uimap.Map) error {
 	const q = `
 		INSERT INTO maps
 			(id, org_id, folder_id, team_id, name, description, status,
-			 created_by, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`
+			 created_by, created_by_commit_hash, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`
 	now := time.Now().UTC()
 	if m.CreatedAt.IsZero() {
 		m.CreatedAt = now
@@ -32,7 +32,7 @@ func (d *DB) CreateMap(ctx context.Context, m uimap.Map) error {
 	}
 	_, err := d.db.ExecContext(ctx, q,
 		m.ID, m.OrgID, m.FolderID, m.TeamID, m.Name, m.Description, m.Status,
-		m.CreatedBy, m.CreatedAt, m.UpdatedAt,
+		m.CreatedBy, m.CreatedByCommitHash, m.CreatedAt, m.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("postgres: CreateMap: %w", err)
@@ -43,7 +43,8 @@ func (d *DB) CreateMap(ctx context.Context, m uimap.Map) error {
 func (d *DB) GetMap(ctx context.Context, id string) (*uimap.Map, error) {
 	const q = `
 		SELECT id, org_id, folder_id, team_id, name, description, status,
-		       created_by, updated_by, created_at, updated_at, deleted_at, deleted_by
+		       created_by, updated_by, created_by_commit_hash, updated_by_commit_hash,
+		       created_at, updated_at, deleted_at, deleted_by
 		FROM maps WHERE id = $1`
 	m, err := scanMap(d.db.QueryRowContext(ctx, q, id))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -88,7 +89,8 @@ func (d *DB) ListMaps(ctx context.Context, orgID string, p uimap.ListParams) ([]
 
 	q := `
 		SELECT id, org_id, folder_id, team_id, name, description, status,
-		       created_by, updated_by, created_at, updated_at, deleted_at, deleted_by
+		       created_by, updated_by, created_by_commit_hash, updated_by_commit_hash,
+		       created_at, updated_at, deleted_at, deleted_by
 		FROM maps` + where + fmt.Sprintf(" ORDER BY %s %s", col, dir)
 	if p.Limit > 0 {
 		args = append(args, p.Limit)
@@ -118,11 +120,11 @@ func (d *DB) UpdateMap(ctx context.Context, m uimap.Map) error {
 	const q = `
 		UPDATE maps
 		SET name=$1, description=$2, status=$3, folder_id=$4, team_id=$5,
-		    updated_by=$6, updated_at=$7
-		WHERE id=$8 AND deleted_at IS NULL`
+		    updated_by=$6, updated_by_commit_hash=$7, updated_at=$8
+		WHERE id=$9 AND deleted_at IS NULL`
 	_, err := d.db.ExecContext(ctx, q,
 		m.Name, m.Description, m.Status, m.FolderID, m.TeamID,
-		m.UpdatedBy, time.Now().UTC(), m.ID,
+		m.UpdatedBy, m.UpdatedByCommitHash, time.Now().UTC(), m.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("postgres: UpdateMap: %w", err)
@@ -147,6 +149,7 @@ func scanMap(row interface{ Scan(...any) error }) (uimap.Map, error) {
 		&m.ID, &m.OrgID, &m.FolderID, &m.TeamID,
 		&m.Name, &m.Description, &m.Status,
 		&m.CreatedBy, &m.UpdatedBy,
+		&m.CreatedByCommitHash, &m.UpdatedByCommitHash,
 		&m.CreatedAt, &m.UpdatedAt, &m.DeletedAt, &m.DeletedBy,
 	)
 }
@@ -158,8 +161,8 @@ func (d *DB) CreateFrame(ctx context.Context, f uimap.Frame) error {
 		INSERT INTO frames
 			(id, map_id, org_id, parent_frame_id, name, description, template_type,
 			 screenshot_asset_id, screenshot_content_hash, status, ord, source,
-			 created_by, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`
+			 created_by, created_by_commit_hash, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`
 	now := time.Now().UTC()
 	if f.CreatedAt.IsZero() {
 		f.CreatedAt = now
@@ -175,7 +178,7 @@ func (d *DB) CreateFrame(ctx context.Context, f uimap.Frame) error {
 		f.Name, f.Description, f.TemplateType,
 		f.ScreenshotAssetID, f.ScreenshotContentHash,
 		f.Status, f.Order, f.Source,
-		f.CreatedBy, f.CreatedAt, f.UpdatedAt,
+		f.CreatedBy, f.CreatedByCommitHash, f.CreatedAt, f.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("postgres: CreateFrame: %w", err)
@@ -187,7 +190,8 @@ func (d *DB) GetFrame(ctx context.Context, id string) (*uimap.Frame, error) {
 	const q = `
 		SELECT id, map_id, org_id, parent_frame_id, name, description, template_type,
 		       screenshot_asset_id, screenshot_content_hash, status, ord, source,
-		       created_by, updated_by, created_at, updated_at, deleted_at, deleted_by,
+		       created_by, updated_by, created_by_commit_hash, updated_by_commit_hash,
+		       created_at, updated_at, deleted_at, deleted_by,
 		       (SELECT COUNT(*) FROM focal_points fp WHERE fp.frame_id = frames.id AND fp.deleted_at IS NULL)
 		FROM frames WHERE id = $1`
 	f, err := scanFrame(d.db.QueryRowContext(ctx, q, id))
@@ -226,7 +230,8 @@ func (d *DB) ListFrames(ctx context.Context, mapID string, p uimap.ListParams) (
 	q := `
 		SELECT id, map_id, org_id, parent_frame_id, name, description, template_type,
 		       screenshot_asset_id, screenshot_content_hash, status, ord, source,
-		       created_by, updated_by, created_at, updated_at, deleted_at, deleted_by,
+		       created_by, updated_by, created_by_commit_hash, updated_by_commit_hash,
+		       created_at, updated_at, deleted_at, deleted_by,
 		       (SELECT COUNT(*) FROM focal_points fp WHERE fp.frame_id = frames.id AND fp.deleted_at IS NULL)
 		FROM frames` + where + order
 	if p.Limit > 0 {
@@ -259,13 +264,13 @@ func (d *DB) UpdateFrame(ctx context.Context, f uimap.Frame) error {
 		SET name=$1, description=$2, template_type=$3,
 		    screenshot_asset_id=$4, screenshot_content_hash=$5,
 		    status=$6, ord=$7, source=$8,
-		    updated_by=$9, updated_at=$10
-		WHERE id=$11 AND deleted_at IS NULL`
+		    updated_by=$9, updated_by_commit_hash=$10, updated_at=$11
+		WHERE id=$12 AND deleted_at IS NULL`
 	_, err := d.db.ExecContext(ctx, q,
 		f.Name, f.Description, f.TemplateType,
 		f.ScreenshotAssetID, f.ScreenshotContentHash,
 		f.Status, f.Order, f.Source,
-		f.UpdatedBy, time.Now().UTC(), f.ID,
+		f.UpdatedBy, f.UpdatedByCommitHash, time.Now().UTC(), f.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("postgres: UpdateFrame: %w", err)
@@ -292,6 +297,7 @@ func scanFrame(row interface{ Scan(...any) error }) (uimap.Frame, error) {
 		&f.ScreenshotAssetID, &f.ScreenshotContentHash,
 		&f.Status, &f.Order, &f.Source,
 		&f.CreatedBy, &f.UpdatedBy,
+		&f.CreatedByCommitHash, &f.UpdatedByCommitHash,
 		&f.CreatedAt, &f.UpdatedAt, &f.DeletedAt, &f.DeletedBy,
 		&f.FocalPointCount,
 	)
@@ -303,8 +309,8 @@ func (d *DB) CreateFocalPoint(ctx context.Context, fp uimap.FocalPoint) error {
 	const q = `
 		INSERT INTO focal_points
 			(id, frame_id, org_id, name, location_x, location_y,
-			 visibility, is_active, created_by, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`
+			 visibility, is_active, created_by, created_by_commit_hash, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`
 	now := time.Now().UTC()
 	if fp.CreatedAt.IsZero() {
 		fp.CreatedAt = now
@@ -318,7 +324,7 @@ func (d *DB) CreateFocalPoint(ctx context.Context, fp uimap.FocalPoint) error {
 	_, err := d.db.ExecContext(ctx, q,
 		fp.ID, fp.FrameID, fp.OrgID, fp.Name,
 		fp.LocationX, fp.LocationY, fp.Visibility, fp.IsActive,
-		fp.CreatedBy, fp.CreatedAt, fp.UpdatedAt,
+		fp.CreatedBy, fp.CreatedByCommitHash, fp.CreatedAt, fp.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("postgres: CreateFocalPoint: %w", err)
@@ -330,6 +336,7 @@ func (d *DB) GetFocalPoint(ctx context.Context, id string) (*uimap.FocalPoint, e
 	const q = `
 		SELECT id, frame_id, org_id, name, location_x, location_y,
 		       visibility, is_active, created_by, updated_by,
+		       created_by_commit_hash, updated_by_commit_hash,
 		       created_at, updated_at, deleted_at, deleted_by
 		FROM focal_points WHERE id = $1`
 	fp, err := scanFocalPoint(d.db.QueryRowContext(ctx, q, id))
@@ -346,6 +353,7 @@ func (d *DB) ListFocalPoints(ctx context.Context, frameID string) ([]uimap.Focal
 	const q = `
 		SELECT id, frame_id, org_id, name, location_x, location_y,
 		       visibility, is_active, created_by, updated_by,
+		       created_by_commit_hash, updated_by_commit_hash,
 		       created_at, updated_at, deleted_at, deleted_by
 		FROM focal_points
 		WHERE frame_id = $1 AND deleted_at IS NULL
@@ -373,12 +381,12 @@ func (d *DB) UpdateFocalPoint(ctx context.Context, fp uimap.FocalPoint) error {
 		UPDATE focal_points
 		SET name=$1, location_x=$2, location_y=$3,
 		    visibility=$4, is_active=$5,
-		    updated_by=$6, updated_at=$7
-		WHERE id=$8 AND deleted_at IS NULL`
+		    updated_by=$6, updated_by_commit_hash=$7, updated_at=$8
+		WHERE id=$9 AND deleted_at IS NULL`
 	_, err := d.db.ExecContext(ctx, q,
 		fp.Name, fp.LocationX, fp.LocationY,
 		fp.Visibility, fp.IsActive,
-		fp.UpdatedBy, time.Now().UTC(), fp.ID,
+		fp.UpdatedBy, fp.UpdatedByCommitHash, time.Now().UTC(), fp.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("postgres: UpdateFocalPoint: %w", err)
@@ -404,6 +412,7 @@ func scanFocalPoint(row interface{ Scan(...any) error }) (uimap.FocalPoint, erro
 		&fp.Name, &fp.LocationX, &fp.LocationY,
 		&fp.Visibility, &fp.IsActive,
 		&fp.CreatedBy, &fp.UpdatedBy,
+		&fp.CreatedByCommitHash, &fp.UpdatedByCommitHash,
 		&fp.CreatedAt, &fp.UpdatedAt, &fp.DeletedAt, &fp.DeletedBy,
 	)
 }
