@@ -68,8 +68,7 @@ func (d *DB) CreateService(ctx context.Context, s catalog.Service) error {
 		s.CreatedBy, s.CreatedAt, s.UpdatedAt,
 	)
 	if err != nil {
-		var pqErr *pq.Error
-		if errors.As(err, &pqErr) && pqErr.Code == "23505" && pqErr.Constraint == "idx_services_org_name" {
+		if uniqueViolation(err, "idx_services_org_name") {
 			return fmt.Errorf("%w: %s", store.ErrServiceNameExists, s.Name)
 		}
 		return fmt.Errorf("postgres: CreateService: %w", err)
@@ -407,8 +406,7 @@ func (d *DB) UpdateService(ctx context.Context, s catalog.Service) error {
 		s.UpdatedBy, time.Now().UTC(), s.ID,
 	)
 	if err != nil {
-		var pqErr *pq.Error
-		if errors.As(err, &pqErr) && pqErr.Code == "23505" && pqErr.Constraint == "idx_services_org_name" {
+		if uniqueViolation(err, "idx_services_org_name") {
 			return fmt.Errorf("%w: %s", store.ErrServiceNameExists, s.Name)
 		}
 		return fmt.Errorf("postgres: UpdateService: %w", err)
@@ -960,4 +958,9 @@ func wrapErr(method string, err error) error {
 		return nil
 	}
 	return fmt.Errorf("postgres: %s: %w", method, err)
+}
+
+func uniqueViolation(err error, constraint string) bool {
+	var pqErr *pq.Error
+	return errors.As(err, &pqErr) && pqErr.Code == "23505" && pqErr.Constraint == constraint
 }

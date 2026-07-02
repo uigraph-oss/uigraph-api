@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/uigraph/app/internal/catalog"
+	"github.com/uigraph/app/internal/store"
 )
 
 func (d *DB) CreateServiceDB(ctx context.Context, sd catalog.ServiceDB) error {
@@ -32,6 +33,9 @@ func (d *DB) CreateServiceDB(ctx context.Context, sd catalog.ServiceDB) error {
 		sd.ID, sd.ServiceID, sd.OrgID, sd.DBName, sd.DBType, sd.Dialect, schema,
 		sd.Source, sd.SourceTS, sd.SchemaTokenCount, sd.CreatedBy, sd.UpdatedBy, sd.CreatedAt, sd.UpdatedAt,
 	)
+	if uniqueViolation(err, "idx_service_dbs_service_name") {
+		return fmt.Errorf("%w: %s", store.ErrDataSourceNameExists, sd.DBName)
+	}
 	return wrapErr("CreateServiceDB", err)
 }
 
@@ -91,6 +95,9 @@ func (d *DB) UpdateServiceDB(ctx context.Context, sd catalog.ServiceDB) error {
 		sd.Source, sd.SourceTS, sd.SchemaTokenCount,
 		sd.UpdatedBy, time.Now().UTC(), sd.ID,
 	)
+	if uniqueViolation(err, "idx_service_dbs_service_name") {
+		return fmt.Errorf("%w: %s", store.ErrDataSourceNameExists, sd.DBName)
+	}
 	return wrapErr("UpdateServiceDB", err)
 }
 

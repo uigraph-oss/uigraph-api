@@ -3,6 +3,7 @@ package catalog
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -131,6 +132,10 @@ func (h *Handler) CreateDB(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt:  now,
 	}
 	if err := h.store.CreateServiceDB(r.Context(), db); err != nil {
+		if errors.Is(err, storepkg.ErrDataSourceNameExists) {
+			httputil.Conflict(w, fmt.Sprintf("a data source named %q already exists in this service", db.DBName))
+			return
+		}
 		httputil.Error(w, r, err)
 		return
 	}
@@ -203,6 +208,10 @@ func (h *Handler) UpdateDB(w http.ResponseWriter, r *http.Request) {
 	db.UpdatedBy = &p.UserID
 
 	if err := h.store.UpdateServiceDB(r.Context(), *db); err != nil {
+		if errors.Is(err, storepkg.ErrDataSourceNameExists) {
+			httputil.Conflict(w, fmt.Sprintf("a data source named %q already exists in this service", db.DBName))
+			return
+		}
 		httputil.Error(w, r, err)
 		return
 	}
@@ -356,6 +365,10 @@ func (h *Handler) CreateDBVersion(w http.ResponseWriter, r *http.Request) {
 	}
 	db.UpdatedBy = &p.UserID
 	if err := h.store.UpdateServiceDB(r.Context(), *db); err != nil {
+		if errors.Is(err, storepkg.ErrDataSourceNameExists) {
+			httputil.Conflict(w, fmt.Sprintf("a data source named %q already exists in this service", db.DBName))
+			return
+		}
 		httputil.Error(w, r, err)
 		return
 	}
