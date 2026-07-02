@@ -1,0 +1,733 @@
+{
+  "components": [
+    {
+      "name": "Backend Flow Diagram",
+      "type": "flow_diagram",
+      "description": "A flow diagram component",
+      "category": "Architecture & Flows",
+      "tags": [
+        "flow",
+        "diagram",
+        "backend"
+      ],
+      "previewImageJpg": "https://placehold.co/64x64",
+      "isActive": true,
+      "order": 1
+    },
+    {
+      "name": "API Contract",
+      "type": "modal",
+      "description": "Protocol-aware API contract component for REST, GraphQL, and gRPC. Supports importing specs and attaching samples, notes, and ownership.",
+      "category": "API & Contracts",
+      "tags": ["api", "rest", "graphql", "grpc", "openapi", "postman", "protobuf", "schema"],
+      "previewImageJpg": "https://placehold.co/64x64",
+      "isActive": true,
+      "order": 2,
+      "componentFields": [
+        {
+          "label": "Name",
+          "type": "Text Input",
+          "required": true,
+          "componentFieldId": "component_field_41df8143-f193-4ccc-9253-94bead37ff56",
+          "order": 1
+        },
+        {
+          "label": "Protocol",
+          "type": "Dropdown",
+          "required": true,
+          "options": ["REST", "GraphQL", "gRPC"],
+          "componentFieldId": "component_field_41df8143-f193-4ccc-9253-94bead37ff57",
+          "order": 2
+        },
+        {
+          "label": "URL",
+          "type": "URL Input",
+          "required": false,
+          "componentFieldId": "component_field_41df8143-f193-4ccc-9253-94bead37ff58",
+          "order": 3
+        },
+        {
+          "label": "Method",
+          "type": "Dropdown",
+          "required": false,
+          "options": ["GET", "POST", "PUT", "DELETE", "PATCH"],
+          "componentFieldId": "component_field_41df8143-f193-4ccc-9253-94bead37ff59",
+          "order": 4
+        },
+        {
+          "label": "Headers",
+          "type": "Key-Value List",
+          "componentFieldId": "component_field_41df8143-f193-4ccc-9253-94bead37ff60",
+          "order": 5
+        },
+        {
+          "label": "GraphQL Operation Type",
+          "type": "Dropdown",
+          "required": false,
+          "options": ["Query", "Mutation", "Subscription"],
+          "componentFieldId": "component_field_41df8143-f193-4ccc-9253-94bead37ff61",
+          "order": 6
+        },
+        {
+          "label": "gRPC Service Name",
+          "type": "Text Input",
+          "required": false,
+          "componentFieldId": "component_field_41df8143-f193-4ccc-9253-94bead37ff66",
+          "order": 7
+        },
+        {
+          "label": "gRPC Method Name",
+          "type": "Text Input",
+          "required": false,
+          "componentFieldId": "component_field_41df8143-f193-4ccc-9253-94bead37ff67",
+          "order": 8
+        },
+        {
+          "label": "gRPC RPC Type",
+          "type": "Dropdown",
+          "required": false,
+          "options": ["Unary", "Server Streaming", "Client Streaming", "Bidirectional Streaming"],
+          "componentFieldId": "component_field_41df8143-f193-4ccc-9253-94bead37ff68",
+          "order": 9
+        },
+        {
+          "label": "Label",
+          "type": "Text Input",
+          "componentFieldId": "component_field_41df8143-f193-4ccc-9253-94bead37ff71",
+          "order": 10
+        },
+        {
+          "label": "Environment",
+          "type": "Tag Input",
+          "options": ["Development", "Staging", "Production"],
+          "componentFieldId": "component_field_41df8143-f193-4ccc-9253-94bead37ff72",
+          "order": 11
+        },
+        {
+          "label": "Authentication",
+          "type": "Dropdown",
+          "options": ["None", "Basic", "Bearer", "API Key", "OAuth 2.0"],
+          "componentFieldId": "component_field_41df8143-f193-4ccc-9253-94bead37ff73",
+          "order": 12
+        },
+        {
+          "label": "Request Example",
+          "type": "Code Editor",
+          "componentFieldId": "component_field_41df8143-f193-4ccc-9253-94bead37ff76",
+          "order": 13
+        },
+        {
+          "label": "Response Example",
+          "type": "Code Editor",
+          "componentFieldId": "component_field_41df8143-f193-4ccc-9253-94bead37ff77",
+          "order": 14
+        },
+        {
+          "label": "Notes",
+          "type": "Rich Text Editor",
+          "componentFieldId": "component_field_41df8143-f193-4ccc-9253-94bead37ff78",
+          "order": 15
+        },
+        {
+          "label": "Owner Team",
+          "type": "Text Editor",
+          "componentFieldId": "component_field_41df8143-f193-4ccc-9253-94bead37ff79",
+          "order": 16
+        }
+      ]
+    },    
+    {
+      "name": "Test Case Suite",
+      "type": "modal",
+      "description": "Links to relevant test cases or suites in external tools, or allows basic native test case documentation.",
+      "category": "Quality & Testing",
+      "tags": [],
+      "previewImageJpg": "https://placehold.co/64x64",
+      "isActive": true,
+      "order": 3,
+      "componentFields": [
+        {
+          "label": "Name",
+          "type": "Text Input",
+          "required": true,
+          "componentFieldId": "component_field_2e3accb6-f193-4ccc-9253-94bead37ff56",
+          "order": 1
+        },
+        {
+          "label": "Test Tool",
+          "type": "Dropdown",
+          "options": [
+            "TestRail",
+            "Zephyr",
+            "Xray",
+            "Cypress",
+            "Playwright",
+            "Other"
+          ],
+          "componentFieldId": "component_field_2e3accb6-3510-467e-867d-a72109ce2909",
+          "order": 2
+        },
+        {
+          "label": "Suite / Run URL",
+          "type": "URL Input",
+          "required": false,
+          "componentFieldId": "component_field_e78c40eb-383b-4a49-aa1a-0db5dea4fcf0",
+          "order": 3
+        },
+        {
+          "label": "Case IDs",
+          "type": "Tag Input",
+          "componentFieldId": "component_field_eab3a3d7-0080-4e56-ba5e-e43d8b560bbb",
+          "order": 4
+        },
+        {
+          "label": "Native Test Notes",
+          "type": "Rich Text Editor",
+          "componentFieldId": "component_field_a5392084-7f05-459c-8647-5df7de265192",
+          "order": 5
+        },
+        {
+          "label": "Owner QA",
+          "type": "Text Input",
+          "componentFieldId": "component_field_59a93b03-228e-4355-89d8-345f4cca4b18",
+          "order": 6
+        }
+      ]
+    },
+    {
+      "name": "Business Rule/Logic",
+      "type": "modal",
+      "description": "Describes specific business rules, validation logic, calculations, or user-facing behavior associated with the element.",
+      "category": "Business Logic",
+      "tags": [],
+      "previewImageJpg": "https://placehold.co/64x64",
+      "isActive": true,
+      "order": 4,
+      "componentFields": [
+        {
+          "label": "Name",
+          "type": "Text Input",
+          "required": true,
+          "componentFieldId": "component_field_d7b18dc8-f193-4ccc-9253-94bead37ff56",
+          "order": 1
+        },
+        {
+          "label": "Rule Summary",
+          "type": "Text Input",
+          "componentFieldId": "component_field_d7b18dc8-e781-40e0-934a-0877ca660a27",
+          "order": 2
+        },
+        {
+          "label": "Detailed Rules",
+          "type": "Rich Text Editor",
+          "componentFieldId": "component_field_e650ee81-2e3e-47c4-91c0-2774e21d7d09",
+          "order": 3
+        },
+        {
+          "label": "Input Validation (JSON Schema)",
+          "type": "Code Editor",
+          "componentFieldId": "component_field_56ad5ce4-d940-41b8-9ee5-70ca777269cd",
+          "order": 4
+        },
+        {
+          "label": "Examples (Input \u2192 Output)",
+          "type": "Code Editor",
+          "componentFieldId": "component_field_8015bba3-82f1-4edc-b00d-f78a1fc81370",
+          "order": 5
+        },
+        {
+          "label": "Depends on Feature Flags",
+          "type": "Tag Input",
+          "componentFieldId": "component_field_6a13fbf6-8319-4437-85e5-2014f81fb5f5",
+          "order": 6
+        }
+      ]
+    },
+    {
+      "name": "Feature Flag Config",
+      "type": "modal",
+      "description": "Documents the associated feature flag name, links to its configuration in an external system, or notes its state.",
+      "category": "Release & Feature Management",
+      "tags": [],
+      "previewImageJpg": "https://placehold.co/64x64",
+      "isActive": true,
+      "order": 5,
+      "componentFields": [
+        {
+          "label": "Name",
+          "type": "Text Input",
+          "required": true,
+          "componentFieldId": "component_field_bb36b236-f193-4ccc-9253-94bead37ff56",
+          "order": 1
+        },
+        {
+          "label": "Flag Key",
+          "type": "Text Input",
+          "required": true,
+          "componentFieldId": "component_field_bb36b236-9800-4580-82aa-624102a3426b",
+          "order": 2
+        },
+        {
+          "label": "Flag Provider",
+          "type": "Dropdown",
+          "options": [
+            "LaunchDarkly",
+            "Unleash",
+            "ConfigCat",
+            "CloudBees",
+            "Custom"
+          ],
+          "componentFieldId": "component_field_d34fc759-1cc1-40bf-9bff-9d6818a1419b",
+          "order": 3
+        },
+        {
+          "label": "Flag URL",
+          "type": "URL Input",
+          "componentFieldId": "component_field_6c278e82-cebe-45fc-af1a-51adc7a79573",
+          "order": 4
+        },
+        {
+          "label": "Default State",
+          "type": "Dropdown",
+          "options": [
+            "On",
+            "Off"
+          ],
+          "componentFieldId": "component_field_6b8f28ea-02f6-4cb8-a921-20e1c5e01b66",
+          "order": 5
+        },
+        {
+          "label": "Environments",
+          "type": "Multi Select",
+          "options": [
+            "dev",
+            "staging",
+            "prod"
+          ],
+          "componentFieldId": "component_field_354ab827-efc7-4061-b2aa-eefaa8789218",
+          "order": 6
+        },
+        {
+          "label": "Prod Rollout %",
+          "type": "Number Input",
+          "componentFieldId": "component_field_4dcabaae-e455-47a5-8910-51edb2bea3fe",
+          "order": 7
+        },
+        {
+          "label": "Targeting Rules",
+          "type": "Rich Text Editor",
+          "componentFieldId": "component_field_c7eb8a74-4d44-4460-a742-951dfe7be468",
+          "order": 8
+        }
+      ]
+    },
+    {
+      "name": "Support KB/Troubleshooting",
+      "type": "modal",
+      "description": "Links to relevant Knowledge Base articles, monitoring dashboards, or provides specific troubleshooting steps.",
+      "category": "Support & Operations",
+      "tags": [],
+      "previewImageJpg": "https://placehold.co/64x64",
+      "isActive": true,
+      "order": 6,
+      "componentFields": [
+        {
+          "label": "Name",
+          "type": "Text Input",
+          "required": true,
+          "componentFieldId": "component_field_b7a1b348-f193-4ccc-9253-94bead37ff56",
+          "order": 1
+        },
+        {
+          "label": "KB Article URLs",
+          "type": "URL Input",
+          "componentFieldId": "component_field_b7a1b348-aabe-4b3b-ac29-196184edcaf8",
+          "order": 2
+        },
+        {
+          "label": "Runbook URLs",
+          "type": "URL Input",
+          "componentFieldId": "component_field_7fbb68a1-818a-48b0-a29d-fc1ad3a5fa23",
+          "order": 3
+        },
+        {
+          "label": "Monitoring Dashboards",
+          "type": "URL Input",
+          "componentFieldId": "component_field_d07c7f4f-c19a-4942-8f6a-48537760d66c",
+          "order": 4
+        },
+        {
+          "label": "Troubleshooting Steps",
+          "type": "Rich Text Editor",
+          "componentFieldId": "component_field_dd9e746d-d61b-42ee-af0a-0f05d0965130",
+          "order": 5
+        }
+      ]
+    },
+    {
+      "name": "Analytics / Telemetry Event",
+      "type": "modal",
+      "description": "Map which tracking events fire from this UI element; speeds funnel analysis.",
+      "category": "Analytics & Telemetry",
+      "tags": [],
+      "previewImageJpg": "https://placehold.co/64x64",
+      "isActive": true,
+      "order": 7,
+      "componentFields": [
+        {
+          "label": "Name",
+          "type": "Text Input",
+          "required": true,
+          "componentFieldId": "component_field_36f35e33-955a-4e70-b511-1b472aac68f0",
+          "order": 1
+        },
+        {
+          "label": "Event Name",
+          "type": "Text Input",
+          "required": true,
+          "componentFieldId": "component_field_36f35e33-955a-4e70-b511-1b472aac68f1",
+          "order": 2
+        },
+        {
+          "label": "Event Provider",
+          "type": "Dropdown",
+          "options": [
+            "Segment",
+            "GA4",
+            "Mixpanel",
+            "Snowplow",
+            "Custom"
+          ],
+          "componentFieldId": "component_field_8b7e898f-f56f-481c-afc8-e7df6b83adaa",
+          "order": 3
+        },
+        {
+          "label": "When It Fires",
+          "type": "Rich Text Editor",
+          "componentFieldId": "component_field_d7cc170b-5544-46a0-9bc0-addedcd4a93c",
+          "order": 4
+        },
+        {
+          "label": "Properties Schema (JSON)",
+          "type": "Code Editor",
+          "componentFieldId": "component_field_affebd5e-0924-4681-b932-57edc6debf1a",
+          "order": 5
+        },
+        {
+          "label": "Example Payload",
+          "type": "Code Editor",
+          "componentFieldId": "component_field_a3eea36d-196d-401a-97a5-0f8e10c5ecff",
+          "order": 6
+        },
+        {
+          "label": "Tracking IDs",
+          "type": "Tag Input",
+          "componentFieldId": "component_field_df9f5a5a-e259-4e67-9b15-5005819f096c",
+          "order": 7
+        }
+      ]
+    },
+    {
+      "name": "Performance SLA",
+      "type": "modal",
+      "description": "Record latency / error-rate targets and current metrics.",
+      "category": "Performance & Reliability",
+      "tags": [],
+      "previewImageJpg": "https://placehold.co/64x64",
+      "isActive": true,
+      "order": 8,
+      "componentFields": [
+        {
+          "label": "Name",
+          "type": "Text Input",
+          "required": true,
+          "componentFieldId": "component_field_d23211c5-f193-4ccc-9253-94bead37ff56",
+          "order": 1
+        },
+        {
+          "label": "Latency Target p95 (ms)",
+          "type": "Number Input",
+          "componentFieldId": "component_field_d23211c5-01dc-4029-92a5-59c7963771c8",
+          "order": 2
+        },
+        {
+          "label": "Error Rate Target (%)",
+          "type": "Number Input",
+          "componentFieldId": "component_field_23075428-12bb-4762-af4b-d1d2c258790a",
+          "order": 3
+        },
+        {
+          "label": "Current p95 (ms)",
+          "type": "Number Input",
+          "componentFieldId": "component_field_ec0c9c75-abb2-418f-b684-d752b5b152c3",
+          "order": 4
+        },
+        {
+          "label": "Current Error Rate (%)",
+          "type": "Number Input",
+          "componentFieldId": "component_field_a957e123-ff22-4f50-97fc-80eb21caacc3",
+          "order": 5
+        },
+        {
+          "label": "Sample Window",
+          "type": "Dropdown",
+          "options": [
+            "1d",
+            "7d",
+            "30d"
+          ],
+          "componentFieldId": "component_field_c92f5b9d-2213-4930-82d7-0e62e8b8658c",
+          "order": 6
+        },
+        {
+          "label": "Dashboard URL",
+          "type": "URL Input",
+          "componentFieldId": "component_field_4a3134d3-8c3a-463b-b0ac-ebc8a843a42b",
+          "order": 7
+        },
+        {
+          "label": "Notes",
+          "type": "Rich Text Editor",
+          "componentFieldId": "component_field_32db8e83-2b7a-416f-a69b-7c3a9291e766",
+          "order": 8
+        }
+      ]
+    },
+    {
+      "name": "Security & PII",
+      "type": "modal",
+      "description": "Flags data sensitivity, auth scopes, GDPR notes.",
+      "tags": [],
+      "category": "Security & Compliance",
+      "previewImageJpg": "https://placehold.co/64x64",
+      "isActive": true,
+      "order": 9,
+      "componentFields": [
+        {
+          "label": "Name",
+          "type": "Text Input",
+          "required": true,
+          "componentFieldId": "component_field_d2bbc84d-f193-4ccc-9253-94bead37ff56",
+          "order": 1
+        },
+        {
+          "label": "Data Sensitivity",
+          "type": "Dropdown",
+          "options": [
+            "Public",
+            "Internal",
+            "Confidential",
+            "Restricted"
+          ],
+          "componentFieldId": "component_field_d2bbc84d-0ad8-45bf-874f-f3d4ac441ca2",
+          "order": 2
+        },
+        {
+          "label": "Contains PII",
+          "type": "Boolean Toggle",
+          "componentFieldId": "component_field_00965425-6994-4524-8b91-f760900b90a5",
+          "order": 3
+        },
+        {
+          "label": "PII Types",
+          "type": "Multi Select",
+          "options": [
+            "Name",
+            "Email",
+            "Phone",
+            "Address",
+            "Payment",
+            "Gov ID",
+            "Other"
+          ],
+          "componentFieldId": "component_field_197bad69-b9ba-4633-b14a-9356d13381cf",
+          "order": 4
+        },
+        {
+          "label": "Auth Scopes",
+          "type": "Tag Input",
+          "componentFieldId": "component_field_47bea401-df3b-4a1b-92e0-e6b9c6ca4d04",
+          "order": 5
+        },
+        {
+          "label": "GDPR / Retention Notes",
+          "type": "Rich Text Editor",
+          "componentFieldId": "component_field_23423f96-310e-478f-912d-cfbb71c3c534",
+          "order": 6
+        },
+        {
+          "label": "Threat Model Notes",
+          "type": "Rich Text Editor",
+          "componentFieldId": "component_field_325d3f3b-ad02-4bc7-9f4f-776fa188ae61",
+          "order": 7
+        }
+      ]
+    },
+    {
+      "name": "Ownership / On-call",
+      "type": "modal",
+      "description": "Clear contact for incidents or questions.",
+      "tags": [],
+      "category": "Ownership & On-call",
+      "previewImageJpg": "https://placehold.co/64x64",
+      "isActive": true,
+      "order": 10,
+      "componentFields": [
+        {
+          "label": "Name",
+          "type": "Text Input",
+          "required": true,
+          "componentFieldId": "component_field_bb6af813-f193-4ccc-9253-94bead37ff56",
+          "order": 1
+        },
+        {
+          "label": "Owner Team",
+          "type": "Text Input",
+          "componentFieldId": "component_field_bb6af813-3eee-4eb7-8134-389a991a011a",
+          "order": 2
+        },
+        {
+          "label": "Slack Channel",
+          "type": "Text Input",
+          "componentFieldId": "component_field_50fe76db-97a7-433d-906a-d1b21e3f63ca",
+          "order": 3
+        },
+        {
+          "label": "On-call Rotation",
+          "type": "Text Input",
+          "componentFieldId": "component_field_b2567fbd-f435-4a10-807d-3a4566876378",
+          "order": 4
+        },
+        {
+          "label": "Runbook URL",
+          "type": "URL Input",
+          "componentFieldId": "component_field_a669634c-5620-48d3-84f4-76067cebcd18",
+          "order": 5
+        },
+        {
+          "label": "PagerDuty Service",
+          "type": "Text Input",
+          "componentFieldId": "component_field_25d292a8-31d4-436e-9a52-e9274f6b76fa",
+          "order": 6
+        },
+        {
+          "label": "Escalation Policy",
+          "type": "Rich Text Editor",
+          "componentFieldId": "component_field_87504099-ec17-4331-ade7-860023b21642",
+          "order": 7
+        }
+      ]
+    },
+    {
+      "name": "Design Spec Link",
+      "type": "modal",
+      "description": "Jump to Figma frame or design-system token.",
+      "tags": [],
+      "category": "Design & UX",
+      "previewImageJpg": "https://placehold.co/64x64",
+      "isActive": true,
+      "order": 11,
+      "componentFields": [
+        {
+          "label": "Name",
+          "type": "Text Input",
+          "required": true,
+          "componentFieldId": "component_field_70831dad-f193-4ccc-9253-94bead37ff56",
+          "order": 1
+        },
+        {
+          "label": "Figma URL",
+          "type": "URL Input",
+          "componentFieldId": "component_field_70831dad-37db-4e39-ae54-3d819156afc9",
+          "order": 2
+        },
+        {
+          "label": "Design Tokens",
+          "type": "Tag Input",
+          "componentFieldId": "component_field_35692b9a-6da4-4a66-8faa-b5841fc18c2e",
+          "order": 3
+        },
+        {
+          "label": "Spec Version",
+          "type": "Text Input",
+          "componentFieldId": "component_field_38dc7e86-9f2e-469e-8b1c-06b8c8638c43",
+          "order": 4
+        },
+        {
+          "label": "Last Reviewed",
+          "type": "Date Picker",
+          "componentFieldId": "component_field_e150092c-27af-420c-964e-8618aa407570",
+          "order": 5
+        },
+        {
+          "label": "Notes",
+          "type": "Rich Text Editor",
+          "componentFieldId": "component_field_f192335d-6206-4c67-bd89-88619ae1292e",
+          "order": 6
+        }
+      ]
+    },
+    {
+      "name": "Open Issues / Bugs",
+      "type": "modal",
+      "description": "Surface active Jira tickets tied to this element.",
+      "tags": [],
+      "category": "Issue Tracking",
+      "previewImageJpg": "https://placehold.co/64x64",
+      "isActive": true,
+      "order": 12,
+      "componentFields": [
+        {
+          "label": "Name",
+          "type": "Text Input",
+          "required": true,
+          "componentFieldId": "component_field_ce7c4a4d-f193-4ccc-9253-94bead37ff56",
+          "order": 1
+        },
+        {
+          "label": "Tracker",
+          "type": "Dropdown",
+          "options": [
+            "Jira",
+            "Linear",
+            "GitHub",
+            "Azure Boards",
+            "Other"
+          ],
+          "componentFieldId": "component_field_ce7c4a4d-b06e-419c-b055-b982297f9bd9",
+          "order": 2
+        },
+        {
+          "label": "Query / Board URL",
+          "type": "URL Input",
+          "componentFieldId": "component_field_0bd212fa-ff33-4f10-ad81-843966be1130",
+          "order": 3
+        },
+        {
+          "label": "Issue Keys / IDs",
+          "type": "Tag Input",
+          "componentFieldId": "component_field_68ce21e0-67d8-47fc-8f8f-f6d5bcdad237",
+          "order": 4
+        },
+        {
+          "label": "Severity",
+          "type": "Dropdown",
+          "options": [
+            "Sev1",
+            "Sev2",
+            "Sev3",
+            "Sev4"
+          ],
+          "componentFieldId": "component_field_dc496fc0-65f7-42b0-a327-0b95f84df9b0",
+          "order": 5
+        },
+        {
+          "label": "Notes",
+          "type": "Rich Text Editor",
+          "componentFieldId": "component_field_9c54d2aa-c156-4d5d-9a1a-cff42aa464fd",
+          "order": 6
+        }
+      ]
+    }
+  ]
+}

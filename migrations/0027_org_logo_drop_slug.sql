@@ -1,0 +1,2 @@
+ALTER TABLE orgs ADD COLUMN logo_asset_id TEXT;
+ALTER TABLE orgs DROP COLUMN slug;

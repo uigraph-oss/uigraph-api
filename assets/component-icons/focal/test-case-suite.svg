@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg
+      fill="none"
+      width="32"
+      height="32"
+      viewBox="0 0 32 32"
+      xmlns="http://www.w3.org/2000/svg"
+      
+    >
+      <rect width="32" height="32" rx="8" fill="#7C59DF" fill-opacity="0.1" />
+      <path
+        d="M15.333 19C15.333 19 16.333 19.3333 16.833 20.6667C16.833 20.6667 19.2153 16.7778 21.333 16"
+        stroke="#7C59DF"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+      <path
+        d="M10.667 11.3333H20.0003"
+        stroke="#7C59DF"
+        stroke-width="0.666667"
+        stroke-linecap="round"
+      />
+      <path
+        d="M10.667 14.6667H18.0003"
+        stroke="#7C59DF"
+        stroke-width="0.666667"
+        stroke-linecap="round"
+      />
+      <path
+        d="M10.667 18H13.3337"
+        stroke="#7C59DF"
+        stroke-width="0.666667"
+        stroke-linecap="round"
+      />
+    </svg>
