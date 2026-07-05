@@ -489,6 +489,7 @@ func (h *Handler) SyncSavedQuery(w http.ResponseWriter, r *http.Request) {
 		Description string   `json:"description"`
 		QueryText   string   `json:"queryText"`
 		Tags        []string `json:"tags"`
+		CommitHash  *string  `json:"commitHash"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -505,18 +506,20 @@ func (h *Handler) SyncSavedQuery(w http.ResponseWriter, r *http.Request) {
 
 	source := "ci"
 	q := catalogpkg.SavedQuery{
-		ID:          uuid.NewString(),
-		OrgID:       orgID,
-		ServiceDBID: dbID,
-		Scope:       catalogpkg.SavedQueryScopeTeam,
-		Title:       body.Title,
-		Description: body.Description,
-		QueryText:   body.QueryText,
-		Tags:        body.Tags,
-		Source:      &source,
-		SourceRef:   &body.SourceRef,
-		CreatedBy:   p.UserID,
-		UpdatedBy:   &p.UserID,
+		ID:                  uuid.NewString(),
+		OrgID:               orgID,
+		ServiceDBID:         dbID,
+		Scope:               catalogpkg.SavedQueryScopeTeam,
+		Title:               body.Title,
+		Description:         body.Description,
+		QueryText:           body.QueryText,
+		Tags:                body.Tags,
+		Source:              &source,
+		SourceRef:           &body.SourceRef,
+		CreatedBy:           p.UserID,
+		UpdatedBy:           &p.UserID,
+		CreatedByCommitHash: body.CommitHash,
+		UpdatedByCommitHash: body.CommitHash,
 	}
 	result, created, err := h.store.UpsertSavedQueryBySourceRef(r.Context(), q)
 	if err != nil {

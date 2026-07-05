@@ -248,25 +248,27 @@ type SavedQueryFolder struct {
 // CLI/CI-synced rows always have Scope=team, TeamID=nil, Source="ci", and a
 // non-nil SourceRef used to upsert on repeated syncs without duplicating rows.
 type SavedQuery struct {
-	ID          string          `json:"id"`
-	OrgID       string          `json:"orgId"`
-	ServiceDBID string          `json:"serviceDbId"`
-	FolderID    *string         `json:"folderId,omitempty"`
-	Scope       SavedQueryScope `json:"scope"`
-	OwnerUserID *string         `json:"ownerUserId,omitempty"`
-	TeamID      *string         `json:"teamId,omitempty"`
-	Title       string          `json:"title"`
-	Description string          `json:"description"`
-	QueryText   string          `json:"queryText"`
-	Tags        []string        `json:"tags"`
-	Source      *string         `json:"source,omitempty"`
-	SourceRef   *string         `json:"sourceRef,omitempty"`
-	CreatedBy   string          `json:"createdBy"`
-	UpdatedBy   *string         `json:"updatedBy,omitempty"`
-	CreatedAt   time.Time       `json:"createdAt"`
-	UpdatedAt   time.Time       `json:"updatedAt"`
-	DeletedAt   *time.Time      `json:"deletedAt,omitempty"`
-	DeletedBy   *string         `json:"deletedBy,omitempty"`
+	ID                  string          `json:"id"`
+	OrgID               string          `json:"orgId"`
+	ServiceDBID         string          `json:"serviceDbId"`
+	FolderID            *string         `json:"folderId,omitempty"`
+	Scope               SavedQueryScope `json:"scope"`
+	OwnerUserID         *string         `json:"ownerUserId,omitempty"`
+	TeamID              *string         `json:"teamId,omitempty"`
+	Title               string          `json:"title"`
+	Description         string          `json:"description"`
+	QueryText           string          `json:"queryText"`
+	Tags                []string        `json:"tags"`
+	Source              *string         `json:"source,omitempty"`
+	SourceRef           *string         `json:"sourceRef,omitempty"`
+	CreatedBy           string          `json:"createdBy"`
+	UpdatedBy           *string         `json:"updatedBy,omitempty"`
+	CreatedByCommitHash *string         `json:"createdByCommitHash,omitempty"`
+	UpdatedByCommitHash *string         `json:"updatedByCommitHash,omitempty"`
+	CreatedAt           time.Time       `json:"createdAt"`
+	UpdatedAt           time.Time       `json:"updatedAt"`
+	DeletedAt           *time.Time      `json:"deletedAt,omitempty"`
+	DeletedBy           *string         `json:"deletedBy,omitempty"`
 }
 
 // ── Service Tests ─────────────────────────────────────────────────────────────

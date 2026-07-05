@@ -134,7 +134,8 @@ func (d *DB) GetSavedQuery(ctx context.Context, id string) (*catalog.SavedQuery,
 	const q = `
 		SELECT id, org_id, service_db_id, folder_id, scope, owner_user_id, team_id,
 		       title, description, query_text, tags, source, source_ref,
-		       created_by, updated_by, created_at, updated_at, deleted_at, deleted_by
+		       created_by, updated_by, created_at, updated_at, deleted_at, deleted_by,
+		       created_by_commit_hash, updated_by_commit_hash
 		FROM saved_queries
 		WHERE id = $1`
 	sq, err := scanSavedQuery(d.db.QueryRowContext(ctx, q, id))
@@ -151,7 +152,8 @@ func (d *DB) ListSavedQueries(ctx context.Context, serviceDBID string, scope cat
 	const q = `
 		SELECT id, org_id, service_db_id, folder_id, scope, owner_user_id, team_id,
 		       title, description, query_text, tags, source, source_ref,
-		       created_by, updated_by, created_at, updated_at, deleted_at, deleted_by
+		       created_by, updated_by, created_at, updated_at, deleted_at, deleted_by,
+		       created_by_commit_hash, updated_by_commit_hash
 		FROM saved_queries
 		WHERE service_db_id = $1 AND scope = $2 AND deleted_at IS NULL
 		  AND ($3::uuid IS NULL OR owner_user_id = $3)
@@ -201,8 +203,9 @@ func (d *DB) UpsertSavedQueryBySourceRef(ctx context.Context, sq catalog.SavedQu
 		INSERT INTO saved_queries
 			(id, org_id, service_db_id, folder_id, scope, owner_user_id, team_id,
 			 title, description, query_text, tags, source, source_ref,
-			 created_by, updated_by, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+			 created_by, updated_by, created_at, updated_at,
+			 created_by_commit_hash, updated_by_commit_hash)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
 		ON CONFLICT (service_db_id, source_ref) WHERE source_ref IS NOT NULL AND deleted_at IS NULL
 		DO UPDATE SET
 			title = EXCLUDED.title,
@@ -212,10 +215,12 @@ func (d *DB) UpsertSavedQueryBySourceRef(ctx context.Context, sq catalog.SavedQu
 			folder_id = EXCLUDED.folder_id,
 			team_id = EXCLUDED.team_id,
 			updated_by = EXCLUDED.updated_by,
-			updated_at = EXCLUDED.updated_at
+			updated_at = EXCLUDED.updated_at,
+			updated_by_commit_hash = EXCLUDED.updated_by_commit_hash
 		RETURNING id, org_id, service_db_id, folder_id, scope, owner_user_id, team_id,
 		          title, description, query_text, tags, source, source_ref,
-		          created_by, updated_by, created_at, updated_at, (xmax = 0) AS was_inserted`
+		          created_by, updated_by, created_at, updated_at,
+		          created_by_commit_hash, updated_by_commit_hash, (xmax = 0) AS was_inserted`
 	now := time.Now().UTC()
 	if sq.CreatedAt.IsZero() {
 		sq.CreatedAt = now
@@ -229,10 +234,12 @@ func (d *DB) UpsertSavedQueryBySourceRef(ctx context.Context, sq catalog.SavedQu
 		sq.ID, sq.OrgID, sq.ServiceDBID, sq.FolderID, sq.Scope, sq.OwnerUserID, sq.TeamID,
 		sq.Title, sq.Description, sq.QueryText, pq.Array(nonNilTags(sq.Tags)), sq.Source, sq.SourceRef,
 		sq.CreatedBy, sq.UpdatedBy, sq.CreatedAt, sq.UpdatedAt,
+		sq.CreatedByCommitHash, sq.UpdatedByCommitHash,
 	).Scan(
 		&out.ID, &out.OrgID, &out.ServiceDBID, &out.FolderID, &out.Scope, &out.OwnerUserID, &out.TeamID,
 		&out.Title, &out.Description, &out.QueryText, &tags, &out.Source, &out.SourceRef,
-		&out.CreatedBy, &out.UpdatedBy, &out.CreatedAt, &out.UpdatedAt, &wasInserted,
+		&out.CreatedBy, &out.UpdatedBy, &out.CreatedAt, &out.UpdatedAt,
+		&out.CreatedByCommitHash, &out.UpdatedByCommitHash, &wasInserted,
 	)
 	if err != nil {
 		return catalog.SavedQuery{}, false, fmt.Errorf("postgres: UpsertSavedQueryBySourceRef: %w", err)
@@ -248,6 +255,7 @@ func scanSavedQuery(row interface{ Scan(...any) error }) (catalog.SavedQuery, er
 		&sq.ID, &sq.OrgID, &sq.ServiceDBID, &sq.FolderID, &sq.Scope, &sq.OwnerUserID, &sq.TeamID,
 		&sq.Title, &sq.Description, &sq.QueryText, &tags, &sq.Source, &sq.SourceRef,
 		&sq.CreatedBy, &sq.UpdatedBy, &sq.CreatedAt, &sq.UpdatedAt, &sq.DeletedAt, &sq.DeletedBy,
+		&sq.CreatedByCommitHash, &sq.UpdatedByCommitHash,
 	)
 	if err != nil {
 		return sq, err
