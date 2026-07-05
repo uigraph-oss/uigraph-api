@@ -53,6 +53,9 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	if v := q.Get("teamId"); v != "" {
 		p.TeamID = &v
 	}
+	if v := q.Get("serviceId"); v != "" {
+		p.ServiceID = &v
+	}
 	if v := q.Get("search"); v != "" {
 		p.Search = &v
 	}

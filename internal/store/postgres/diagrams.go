@@ -66,6 +66,10 @@ func (d *DB) ListDiagrams(ctx context.Context, orgID string, p diagram.ListParam
 		args = append(args, *p.TeamID)
 		where += fmt.Sprintf(" AND team_id = $%d", len(args))
 	}
+	if p.ServiceID != nil {
+		args = append(args, *p.ServiceID)
+		where += fmt.Sprintf(" AND id IN (SELECT diagram_id FROM service_diagrams WHERE service_id = $%d AND deleted_at IS NULL)", len(args))
+	}
 	if p.Search != nil && *p.Search != "" {
 		args = append(args, "%"+*p.Search+"%")
 		where += fmt.Sprintf(" AND name ILIKE $%d", len(args))

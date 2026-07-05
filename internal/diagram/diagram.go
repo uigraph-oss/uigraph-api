@@ -70,9 +70,10 @@ type Image struct {
 }
 
 type ListParams struct {
-	FolderID *string
-	TeamID   *string
-	Search   *string
+	FolderID  *string
+	TeamID    *string
+	ServiceID *string
+	Search    *string
 	SortBy   string
 	SortDir  string
 	Limit    int
