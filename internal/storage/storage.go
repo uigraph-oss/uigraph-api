@@ -4,6 +4,8 @@ package storage
 
 import (
 	"context"
+	"crypto/sha256"
+	"fmt"
 	"io"
 	"time"
 
@@ -60,6 +62,25 @@ func FileKey(orgID, fileID, filename string) string {
 
 func AssetKey(assetID string) string {
 	return "assets/" + assetID
+}
+
+// Downloader is the minimal storage surface needed to read an object back.
+type Downloader interface {
+	Download(ctx context.Context, key string) (io.ReadCloser, error)
+}
+
+// HashAsset streams the object stored under assetID and returns its sha256 hex.
+func HashAsset(ctx context.Context, c Downloader, assetID string) (string, error) {
+	rc, err := c.Download(ctx, AssetKey(assetID))
+	if err != nil {
+		return "", err
+	}
+	defer rc.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, rc); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x", h.Sum(nil)), nil
 }
 
 func NewFileAssetID() string {

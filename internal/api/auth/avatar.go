@@ -2,7 +2,9 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/uigraph/app/internal/cache"
 	"github.com/uigraph/app/internal/httputil"
@@ -57,7 +59,7 @@ func (h *AvatarHandler) PutUserAvatar(w http.ResponseWriter, r *http.Request) {
 	}
 
 	assetID := storage.UserAvatarAssetID(p.UserID)
-	if !h.uploadAvatar(w, r, assetID) {
+	if !h.resolveAvatarAsset(w, r, assetID) {
 		return
 	}
 	if err := h.store.SetUserAvatar(r.Context(), p.UserID, &assetID); err != nil {
@@ -127,7 +129,7 @@ func (h *AvatarHandler) PutServiceAccountAvatar(w http.ResponseWriter, r *http.R
 	}
 
 	assetID := storage.ServiceAccountAvatarAssetID(saID)
-	if !h.uploadAvatar(w, r, assetID) {
+	if !h.resolveAvatarAsset(w, r, assetID) {
 		return
 	}
 	if err := h.store.SetServiceAccountAvatar(r.Context(), saID, &assetID); err != nil {
@@ -201,7 +203,7 @@ func (h *AvatarHandler) PutOrgLogo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	assetID := storage.OrgLogoAssetID(orgID)
-	if !h.uploadAvatar(w, r, assetID) {
+	if !h.resolveAvatarAsset(w, r, assetID) {
 		return
 	}
 	if err := h.store.SetOrgLogo(r.Context(), orgID, &assetID); err != nil {
@@ -244,6 +246,57 @@ func (h *AvatarHandler) DeleteOrgLogo(w http.ResponseWriter, r *http.Request) {
 	}
 	h.bust(r, orgID, assetID)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// putPresignedImage handles the JSON {assetId, contentType} presigned-upload
+// branch shared by avatars, logos and provider icons: the browser already PUT
+// the bytes to assets/<assetId> via a presigned URL, so copy them into the
+// canonical assets/<dstAssetID> key. handled reports whether the request was
+// JSON; when handled, ok reports success and an error response was already
+// written on failure.
+func putPresignedImage(w http.ResponseWriter, r *http.Request, st storage.Client, dstAssetID string) (handled bool, ok bool) {
+	if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
+		return false, false
+	}
+	var body struct {
+		AssetID     string `json:"assetId"`
+		ContentType string `json:"contentType"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httputil.BadRequest(w, "invalid request body")
+		return true, false
+	}
+	src := strings.TrimSpace(body.AssetID)
+	if src == "" {
+		httputil.BadRequest(w, "assetId is required")
+		return true, false
+	}
+	contentType := strings.TrimSpace(body.ContentType)
+	if contentType == "" {
+		contentType = "image/png"
+	}
+	rc, err := st.Download(r.Context(), storage.AssetKey(src))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return true, false
+	}
+	defer rc.Close()
+	if err := st.Upload(r.Context(), storage.AssetKey(dstAssetID), contentType, rc, -1); err != nil {
+		httputil.Error(w, r, err)
+		return true, false
+	}
+	_ = st.Delete(r.Context(), storage.AssetKey(src))
+	return true, true
+}
+
+// resolveAvatarAsset stores the image under assets/<assetID> from either the
+// presigned JSON flow or a multipart "file". It writes an error response and
+// returns false on failure.
+func (h *AvatarHandler) resolveAvatarAsset(w http.ResponseWriter, r *http.Request, assetID string) bool {
+	if handled, ok := putPresignedImage(w, r, h.storage, assetID); handled {
+		return ok
+	}
+	return h.uploadAvatar(w, r, assetID)
 }
 
 // uploadAvatar reads the multipart "file" and stores it under assets/<assetID>.

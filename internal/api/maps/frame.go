@@ -76,9 +76,10 @@ func (h *Handler) CreateFrame(w http.ResponseWriter, r *http.Request) {
 		Name          string  `json:"name"`
 		Description   string  `json:"description"`
 		TemplateType  string  `json:"templateType"`
-		ParentFrameID *string `json:"parentFrameId"`
-		Order         float64 `json:"order"`
-		Screenshot    string  `json:"screenshot"`
+		ParentFrameID     *string `json:"parentFrameId"`
+		Order             float64 `json:"order"`
+		Screenshot        string  `json:"screenshot"`
+		ScreenshotAssetID string  `json:"screenshotAssetId"`
 	}
 	if err := httputil.Decode(r, &body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -107,13 +108,12 @@ func (h *Handler) CreateFrame(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt:     now,
 	}
 
-	if body.Screenshot != "" && h.storage != nil {
-		assetID := storage.FrameScreenshotAssetID(id)
-		if err := h.uploadScreenshot(r.Context(), storage.AssetKey(assetID), body.Screenshot); err != nil {
-			httputil.Error(w, r, err)
-			return
-		}
-		hash := screenshotHash(body.Screenshot)
+	assetID, hash, changed, err := h.resolveScreenshotAsset(r.Context(), id, body.ScreenshotAssetID, body.Screenshot, nil)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if changed {
 		frame.ScreenshotAssetID = &assetID
 		frame.ScreenshotContentHash = &hash
 	}
@@ -185,9 +185,10 @@ func (h *Handler) UpdateFrame(w http.ResponseWriter, r *http.Request) {
 		Name         *string  `json:"name"`
 		Description  *string  `json:"description"`
 		TemplateType *string  `json:"templateType"`
-		Status       *string  `json:"status"`
-		Order        *float64 `json:"order"`
-		Screenshot   *string  `json:"screenshot"`
+		Status            *string  `json:"status"`
+		Order             *float64 `json:"order"`
+		Screenshot        *string  `json:"screenshot"`
+		ScreenshotAssetID *string  `json:"screenshotAssetId"`
 	}
 	if err := httputil.Decode(r, &body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -211,16 +212,23 @@ func (h *Handler) UpdateFrame(w http.ResponseWriter, r *http.Request) {
 	}
 	f.UpdatedBy = &p.UserID
 
-	if body.Screenshot != nil && h.storage != nil {
-		newHash := screenshotHash(*body.Screenshot)
-		if f.ScreenshotContentHash == nil || newHash != *f.ScreenshotContentHash {
-			assetID := storage.FrameScreenshotAssetID(f.ID)
-			if err := h.uploadScreenshot(r.Context(), storage.AssetKey(assetID), *body.Screenshot); err != nil {
-				httputil.Error(w, r, err)
-				return
-			}
+	if body.Screenshot != nil || body.ScreenshotAssetID != nil {
+		ss := ""
+		if body.Screenshot != nil {
+			ss = *body.Screenshot
+		}
+		sa := ""
+		if body.ScreenshotAssetID != nil {
+			sa = *body.ScreenshotAssetID
+		}
+		assetID, hash, changed, err := h.resolveScreenshotAsset(r.Context(), f.ID, sa, ss, f.ScreenshotContentHash)
+		if err != nil {
+			httputil.Error(w, r, err)
+			return
+		}
+		if changed {
 			f.ScreenshotAssetID = &assetID
-			f.ScreenshotContentHash = &newHash
+			f.ScreenshotContentHash = &hash
 		}
 	}
 
@@ -282,8 +290,9 @@ func (h *Handler) SyncFrames(w http.ResponseWriter, r *http.Request) {
 		Name         string  `json:"name"`
 		TemplateType string  `json:"templateType"`
 		Description  string  `json:"description"`
-		Source       *string `json:"source"`
-		Screenshot   string  `json:"screenshot"`
+		Source            *string `json:"source"`
+		Screenshot        string  `json:"screenshot"`
+		ScreenshotAssetID string  `json:"screenshotAssetId"`
 	}
 	if err := httputil.Decode(r, &body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -294,7 +303,7 @@ func (h *Handler) SyncFrames(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newHash := screenshotHash(body.Screenshot)
+	hasScreenshot := body.Screenshot != "" || body.ScreenshotAssetID != ""
 
 	// Update path — frameId provided.
 	if body.FrameID != nil {
@@ -308,23 +317,21 @@ func (h *Handler) SyncFrames(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Skip upload if hash unchanged.
-		if body.Screenshot != "" && f.ScreenshotContentHash != nil && newHash == *f.ScreenshotContentHash {
+		assetID, hash, changed, err := h.resolveScreenshotAsset(r.Context(), f.ID, body.ScreenshotAssetID, body.Screenshot, f.ScreenshotContentHash)
+		if err != nil {
+			httputil.Error(w, r, err)
+			return
+		}
+		if hasScreenshot && !changed {
 			httputil.JSON(w, http.StatusOK, map[string]any{
 				"frameId":         f.ID,
 				"screenshotSaved": false,
 			})
 			return
 		}
-
-		if body.Screenshot != "" && h.storage != nil {
-			assetID := storage.FrameScreenshotAssetID(f.ID)
-			if err := h.uploadScreenshot(r.Context(), storage.AssetKey(assetID), body.Screenshot); err != nil {
-				httputil.Error(w, r, err)
-				return
-			}
+		if changed {
 			f.ScreenshotAssetID = &assetID
-			f.ScreenshotContentHash = &newHash
+			f.ScreenshotContentHash = &hash
 		}
 		f.Name = body.Name
 		f.Description = body.Description
@@ -337,7 +344,7 @@ func (h *Handler) SyncFrames(w http.ResponseWriter, r *http.Request) {
 		}
 		httputil.JSON(w, http.StatusOK, map[string]any{
 			"frameId":         f.ID,
-			"screenshotSaved": body.Screenshot != "",
+			"screenshotSaved": changed,
 		})
 		return
 	}
@@ -359,14 +366,14 @@ func (h *Handler) SyncFrames(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt:    now,
 	}
 
-	if body.Screenshot != "" && h.storage != nil {
-		assetID := storage.FrameScreenshotAssetID(id)
-		if err := h.uploadScreenshot(r.Context(), storage.AssetKey(assetID), body.Screenshot); err != nil {
-			httputil.Error(w, r, err)
-			return
-		}
+	assetID, hash, changed, err := h.resolveScreenshotAsset(r.Context(), id, body.ScreenshotAssetID, body.Screenshot, nil)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if changed {
 		frame.ScreenshotAssetID = &assetID
-		frame.ScreenshotContentHash = &newHash
+		frame.ScreenshotContentHash = &hash
 	}
 
 	if err := h.store.CreateFrame(r.Context(), frame); err != nil {
@@ -375,8 +382,36 @@ func (h *Handler) SyncFrames(w http.ResponseWriter, r *http.Request) {
 	}
 	httputil.JSON(w, http.StatusCreated, map[string]any{
 		"frameId":         id,
-		"screenshotSaved": body.Screenshot != "" && h.storage != nil,
+		"screenshotSaved": changed,
 	})
+}
+
+func (h *Handler) resolveScreenshotAsset(ctx context.Context, frameID, screenshotAssetID, screenshot string, existingHash *string) (string, string, bool, error) {
+	if h.storage == nil {
+		return "", "", false, nil
+	}
+	if screenshotAssetID != "" {
+		hash, err := storage.HashAsset(ctx, h.storage, screenshotAssetID)
+		if err != nil {
+			return "", "", false, err
+		}
+		if existingHash != nil && hash == *existingHash {
+			return "", "", false, nil
+		}
+		return screenshotAssetID, hash, true, nil
+	}
+	if screenshot != "" {
+		hash := screenshotHash(screenshot)
+		if existingHash != nil && hash == *existingHash {
+			return "", "", false, nil
+		}
+		key := storage.FrameScreenshotAssetID(frameID)
+		if err := h.uploadScreenshot(ctx, storage.AssetKey(key), screenshot); err != nil {
+			return "", "", false, err
+		}
+		return key, hash, true, nil
+	}
+	return "", "", false, nil
 }
 
 func (h *Handler) uploadScreenshot(ctx context.Context, key, content string) error {

@@ -160,27 +160,33 @@ func (h *SSOHandler) PutOAuthProviderIcon(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	file, header, err := r.FormFile("file")
-	if err != nil {
-		httputil.BadRequest(w, "missing file")
-		return
-	}
-	defer file.Close()
-
-	if header.Size > maxIconBytes {
-		httputil.BadRequest(w, "icon too large")
-		return
-	}
-
-	contentType := header.Header.Get("Content-Type")
-	if contentType == "" {
-		contentType = "application/octet-stream"
-	}
-
 	assetID := storage.OAuthProviderIconAssetID(provider)
-	if err := h.storage.Upload(r.Context(), storage.AssetKey(assetID), contentType, file, header.Size); err != nil {
-		httputil.Error(w, r, err)
-		return
+	if handled, ok := putPresignedImage(w, r, h.storage, assetID); handled {
+		if !ok {
+			return
+		}
+	} else {
+		file, header, err := r.FormFile("file")
+		if err != nil {
+			httputil.BadRequest(w, "missing file")
+			return
+		}
+		defer file.Close()
+
+		if header.Size > maxIconBytes {
+			httputil.BadRequest(w, "icon too large")
+			return
+		}
+
+		contentType := header.Header.Get("Content-Type")
+		if contentType == "" {
+			contentType = "application/octet-stream"
+		}
+
+		if err := h.storage.Upload(r.Context(), storage.AssetKey(assetID), contentType, file, header.Size); err != nil {
+			httputil.Error(w, r, err)
+			return
+		}
 	}
 	if err := h.store.SetOAuthProviderIcon(r.Context(), provider, &assetID); err != nil {
 		httputil.Error(w, r, err)

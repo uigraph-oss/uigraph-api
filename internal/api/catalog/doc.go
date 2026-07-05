@@ -77,6 +77,7 @@ func (h *Handler) CreateDoc(w http.ResponseWriter, r *http.Request) {
 		FileType      *string `json:"fileType"`
 		Description   *string `json:"description"`
 		ContentBase64 *string `json:"contentBase64"`
+		FileAssetID   *string `json:"fileAssetId"`
 		FolderID      *string `json:"folderId"`
 		TeamID        *string `json:"teamId"`
 	}
@@ -102,13 +103,10 @@ func (h *Handler) CreateDoc(w http.ResponseWriter, r *http.Request) {
 			httputil.BadRequest(w, "storage is not configured")
 			return
 		}
-		if body.FileName == nil || strings.TrimSpace(*body.FileName) == "" || body.ContentBase64 == nil || strings.TrimSpace(*body.ContentBase64) == "" {
-			httputil.BadRequest(w, "fileName and contentBase64 are required when docId is not provided")
-			return
-		}
-		fileBytes, err := base64.StdEncoding.DecodeString(*body.ContentBase64)
-		if err != nil {
-			httputil.BadRequest(w, "contentBase64 must be valid base64")
+		hasBase64 := body.ContentBase64 != nil && strings.TrimSpace(*body.ContentBase64) != ""
+		hasAssetID := body.FileAssetID != nil && strings.TrimSpace(*body.FileAssetID) != ""
+		if body.FileName == nil || strings.TrimSpace(*body.FileName) == "" || (!hasBase64 && !hasAssetID) {
+			httputil.BadRequest(w, "fileName and contentBase64 or fileAssetId are required when docId is not provided")
 			return
 		}
 
@@ -121,10 +119,27 @@ func (h *Handler) CreateDoc(w http.ResponseWriter, r *http.Request) {
 			description = strings.TrimSpace(*body.Description)
 		}
 
-		fileAssetID := storage.NewFileAssetID()
-		if err := h.storage.Upload(r.Context(), storage.AssetKey(fileAssetID), fileType, bytes.NewReader(fileBytes), int64(len(fileBytes))); err != nil {
-			httputil.Error(w, r, err)
-			return
+		var fileAssetID, contentHash string
+		if hasAssetID {
+			fileAssetID = strings.TrimSpace(*body.FileAssetID)
+			hash, err := storage.HashAsset(r.Context(), h.storage, fileAssetID)
+			if err != nil {
+				httputil.Error(w, r, err)
+				return
+			}
+			contentHash = hash
+		} else {
+			fileBytes, err := base64.StdEncoding.DecodeString(*body.ContentBase64)
+			if err != nil {
+				httputil.BadRequest(w, "contentBase64 must be valid base64")
+				return
+			}
+			fileAssetID = storage.NewFileAssetID()
+			if err := h.storage.Upload(r.Context(), storage.AssetKey(fileAssetID), fileType, bytes.NewReader(fileBytes), int64(len(fileBytes))); err != nil {
+				httputil.Error(w, r, err)
+				return
+			}
+			contentHash = sha256Bytes(fileBytes)
 		}
 
 		now := time.Now().UTC()
@@ -137,7 +152,7 @@ func (h *Handler) CreateDoc(w http.ResponseWriter, r *http.Request) {
 			FileName:    strings.TrimSpace(*body.FileName),
 			FileType:    fileType,
 			Description: description,
-			ContentHash: sha256Bytes(fileBytes),
+			ContentHash: contentHash,
 			CreatedBy:   p.UserID,
 			UpdatedBy:   &p.UserID,
 			CreatedAt:   now,
