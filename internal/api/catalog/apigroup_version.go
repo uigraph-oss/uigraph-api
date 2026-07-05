@@ -65,6 +65,7 @@ func (h *Handler) CreateAPIGroupVersion(w http.ResponseWriter, r *http.Request) 
 	}
 
 	g.UpdatedBy = &p.UserID
+	g.UpdatedByCommitHash = nil
 	v, err := h.publishAPIGroupVersion(r.Context(), publishParams{
 		group: g, serviceID: serviceID, spec: specContent,
 		label: label, isAuto: false, actorID: p.UserID,
@@ -147,6 +148,7 @@ func (h *Handler) RestoreAPIGroupVersion(w http.ResponseWriter, r *http.Request)
 	}
 
 	g.UpdatedBy = &p.UserID
+	g.UpdatedByCommitHash = nil
 	if _, err := h.publishAPIGroupVersion(r.Context(), publishParams{
 		group: g, serviceID: serviceID, spec: specContent,
 		endpoints: working, label: nil, isAuto: true, actorID: p.UserID,

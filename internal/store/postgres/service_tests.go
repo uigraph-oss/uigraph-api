@@ -17,8 +17,8 @@ import (
 func (d *DB) CreateTestPack(ctx context.Context, p catalog.TestPack) error {
 	const q = `
 		INSERT INTO test_packs
-			(id, service_id, org_id, name, type, created_by, updated_by, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`
+			(id, service_id, org_id, name, type, created_by, updated_by, created_by_commit_hash, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`
 	now := time.Now().UTC()
 	if p.CreatedAt.IsZero() {
 		p.CreatedAt = now
@@ -28,7 +28,7 @@ func (d *DB) CreateTestPack(ctx context.Context, p catalog.TestPack) error {
 	}
 	_, err := d.db.ExecContext(ctx, q,
 		p.ID, p.ServiceID, p.OrgID, p.Name, p.Type,
-		p.CreatedBy, p.UpdatedBy, p.CreatedAt, p.UpdatedAt,
+		p.CreatedBy, p.UpdatedBy, p.CreatedByCommitHash, p.CreatedAt, p.UpdatedAt,
 	)
 	return wrapErr("CreateTestPack", err)
 }
@@ -36,7 +36,7 @@ func (d *DB) CreateTestPack(ctx context.Context, p catalog.TestPack) error {
 func (d *DB) GetTestPack(ctx context.Context, id string) (*catalog.TestPack, error) {
 	const q = `
 		SELECT id, service_id, org_id, name, type,
-		       created_by, updated_by, deleted_by, created_at, updated_at, deleted_at
+		       created_by, updated_by, created_by_commit_hash, updated_by_commit_hash, deleted_by, created_at, updated_at, deleted_at
 		FROM test_packs WHERE id=$1`
 	p, err := scanTestPack(d.db.QueryRowContext(ctx, q, id))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -51,7 +51,7 @@ func (d *DB) GetTestPack(ctx context.Context, id string) (*catalog.TestPack, err
 func (d *DB) ListTestPacks(ctx context.Context, serviceID string) ([]catalog.TestPack, error) {
 	const q = `
 		SELECT id, service_id, org_id, name, type,
-		       created_by, updated_by, deleted_by, created_at, updated_at, deleted_at
+		       created_by, updated_by, created_by_commit_hash, updated_by_commit_hash, deleted_by, created_at, updated_at, deleted_at
 		FROM test_packs
 		WHERE service_id=$1 AND deleted_at IS NULL
 		ORDER BY created_at ASC`
@@ -74,9 +74,9 @@ func (d *DB) ListTestPacks(ctx context.Context, serviceID string) ([]catalog.Tes
 func (d *DB) UpdateTestPack(ctx context.Context, p catalog.TestPack) error {
 	const q = `
 		UPDATE test_packs
-		SET name=$1, type=$2, updated_by=$3, updated_at=$4
-		WHERE id=$5 AND deleted_at IS NULL`
-	_, err := d.db.ExecContext(ctx, q, p.Name, p.Type, p.UpdatedBy, time.Now().UTC(), p.ID)
+		SET name=$1, type=$2, updated_by=$3, updated_by_commit_hash=$4, updated_at=$5
+		WHERE id=$6 AND deleted_at IS NULL`
+	_, err := d.db.ExecContext(ctx, q, p.Name, p.Type, p.UpdatedBy, p.UpdatedByCommitHash, time.Now().UTC(), p.ID)
 	return wrapErr("UpdateTestPack", err)
 }
 
@@ -90,7 +90,7 @@ func scanTestPack(row interface{ Scan(...any) error }) (catalog.TestPack, error)
 	var p catalog.TestPack
 	err := row.Scan(
 		&p.ID, &p.ServiceID, &p.OrgID, &p.Name, &p.Type,
-		&p.CreatedBy, &p.UpdatedBy, &p.DeletedBy, &p.CreatedAt, &p.UpdatedAt, &p.DeletedAt,
+		&p.CreatedBy, &p.UpdatedBy, &p.CreatedByCommitHash, &p.UpdatedByCommitHash, &p.DeletedBy, &p.CreatedAt, &p.UpdatedAt, &p.DeletedAt,
 	)
 	return p, err
 }
@@ -104,12 +104,12 @@ func (d *DB) CreateTestCase(ctx context.Context, tc catalog.TestCase) error {
 			 labels, linked_ticket, estimated_duration_mins, test_owner, linked_map_node_id,
 			 is_critical, evidence_required, manual_payload, api_payload, graphql_payload,
 			 database_payload, grpc_payload, status, version, baseline_run_result_id, dependencies,
-			 created_by, updated_by, created_at, updated_at)
+			 created_by, updated_by, created_by_commit_hash, created_at, updated_at)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,
 		        $10,$11,$12,$13,$14,
 		        $15,$16,$17,$18,$19,
 		        $20,$21,$22,$23,$24,$25,
-		        $26,$27,$28,$29)`
+		        $26,$27,$28,$29,$30)`
 	now := time.Now().UTC()
 	if tc.CreatedAt.IsZero() {
 		tc.CreatedAt = now
@@ -141,7 +141,7 @@ func (d *DB) CreateTestCase(ctx context.Context, tc catalog.TestCase) error {
 		pq.Array(labels), tc.LinkedTicket, tc.EstimatedDurationMins, tc.TestOwner, tc.LinkedMapNodeID,
 		tc.IsCritical, tc.EvidenceRequired, nullableJSON(manualJSON), nullableJSON(apiJSON), nullableJSON(graphqlJSON),
 		nullableJSON(dbJSON), nullableJSON(grpcJSON), tc.Status, tc.Version, tc.BaselineRunResultID, pq.Array(deps),
-		tc.CreatedBy, tc.UpdatedBy, tc.CreatedAt, tc.UpdatedAt,
+		tc.CreatedBy, tc.UpdatedBy, tc.CreatedByCommitHash, tc.CreatedAt, tc.UpdatedAt,
 	)
 	return wrapErr("CreateTestCase", err)
 }
@@ -152,7 +152,7 @@ func (d *DB) GetTestCase(ctx context.Context, id string) (*catalog.TestCase, err
 		       labels, linked_ticket, estimated_duration_mins, test_owner, linked_map_node_id,
 		       is_critical, evidence_required, manual_payload, api_payload, graphql_payload,
 		       database_payload, grpc_payload, status, version, baseline_run_result_id, dependencies,
-		       created_by, updated_by, deleted_by, created_at, updated_at, deleted_at
+		       created_by, updated_by, created_by_commit_hash, updated_by_commit_hash, deleted_by, created_at, updated_at, deleted_at
 		FROM test_cases WHERE id=$1`
 	tc, err := scanTestCase(d.db.QueryRowContext(ctx, q, id))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -170,7 +170,7 @@ func (d *DB) ListTestCases(ctx context.Context, serviceID string, testPackID *st
 		       labels, linked_ticket, estimated_duration_mins, test_owner, linked_map_node_id,
 		       is_critical, evidence_required, manual_payload, api_payload, graphql_payload,
 		       database_payload, grpc_payload, status, version, baseline_run_result_id, dependencies,
-		       created_by, updated_by, deleted_by, created_at, updated_at, deleted_at
+		       created_by, updated_by, created_by_commit_hash, updated_by_commit_hash, deleted_by, created_at, updated_at, deleted_at
 		FROM test_cases
 		WHERE service_id=$1 AND deleted_at IS NULL`
 	args := []any{serviceID}
@@ -202,8 +202,8 @@ func (d *DB) UpdateTestCase(ctx context.Context, tc catalog.TestCase) error {
 		    labels=$7, linked_ticket=$8, estimated_duration_mins=$9, test_owner=$10, linked_map_node_id=$11,
 		    is_critical=$12, evidence_required=$13, manual_payload=$14, api_payload=$15, graphql_payload=$16,
 		    database_payload=$17, grpc_payload=$18, status=$19, version=$20, baseline_run_result_id=$21, dependencies=$22,
-		    updated_by=$23, updated_at=$24
-		WHERE id=$25 AND deleted_at IS NULL`
+		    updated_by=$23, updated_by_commit_hash=$24, updated_at=$25
+		WHERE id=$26 AND deleted_at IS NULL`
 	manualJSON, _ := json.Marshal(tc.Manual)
 	apiJSON, _ := json.Marshal(tc.API)
 	graphqlJSON, _ := json.Marshal(tc.GraphQL)
@@ -222,7 +222,7 @@ func (d *DB) UpdateTestCase(ctx context.Context, tc catalog.TestCase) error {
 		pq.Array(labels), tc.LinkedTicket, tc.EstimatedDurationMins, tc.TestOwner, tc.LinkedMapNodeID,
 		tc.IsCritical, tc.EvidenceRequired, nullableJSON(manualJSON), nullableJSON(apiJSON), nullableJSON(graphqlJSON),
 		nullableJSON(dbJSON), nullableJSON(grpcJSON), tc.Status, tc.Version, tc.BaselineRunResultID, pq.Array(deps),
-		tc.UpdatedBy, time.Now().UTC(), tc.ID,
+		tc.UpdatedBy, tc.UpdatedByCommitHash, time.Now().UTC(), tc.ID,
 	)
 	return wrapErr("UpdateTestCase", err)
 }
@@ -243,7 +243,7 @@ func scanTestCase(row interface{ Scan(...any) error }) (catalog.TestCase, error)
 		&labels, &tc.LinkedTicket, &tc.EstimatedDurationMins, &tc.TestOwner, &tc.LinkedMapNodeID,
 		&tc.IsCritical, &tc.EvidenceRequired, &manualPayload, &apiPayload, &gqlPayload,
 		&dbPayload, &grpcPayload, &tc.Status, &tc.Version, &tc.BaselineRunResultID, &deps,
-		&tc.CreatedBy, &tc.UpdatedBy, &tc.DeletedBy, &tc.CreatedAt, &tc.UpdatedAt, &tc.DeletedAt,
+		&tc.CreatedBy, &tc.UpdatedBy, &tc.CreatedByCommitHash, &tc.UpdatedByCommitHash, &tc.DeletedBy, &tc.CreatedAt, &tc.UpdatedAt, &tc.DeletedAt,
 	)
 	if err != nil {
 		return tc, err

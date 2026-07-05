@@ -103,6 +103,7 @@ func (h *Handler) CreateDB(w http.ResponseWriter, r *http.Request) {
 		SchemaJSON json.RawMessage `json:"schemaJson"`
 		Source     *string         `json:"source"`
 		SourceTS   *time.Time      `json:"sourceTs"`
+		CommitHash *string         `json:"commitHash"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -117,19 +118,20 @@ func (h *Handler) CreateDB(w http.ResponseWriter, r *http.Request) {
 	}
 	now := time.Now().UTC()
 	db := catalogpkg.ServiceDB{
-		ID:         uuid.NewString(),
-		ServiceID:  serviceID,
-		OrgID:      orgID,
-		DBName:     body.DBName,
-		DBType:     body.DBType,
-		Dialect:    body.Dialect,
-		SchemaJSON: body.SchemaJSON,
-		Source:     body.Source,
-		SourceTS:   body.SourceTS,
-		CreatedBy:  p.UserID,
-		UpdatedBy:  &p.UserID,
-		CreatedAt:  now,
-		UpdatedAt:  now,
+		ID:                  uuid.NewString(),
+		ServiceID:           serviceID,
+		OrgID:               orgID,
+		DBName:              body.DBName,
+		DBType:              body.DBType,
+		Dialect:             body.Dialect,
+		SchemaJSON:          body.SchemaJSON,
+		Source:              body.Source,
+		SourceTS:            body.SourceTS,
+		CreatedBy:           p.UserID,
+		UpdatedBy:           &p.UserID,
+		CreatedByCommitHash: body.CommitHash,
+		CreatedAt:           now,
+		UpdatedAt:           now,
 	}
 	if err := h.store.CreateServiceDB(r.Context(), db); err != nil {
 		if errors.Is(err, storepkg.ErrDataSourceNameExists) {
@@ -139,7 +141,7 @@ func (h *Handler) CreateDB(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, r, err)
 		return
 	}
-	_, _ = h.createServiceDBVersionSnapshot(r, db, nil, true, p.UserID)
+	_, _ = h.createServiceDBVersionSnapshot(r, db, nil, true, p.UserID, body.CommitHash)
 	httputil.JSON(w, http.StatusCreated, db)
 }
 
@@ -186,6 +188,7 @@ func (h *Handler) UpdateDB(w http.ResponseWriter, r *http.Request) {
 		SchemaJSON json.RawMessage `json:"schemaJson"`
 		Source     *string         `json:"source"`
 		SourceTS   *time.Time      `json:"sourceTs"`
+		CommitHash *string         `json:"commitHash"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -206,6 +209,7 @@ func (h *Handler) UpdateDB(w http.ResponseWriter, r *http.Request) {
 	db.Source = body.Source
 	db.SourceTS = body.SourceTS
 	db.UpdatedBy = &p.UserID
+	db.UpdatedByCommitHash = body.CommitHash
 
 	if err := h.store.UpdateServiceDB(r.Context(), *db); err != nil {
 		if errors.Is(err, storepkg.ErrDataSourceNameExists) {
@@ -216,7 +220,7 @@ func (h *Handler) UpdateDB(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !bytes.Equal(prevSchema, db.SchemaJSON) {
-		_, _ = h.createServiceDBVersionSnapshot(r, *db, nil, true, p.UserID)
+		_, _ = h.createServiceDBVersionSnapshot(r, *db, nil, true, p.UserID, body.CommitHash)
 	}
 	httputil.JSON(w, http.StatusOK, db)
 }
@@ -364,6 +368,7 @@ func (h *Handler) CreateDBVersion(w http.ResponseWriter, r *http.Request) {
 		db.SourceTS = body.SourceTS
 	}
 	db.UpdatedBy = &p.UserID
+	db.UpdatedByCommitHash = nil
 	if err := h.store.UpdateServiceDB(r.Context(), *db); err != nil {
 		if errors.Is(err, storepkg.ErrDataSourceNameExists) {
 			httputil.Conflict(w, fmt.Sprintf("a data source named %q already exists in this service", db.DBName))
@@ -376,7 +381,7 @@ func (h *Handler) CreateDBVersion(w http.ResponseWriter, r *http.Request) {
 	if body.IsAutoVersion != nil {
 		isAuto = *body.IsAutoVersion
 	}
-	version, err := h.createServiceDBVersionSnapshot(r, *db, body.Label, isAuto, p.UserID)
+	version, err := h.createServiceDBVersionSnapshot(r, *db, body.Label, isAuto, p.UserID, nil)
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
@@ -431,12 +436,13 @@ func (h *Handler) RestoreDBVersion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	restoreLabel := fmt.Sprintf("Restored from v%d", version.VersionNumber)
-	_, _ = h.createServiceDBVersionSnapshot(r, *db, &restoreLabel, true, p.UserID)
+	_, _ = h.createServiceDBVersionSnapshot(r, *db, &restoreLabel, true, p.UserID, nil)
 
 	db.SchemaJSON = version.SchemaJSON
 	db.Source = version.Source
 	db.SourceTS = version.SourceTS
 	db.UpdatedBy = &p.UserID
+	db.UpdatedByCommitHash = nil
 	if err := h.store.UpdateServiceDB(r.Context(), *db); err != nil {
 		httputil.Error(w, r, err)
 		return
@@ -444,22 +450,23 @@ func (h *Handler) RestoreDBVersion(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, db)
 }
 
-func (h *Handler) createServiceDBVersionSnapshot(r *http.Request, db catalogpkg.ServiceDB, label *string, isAuto bool, userID string) (*catalogpkg.ServiceDBVersion, error) {
+func (h *Handler) createServiceDBVersionSnapshot(r *http.Request, db catalogpkg.ServiceDB, label *string, isAuto bool, userID string, commitHash *string) (*catalogpkg.ServiceDBVersion, error) {
 	latest, err := h.store.LatestServiceDBVersionNumber(r.Context(), db.ID)
 	if err != nil {
 		return nil, err
 	}
 	version := catalogpkg.ServiceDBVersion{
-		ID:            uuid.NewString(),
-		ServiceDBID:   db.ID,
-		VersionNumber: latest + 1,
-		Label:         label,
-		SchemaJSON:    db.SchemaJSON,
-		Source:        db.Source,
-		SourceTS:      db.SourceTS,
-		IsAutoVersion: isAuto,
-		CreatedBy:     userID,
-		CreatedAt:     time.Now().UTC(),
+		ID:                  uuid.NewString(),
+		ServiceDBID:         db.ID,
+		VersionNumber:       latest + 1,
+		Label:               label,
+		SchemaJSON:          db.SchemaJSON,
+		Source:              db.Source,
+		SourceTS:            db.SourceTS,
+		IsAutoVersion:       isAuto,
+		CreatedBy:           userID,
+		CreatedByCommitHash: commitHash,
+		CreatedAt:           time.Now().UTC(),
 	}
 	if err := h.store.CreateServiceDBVersion(r.Context(), version); err != nil {
 		return nil, err

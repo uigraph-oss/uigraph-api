@@ -16,8 +16,8 @@ func (d *DB) CreateServiceDB(ctx context.Context, sd catalog.ServiceDB) error {
 	const q = `
 		INSERT INTO service_dbs
 			(id, service_id, org_id, db_name, db_type, dialect, schema_json,
-			 source, source_ts, schema_token_count, created_by, updated_by, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`
+			 source, source_ts, schema_token_count, created_by, updated_by, created_by_commit_hash, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`
 	now := time.Now().UTC()
 	if sd.CreatedAt.IsZero() {
 		sd.CreatedAt = now
@@ -31,7 +31,7 @@ func (d *DB) CreateServiceDB(ctx context.Context, sd catalog.ServiceDB) error {
 	}
 	_, err := d.db.ExecContext(ctx, q,
 		sd.ID, sd.ServiceID, sd.OrgID, sd.DBName, sd.DBType, sd.Dialect, schema,
-		sd.Source, sd.SourceTS, sd.SchemaTokenCount, sd.CreatedBy, sd.UpdatedBy, sd.CreatedAt, sd.UpdatedAt,
+		sd.Source, sd.SourceTS, sd.SchemaTokenCount, sd.CreatedBy, sd.UpdatedBy, sd.CreatedByCommitHash, sd.CreatedAt, sd.UpdatedAt,
 	)
 	if uniqueViolation(err, "idx_service_dbs_service_name") {
 		return fmt.Errorf("%w: %s", store.ErrDataSourceNameExists, sd.DBName)
@@ -42,7 +42,8 @@ func (d *DB) CreateServiceDB(ctx context.Context, sd catalog.ServiceDB) error {
 func (d *DB) GetServiceDB(ctx context.Context, id string) (*catalog.ServiceDB, error) {
 	const q = `
 		SELECT id, service_id, org_id, db_name, db_type, dialect, schema_json,
-		       source, source_ts, schema_token_count, created_by, updated_by, created_at, updated_at, deleted_at, deleted_by
+		       source, source_ts, schema_token_count, created_by, updated_by,
+		       created_by_commit_hash, updated_by_commit_hash, created_at, updated_at, deleted_at, deleted_by
 		FROM service_dbs
 		WHERE id = $1`
 	sd, err := scanServiceDB(d.db.QueryRowContext(ctx, q, id))
@@ -58,7 +59,8 @@ func (d *DB) GetServiceDB(ctx context.Context, id string) (*catalog.ServiceDB, e
 func (d *DB) ListServiceDBs(ctx context.Context, serviceID string) ([]catalog.ServiceDB, error) {
 	const q = `
 		SELECT id, service_id, org_id, db_name, db_type, dialect, schema_json,
-		       source, source_ts, schema_token_count, created_by, updated_by, created_at, updated_at, deleted_at, deleted_by
+		       source, source_ts, schema_token_count, created_by, updated_by,
+		       created_by_commit_hash, updated_by_commit_hash, created_at, updated_at, deleted_at, deleted_by
 		FROM service_dbs
 		WHERE service_id = $1 AND deleted_at IS NULL
 		ORDER BY created_at DESC`
@@ -84,8 +86,8 @@ func (d *DB) UpdateServiceDB(ctx context.Context, sd catalog.ServiceDB) error {
 		UPDATE service_dbs
 		SET db_name=$1, db_type=$2, dialect=$3, schema_json=$4,
 		    source=$5, source_ts=$6, schema_token_count=$7,
-		    updated_by=$8, updated_at=$9
-		WHERE id=$10 AND deleted_at IS NULL`
+		    updated_by=$8, updated_by_commit_hash=$9, updated_at=$10
+		WHERE id=$11 AND deleted_at IS NULL`
 	schema := sd.SchemaJSON
 	if schema == nil {
 		schema = json.RawMessage("{}")
@@ -93,7 +95,7 @@ func (d *DB) UpdateServiceDB(ctx context.Context, sd catalog.ServiceDB) error {
 	_, err := d.db.ExecContext(ctx, q,
 		sd.DBName, sd.DBType, sd.Dialect, schema,
 		sd.Source, sd.SourceTS, sd.SchemaTokenCount,
-		sd.UpdatedBy, time.Now().UTC(), sd.ID,
+		sd.UpdatedBy, sd.UpdatedByCommitHash, time.Now().UTC(), sd.ID,
 	)
 	if uniqueViolation(err, "idx_service_dbs_service_name") {
 		return fmt.Errorf("%w: %s", store.ErrDataSourceNameExists, sd.DBName)
@@ -112,7 +114,8 @@ func scanServiceDB(row interface{ Scan(...any) error }) (catalog.ServiceDB, erro
 	var schema []byte
 	err := row.Scan(
 		&sd.ID, &sd.ServiceID, &sd.OrgID, &sd.DBName, &sd.DBType, &sd.Dialect, &schema,
-		&sd.Source, &sd.SourceTS, &sd.SchemaTokenCount, &sd.CreatedBy, &sd.UpdatedBy, &sd.CreatedAt, &sd.UpdatedAt, &sd.DeletedAt, &sd.DeletedBy,
+		&sd.Source, &sd.SourceTS, &sd.SchemaTokenCount, &sd.CreatedBy, &sd.UpdatedBy,
+		&sd.CreatedByCommitHash, &sd.UpdatedByCommitHash, &sd.CreatedAt, &sd.UpdatedAt, &sd.DeletedAt, &sd.DeletedBy,
 	)
 	if err != nil {
 		return sd, err
@@ -124,8 +127,8 @@ func scanServiceDB(row interface{ Scan(...any) error }) (catalog.ServiceDB, erro
 func (d *DB) CreateServiceDBVersion(ctx context.Context, v catalog.ServiceDBVersion) error {
 	const q = `
 		INSERT INTO service_db_versions
-			(id, service_db_id, version_number, label, schema_json, source, source_ts, is_auto_version, created_by, created_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`
+			(id, service_db_id, version_number, label, schema_json, source, source_ts, is_auto_version, created_by, created_by_commit_hash, created_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`
 	if v.CreatedAt.IsZero() {
 		v.CreatedAt = time.Now().UTC()
 	}
@@ -134,20 +137,20 @@ func (d *DB) CreateServiceDBVersion(ctx context.Context, v catalog.ServiceDBVers
 		schema = json.RawMessage("{}")
 	}
 	_, err := d.db.ExecContext(ctx, q,
-		v.ID, v.ServiceDBID, v.VersionNumber, v.Label, schema, v.Source, v.SourceTS, v.IsAutoVersion, v.CreatedBy, v.CreatedAt,
+		v.ID, v.ServiceDBID, v.VersionNumber, v.Label, schema, v.Source, v.SourceTS, v.IsAutoVersion, v.CreatedBy, v.CreatedByCommitHash, v.CreatedAt,
 	)
 	return wrapErr("CreateServiceDBVersion", err)
 }
 
 func (d *DB) GetServiceDBVersion(ctx context.Context, id string) (*catalog.ServiceDBVersion, error) {
 	const q = `
-		SELECT id, service_db_id, version_number, label, schema_json, source, source_ts, is_auto_version, created_by, created_at
+		SELECT id, service_db_id, version_number, label, schema_json, source, source_ts, is_auto_version, created_by, created_by_commit_hash, created_at
 		FROM service_db_versions
 		WHERE id = $1`
 	var v catalog.ServiceDBVersion
 	var schema []byte
 	err := d.db.QueryRowContext(ctx, q, id).Scan(
-		&v.ID, &v.ServiceDBID, &v.VersionNumber, &v.Label, &schema, &v.Source, &v.SourceTS, &v.IsAutoVersion, &v.CreatedBy, &v.CreatedAt,
+		&v.ID, &v.ServiceDBID, &v.VersionNumber, &v.Label, &schema, &v.Source, &v.SourceTS, &v.IsAutoVersion, &v.CreatedBy, &v.CreatedByCommitHash, &v.CreatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -161,7 +164,7 @@ func (d *DB) GetServiceDBVersion(ctx context.Context, id string) (*catalog.Servi
 
 func (d *DB) ListServiceDBVersions(ctx context.Context, serviceDBID string) ([]catalog.ServiceDBVersion, error) {
 	const q = `
-		SELECT id, service_db_id, version_number, label, schema_json, source, source_ts, is_auto_version, created_by, created_at
+		SELECT id, service_db_id, version_number, label, schema_json, source, source_ts, is_auto_version, created_by, created_by_commit_hash, created_at
 		FROM service_db_versions
 		WHERE service_db_id = $1
 		ORDER BY version_number DESC`

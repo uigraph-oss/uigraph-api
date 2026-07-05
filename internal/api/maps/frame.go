@@ -12,10 +12,10 @@ import (
 
 	"github.com/google/uuid"
 
-	authmw "github.com/uigraph/app/internal/middleware"
 	"github.com/uigraph/app/internal/httputil"
-	storepkg "github.com/uigraph/app/internal/store"
+	authmw "github.com/uigraph/app/internal/middleware"
 	"github.com/uigraph/app/internal/storage"
+	storepkg "github.com/uigraph/app/internal/store"
 	"github.com/uigraph/app/internal/uimap"
 )
 
@@ -80,6 +80,7 @@ func (h *Handler) CreateFrame(w http.ResponseWriter, r *http.Request) {
 		Order             float64 `json:"order"`
 		Screenshot        string  `json:"screenshot"`
 		ScreenshotAssetID string  `json:"screenshotAssetId"`
+		CommitHash        *string `json:"commitHash"`
 	}
 	if err := httputil.Decode(r, &body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -94,18 +95,19 @@ func (h *Handler) CreateFrame(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
 
 	frame := uimap.Frame{
-		ID:            id,
-		MapID:         mapID,
-		OrgID:         orgID,
-		ParentFrameID: body.ParentFrameID,
-		Name:          body.Name,
-		Description:   body.Description,
-		TemplateType:  body.TemplateType,
-		Status:        "active",
-		Order:         body.Order,
-		CreatedBy:     p.UserID,
-		CreatedAt:     now,
-		UpdatedAt:     now,
+		ID:                  id,
+		MapID:               mapID,
+		OrgID:               orgID,
+		ParentFrameID:       body.ParentFrameID,
+		Name:                body.Name,
+		Description:         body.Description,
+		TemplateType:        body.TemplateType,
+		Status:              "active",
+		Order:               body.Order,
+		CreatedBy:           p.UserID,
+		CreatedByCommitHash: body.CommitHash,
+		CreatedAt:           now,
+		UpdatedAt:           now,
 	}
 
 	assetID, hash, changed, err := h.resolveScreenshotAsset(r.Context(), id, body.ScreenshotAssetID, body.Screenshot, nil)
@@ -189,6 +191,7 @@ func (h *Handler) UpdateFrame(w http.ResponseWriter, r *http.Request) {
 		Order             *float64 `json:"order"`
 		Screenshot        *string  `json:"screenshot"`
 		ScreenshotAssetID *string  `json:"screenshotAssetId"`
+		CommitHash        *string  `json:"commitHash"`
 	}
 	if err := httputil.Decode(r, &body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -211,6 +214,7 @@ func (h *Handler) UpdateFrame(w http.ResponseWriter, r *http.Request) {
 		f.Order = *body.Order
 	}
 	f.UpdatedBy = &p.UserID
+	f.UpdatedByCommitHash = body.CommitHash
 
 	if body.Screenshot != nil || body.ScreenshotAssetID != nil {
 		ss := ""
@@ -293,6 +297,7 @@ func (h *Handler) SyncFrames(w http.ResponseWriter, r *http.Request) {
 		Source            *string `json:"source"`
 		Screenshot        string  `json:"screenshot"`
 		ScreenshotAssetID string  `json:"screenshotAssetId"`
+		CommitHash        *string `json:"commitHash"`
 	}
 	if err := httputil.Decode(r, &body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -338,6 +343,7 @@ func (h *Handler) SyncFrames(w http.ResponseWriter, r *http.Request) {
 		f.TemplateType = body.TemplateType
 		f.Source = body.Source
 		f.UpdatedBy = &p.UserID
+		f.UpdatedByCommitHash = body.CommitHash
 		if err := h.store.UpdateFrame(r.Context(), *f); err != nil {
 			httputil.Error(w, r, err)
 			return
@@ -353,17 +359,18 @@ func (h *Handler) SyncFrames(w http.ResponseWriter, r *http.Request) {
 	id := uuid.NewString()
 	now := time.Now().UTC()
 	frame := uimap.Frame{
-		ID:           id,
-		MapID:        mapID,
-		OrgID:        orgID,
-		Name:         body.Name,
-		Description:  body.Description,
-		TemplateType: body.TemplateType,
-		Status:       "active",
-		Source:       body.Source,
-		CreatedBy:    p.UserID,
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		ID:                  id,
+		MapID:               mapID,
+		OrgID:               orgID,
+		Name:                body.Name,
+		Description:         body.Description,
+		TemplateType:        body.TemplateType,
+		Status:              "active",
+		Source:              body.Source,
+		CreatedBy:           p.UserID,
+		CreatedByCommitHash: body.CommitHash,
+		CreatedAt:           now,
+		UpdatedAt:           now,
 	}
 
 	assetID, hash, changed, err := h.resolveScreenshotAsset(r.Context(), id, body.ScreenshotAssetID, body.Screenshot, nil)

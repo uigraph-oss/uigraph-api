@@ -6,8 +6,8 @@ import (
 
 	"github.com/google/uuid"
 
-	authmw "github.com/uigraph/app/internal/middleware"
 	"github.com/uigraph/app/internal/httputil"
+	authmw "github.com/uigraph/app/internal/middleware"
 	storepkg "github.com/uigraph/app/internal/store"
 	"github.com/uigraph/app/internal/uimap"
 )
@@ -74,6 +74,7 @@ func (h *Handler) CreateMap(w http.ResponseWriter, r *http.Request) {
 		Description string  `json:"description"`
 		FolderID    *string `json:"folderId"`
 		TeamID      *string `json:"teamId"`
+		CommitHash  *string `json:"commitHash"`
 	}
 	if err := httputil.Decode(r, &body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -86,16 +87,17 @@ func (h *Handler) CreateMap(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now().UTC()
 	m := uimap.Map{
-		ID:          uuid.NewString(),
-		OrgID:       orgID,
-		FolderID:    body.FolderID,
-		TeamID:      body.TeamID,
-		Name:        body.Name,
-		Description: body.Description,
-		Status:      "active",
-		CreatedBy:   p.UserID,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID:                  uuid.NewString(),
+		OrgID:               orgID,
+		FolderID:            body.FolderID,
+		TeamID:              body.TeamID,
+		Name:                body.Name,
+		Description:         body.Description,
+		Status:              "active",
+		CreatedBy:           p.UserID,
+		CreatedByCommitHash: body.CommitHash,
+		CreatedAt:           now,
+		UpdatedAt:           now,
 	}
 	if err := h.store.CreateMap(r.Context(), m); err != nil {
 		httputil.Error(w, r, err)
@@ -163,6 +165,7 @@ func (h *Handler) UpdateMap(w http.ResponseWriter, r *http.Request) {
 		Status      *string `json:"status"`
 		FolderID    *string `json:"folderId"`
 		TeamID      *string `json:"teamId"`
+		CommitHash  *string `json:"commitHash"`
 	}
 	if err := httputil.Decode(r, &body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -184,6 +187,7 @@ func (h *Handler) UpdateMap(w http.ResponseWriter, r *http.Request) {
 		m.TeamID = body.TeamID
 	}
 	m.UpdatedBy = &p.UserID
+	m.UpdatedByCommitHash = body.CommitHash
 
 	if err := h.store.UpdateMap(r.Context(), *m); err != nil {
 		httputil.Error(w, r, err)

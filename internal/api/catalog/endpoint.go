@@ -72,18 +72,18 @@ func (h *Handler) CreateAPIEndpoint(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		OperationID string          `json:"operationId"`
-		Method      string          `json:"method"`
-		Path        string          `json:"path"`
-		Summary     string          `json:"summary"`
-		Description string          `json:"description"`
-		Tags        []string        `json:"tags"`
-		Parameters        json.RawMessage `json:"parameters"`
-		RequestBody       json.RawMessage `json:"requestBody"`
-		Responses         json.RawMessage `json:"responses"`
-		ExampleRequests   json.RawMessage `json:"exampleRequests"`
-		ExampleResponses  json.RawMessage `json:"exampleResponses"`
-		Order             float64         `json:"order"`
+		OperationID      string          `json:"operationId"`
+		Method           string          `json:"method"`
+		Path             string          `json:"path"`
+		Summary          string          `json:"summary"`
+		Description      string          `json:"description"`
+		Tags             []string        `json:"tags"`
+		Parameters       json.RawMessage `json:"parameters"`
+		RequestBody      json.RawMessage `json:"requestBody"`
+		Responses        json.RawMessage `json:"responses"`
+		ExampleRequests  json.RawMessage `json:"exampleRequests"`
+		ExampleResponses json.RawMessage `json:"exampleResponses"`
+		Order            float64         `json:"order"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -96,25 +96,25 @@ func (h *Handler) CreateAPIEndpoint(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now().UTC()
 	e := catalogpkg.APIEndpoint{
-		ID:          uuid.NewString(),
-		APIGroupID:  apiGroupID,
-		ServiceID:   serviceID,
-		OrgID:       orgID,
-		OperationID: body.OperationID,
-		Method:      body.Method,
-		Path:        body.Path,
-		Summary:     body.Summary,
-		Description: body.Description,
-		Tags:        body.Tags,
+		ID:               uuid.NewString(),
+		APIGroupID:       apiGroupID,
+		ServiceID:        serviceID,
+		OrgID:            orgID,
+		OperationID:      body.OperationID,
+		Method:           body.Method,
+		Path:             body.Path,
+		Summary:          body.Summary,
+		Description:      body.Description,
+		Tags:             body.Tags,
 		Parameters:       normalizeStoredJSON(body.Parameters),
 		RequestBody:      normalizeStoredJSON(body.RequestBody),
 		Responses:        normalizeStoredJSON(body.Responses),
 		ExampleRequests:  normalizeStoredJSON(body.ExampleRequests),
 		ExampleResponses: normalizeStoredJSON(body.ExampleResponses),
 		Order:            body.Order,
-		CreatedBy:   p.UserID,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		CreatedBy:        p.UserID,
+		CreatedAt:        now,
+		UpdatedAt:        now,
 	}
 	if err := h.store.CreateAPIEndpoint(r.Context(), e); err != nil {
 		httputil.Error(w, r, err)
@@ -182,12 +182,12 @@ func (h *Handler) UpdateAPIEndpoint(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		OperationID *string         `json:"operationId"`
-		Method      *string         `json:"method"`
-		Path        *string         `json:"path"`
-		Summary     *string         `json:"summary"`
-		Description *string         `json:"description"`
-		Tags        []string        `json:"tags"`
+		OperationID      *string         `json:"operationId"`
+		Method           *string         `json:"method"`
+		Path             *string         `json:"path"`
+		Summary          *string         `json:"summary"`
+		Description      *string         `json:"description"`
+		Tags             []string        `json:"tags"`
 		Parameters       json.RawMessage `json:"parameters"`
 		RequestBody      json.RawMessage `json:"requestBody"`
 		Responses        json.RawMessage `json:"responses"`
@@ -236,6 +236,7 @@ func (h *Handler) UpdateAPIEndpoint(w http.ResponseWriter, r *http.Request) {
 		e.Order = *body.Order
 	}
 	e.UpdatedBy = &p.UserID
+	e.UpdatedByCommitHash = nil
 
 	if err := h.store.UpdateAPIEndpoint(r.Context(), *e); err != nil {
 		httputil.Error(w, r, err)
