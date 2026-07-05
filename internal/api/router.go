@@ -134,6 +134,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 
 	// Avatars — a user sets their own; a service account's is set by an admin (below).
 	avatarH := auth.NewAvatarHandler(s, st, c)
+	protected("POST", "/api/v1/users/me/avatar/prepare", avatarH.PrepareUserAvatarUpload)
 	protected("PUT", "/api/v1/users/me/avatar", avatarH.PutUserAvatar)
 	protected("DELETE", "/api/v1/users/me/avatar", avatarH.DeleteUserAvatar)
 
@@ -182,6 +183,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	requireScope(authz.ScopeServiceAccountsCreate, "POST", "/api/v1/orgs/{orgID}/service-accounts", saH.Create)
 	requireScope(authz.ScopeServiceAccountsRead, "GET", "/api/v1/orgs/{orgID}/service-accounts/{saID}", saH.Get)
 	requireScope(authz.ScopeServiceAccountsEdit, "PUT", "/api/v1/orgs/{orgID}/service-accounts/{saID}", saH.Update)
+	requireScope(authz.ScopeServiceAccountsEdit, "POST", "/api/v1/orgs/{orgID}/service-accounts/{saID}/avatar/prepare", avatarH.PrepareServiceAccountAvatarUpload)
 	requireScope(authz.ScopeServiceAccountsEdit, "PUT", "/api/v1/orgs/{orgID}/service-accounts/{saID}/avatar", avatarH.PutServiceAccountAvatar)
 	requireScope(authz.ScopeServiceAccountsEdit, "DELETE", "/api/v1/orgs/{orgID}/service-accounts/{saID}/avatar", avatarH.DeleteServiceAccountAvatar)
 	requireScope(authz.ScopeServiceAccountsDelete, "DELETE", "/api/v1/orgs/{orgID}/service-accounts/{saID}", saH.Delete)
@@ -200,6 +202,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	serverAdmin("GET", "/api/v1/server/orgs/{orgID}", orgH.Get)
 	serverAdmin("PUT", "/api/v1/server/orgs/{orgID}", orgH.Update)
 	serverAdmin("DELETE", "/api/v1/server/orgs/{orgID}", orgH.Delete)
+	serverAdmin("POST", "/api/v1/server/orgs/{orgID}/logo/prepare", avatarH.PrepareOrgLogoUpload)
 	serverAdmin("PUT", "/api/v1/server/orgs/{orgID}/logo", avatarH.PutOrgLogo)
 	serverAdmin("DELETE", "/api/v1/server/orgs/{orgID}/logo", avatarH.DeleteOrgLogo)
 
@@ -208,6 +211,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	serverAdmin("GET", "/api/v1/sso/oauth", ssoH.ListOAuthProviders)
 	serverAdmin("PUT", "/api/v1/sso/oauth/{provider}", ssoH.UpsertOAuthProvider)
 	serverAdmin("DELETE", "/api/v1/sso/oauth/{provider}", ssoH.DeleteOAuthProvider)
+	serverAdmin("POST", "/api/v1/sso/oauth/{provider}/icon/prepare", ssoH.PrepareOAuthProviderIconUpload)
 	serverAdmin("PUT", "/api/v1/sso/oauth/{provider}/icon", ssoH.PutOAuthProviderIcon)
 	serverAdmin("DELETE", "/api/v1/sso/oauth/{provider}/icon", ssoH.DeleteOAuthProviderIcon)
 	serverAdmin("GET", "/api/v1/sso/role-mappings", ssoH.ListMappings)

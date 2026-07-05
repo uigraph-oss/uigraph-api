@@ -14,8 +14,6 @@ import (
 	"github.com/uigraph/app/internal/store"
 )
 
-const maxIconBytes = 5 << 20
-
 type ssoStore interface {
 	identity.ProviderStore
 	authz.RBACStore
@@ -147,6 +145,31 @@ func (h *SSOHandler) ListOAuthProviders(w http.ResponseWriter, r *http.Request) 
 // @Failure  404  {object}  httputil.errorBody
 // @Failure  500  {object}  httputil.errorBody
 // @Router   /sso/oauth/{provider}/icon [put]
+func (h *SSOHandler) PrepareOAuthProviderIconUpload(w http.ResponseWriter, r *http.Request) {
+	provider := r.PathValue("provider")
+
+	existing, err := h.store.GetOAuthProvider(r.Context(), provider)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if existing == nil {
+		httputil.Error(w, r, store.ErrNotFound)
+		return
+	}
+
+	assetID := storage.OAuthProviderIconAssetID(provider)
+	url, err := h.storage.PresignPutURL(r.Context(), storage.AssetKey(assetID))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{
+		"assetId":   assetID,
+		"uploadUrl": url,
+	})
+}
+
 func (h *SSOHandler) PutOAuthProviderIcon(w http.ResponseWriter, r *http.Request) {
 	provider := r.PathValue("provider")
 
@@ -161,33 +184,6 @@ func (h *SSOHandler) PutOAuthProviderIcon(w http.ResponseWriter, r *http.Request
 	}
 
 	assetID := storage.OAuthProviderIconAssetID(provider)
-	if handled, ok := putPresignedImage(w, r, h.storage, assetID); handled {
-		if !ok {
-			return
-		}
-	} else {
-		file, header, err := r.FormFile("file")
-		if err != nil {
-			httputil.BadRequest(w, "missing file")
-			return
-		}
-		defer file.Close()
-
-		if header.Size > maxIconBytes {
-			httputil.BadRequest(w, "icon too large")
-			return
-		}
-
-		contentType := header.Header.Get("Content-Type")
-		if contentType == "" {
-			contentType = "application/octet-stream"
-		}
-
-		if err := h.storage.Upload(r.Context(), storage.AssetKey(assetID), contentType, file, header.Size); err != nil {
-			httputil.Error(w, r, err)
-			return
-		}
-	}
 	if err := h.store.SetOAuthProviderIcon(r.Context(), provider, &assetID); err != nil {
 		httputil.Error(w, r, err)
 		return
