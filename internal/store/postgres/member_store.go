@@ -105,7 +105,7 @@ func (d *DB) UpdateMemberRole(ctx context.Context, userID, orgID, role, source s
 
 func (d *DB) ListOrgsForUser(ctx context.Context, userID string) ([]org.OrgMembershipView, error) {
 	const q = `
-		SELECT o.id, o.name, o.logo_asset_id, o.disabled, o.created_at, o.updated_at, m.role
+		SELECT o.id, o.name, o.logo_asset_id, o.disabled, o.onboarding_done, o.created_at, o.updated_at, m.role
 		FROM   org_members m
 		JOIN   orgs o ON o.id = m.org_id
 		WHERE  m.user_id = $1
@@ -122,7 +122,7 @@ func (d *DB) ListOrgsForUser(ctx context.Context, userID string) ([]org.OrgMembe
 		var v org.OrgMembershipView
 		var logoAssetID sql.NullString
 		if err := rows.Scan(
-			&v.Org.ID, &v.Org.Name, &logoAssetID, &v.Org.Disabled,
+			&v.Org.ID, &v.Org.Name, &logoAssetID, &v.Org.Disabled, &v.Org.OnboardingDone,
 			&v.Org.CreatedAt, &v.Org.UpdatedAt, &v.Role,
 		); err != nil {
 			return nil, fmt.Errorf("postgres: ListOrgsForUser scan: %w", err)
