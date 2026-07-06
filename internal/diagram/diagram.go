@@ -38,6 +38,8 @@ type Diagram struct {
 	Source             *string    `json:"source,omitempty"`
 	CreatedBy          string     `json:"createdBy"`
 	UpdatedBy          *string    `json:"updatedBy,omitempty"`
+	CreatedByCommitHash *string   `json:"createdByCommitHash,omitempty"`
+	UpdatedByCommitHash *string   `json:"updatedByCommitHash,omitempty"`
 	CreatedAt          time.Time  `json:"createdAt"`
 	UpdatedAt          time.Time  `json:"updatedAt"`
 	DeletedAt          *time.Time `json:"deletedAt,omitempty"`
