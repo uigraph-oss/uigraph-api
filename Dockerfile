@@ -5,13 +5,12 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /uigraph-api ./cmd/api
 
-FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y --no-install-recommends \
+FROM alpine:3.20
+RUN apk add --no-cache \
     ca-certificates \
     wget \
-    fonts-liberation \
-    chromium \
-    && rm -rf /var/lib/apt/lists/*
+    font-liberation \
+    chromium
 ENV UIGRAPH_CHROMIUM_PATH=/usr/bin/chromium
 COPY --from=builder /uigraph-api /usr/local/bin/uigraph-api
 EXPOSE 8080
