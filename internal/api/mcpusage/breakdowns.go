@@ -37,6 +37,8 @@ func (h *Handler) Timeseries(w http.ResponseWriter, r *http.Request) {
 		rows[i].CostServedUSD = costUSD(rows[i].TotalTokensServed, m.InputCostPerMillion)
 		rows[i].CostRawUSD = costUSD(rows[i].TotalTokensRawEquivalent, m.InputCostPerMillion)
 		rows[i].CostSavedUSD = costUSD(rows[i].TotalTokensSaved, m.InputCostPerMillion)
+		rows[i].EstAgentTimeMs = estAgentTimeMs("", rows[i].TotalTokensRawEquivalent)
+		rows[i].TimeSavedMs = timeSavedMs(rows[i].EstAgentTimeMs, rows[i].TotalDurationMs)
 	}
 	httputil.JSON(w, http.StatusOK, map[string]any{"timeseries": rows})
 }
@@ -68,6 +70,8 @@ func (h *Handler) ByTool(w http.ResponseWriter, r *http.Request) {
 	m := h.pricing.PriceFor(modelID)
 	for i := range rows {
 		rows[i].CostSavedUSD = costUSD(rows[i].TokensSaved, m.InputCostPerMillion)
+		rows[i].EstAgentTimeMs = estAgentTimeMs(rows[i].ToolName, rows[i].TokensRawEquivalent)
+		rows[i].TimeSavedMs = timeSavedMs(rows[i].EstAgentTimeMs, rows[i].TotalDurationMs)
 	}
 	httputil.JSON(w, http.StatusOK, map[string]any{"byTool": rows})
 }

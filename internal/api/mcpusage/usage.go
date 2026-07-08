@@ -39,6 +39,7 @@ func (h *Handler) Record(w http.ResponseWriter, r *http.Request) {
 		ResponseSizeBytes   int      `json:"responseSizeBytes"`
 		ClientName          string   `json:"clientName"`
 		ClientVersion       string   `json:"clientVersion"`
+		DurationMs          int      `json:"durationMs"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -58,6 +59,7 @@ func (h *Handler) Record(w http.ResponseWriter, r *http.Request) {
 		TokensRawEquivalent: body.TokensRawEquivalent,
 		TokensSaved:         body.TokensSaved,
 		ResponseSizeBytes:   body.ResponseSizeBytes,
+		DurationMs:          body.DurationMs,
 		CreatedAt:           time.Now().UTC(),
 	}
 	if body.ClientName != "" {
