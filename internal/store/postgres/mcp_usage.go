@@ -13,9 +13,9 @@ func (d *DB) CreateUsageEvent(ctx context.Context, e mcpusage.UsageEvent) error 
 	const q = `
 		INSERT INTO mcp_usage_events
 			(id, org_id, user_id, service_account_id, tool_name, resource_ids,
-			 model_id, tokens_served, tokens_raw_equivalent, tokens_saved,
-			 response_size_bytes, created_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`
+			 tokens_served, tokens_raw_equivalent, tokens_saved,
+			 response_size_bytes, client_name, client_version, created_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`
 	ids := e.ResourceIDs
 	if ids == nil {
 		ids = []string{}
@@ -23,8 +23,8 @@ func (d *DB) CreateUsageEvent(ctx context.Context, e mcpusage.UsageEvent) error 
 	_, err := d.db.ExecContext(ctx, q,
 		e.ID, e.OrgID, e.UserID, e.ServiceAccountID,
 		e.ToolName, pq.Array(ids),
-		e.ModelID, e.TokensServed, e.TokensRawEquivalent, e.TokensSaved,
-		e.ResponseSizeBytes, time.Now().UTC(),
+		e.TokensServed, e.TokensRawEquivalent, e.TokensSaved,
+		e.ResponseSizeBytes, e.ClientName, e.ClientVersion, time.Now().UTC(),
 	)
 	return wrapErr("CreateUsageEvent", err)
 }
@@ -32,8 +32,8 @@ func (d *DB) CreateUsageEvent(ctx context.Context, e mcpusage.UsageEvent) error 
 func (d *DB) ListUsageEvents(ctx context.Context, orgID string, f mcpusage.Filter) ([]mcpusage.UsageEvent, error) {
 	q := `
 		SELECT id, org_id, user_id, service_account_id, tool_name, resource_ids,
-		       model_id, tokens_served, tokens_raw_equivalent, tokens_saved,
-		       response_size_bytes, created_at
+		       tokens_served, tokens_raw_equivalent, tokens_saved,
+		       response_size_bytes, client_name, client_version, created_at
 		FROM mcp_usage_events
 		WHERE org_id = $1`
 	args := []any{orgID}
@@ -66,8 +66,8 @@ func (d *DB) ListUsageEvents(ctx context.Context, orgID string, f mcpusage.Filte
 		if scanErr := rows.Scan(
 			&e.ID, &e.OrgID, &e.UserID, &e.ServiceAccountID,
 			&e.ToolName, &ids,
-			&e.ModelID, &e.TokensServed, &e.TokensRawEquivalent, &e.TokensSaved,
-			&e.ResponseSizeBytes, &e.CreatedAt,
+			&e.TokensServed, &e.TokensRawEquivalent, &e.TokensSaved,
+			&e.ResponseSizeBytes, &e.ClientName, &e.ClientVersion, &e.CreatedAt,
 		); scanErr != nil {
 			return nil, fmt.Errorf("postgres: ListUsageEvents scan: %w", scanErr)
 		}

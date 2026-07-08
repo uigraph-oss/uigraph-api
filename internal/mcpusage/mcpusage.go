@@ -16,11 +16,12 @@ type UsageEvent struct {
 	ServiceAccountID    *string   `json:"serviceAccountId,omitempty"`
 	ToolName            string    `json:"toolName"`
 	ResourceIDs         []string  `json:"resourceIds"`
-	ModelID             string    `json:"modelId"`
 	TokensServed        int       `json:"tokensServed"`
 	TokensRawEquivalent int       `json:"tokensRawEquivalent"`
 	TokensSaved         int       `json:"tokensSaved"`
 	ResponseSizeBytes   int       `json:"responseSizeBytes"`
+	ClientName          *string   `json:"clientName,omitempty"`
+	ClientVersion       *string   `json:"clientVersion,omitempty"`
 	CreatedAt           time.Time `json:"createdAt"`
 }
 
