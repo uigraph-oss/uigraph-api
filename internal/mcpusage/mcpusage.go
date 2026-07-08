@@ -59,6 +59,14 @@ type ToolSavings struct {
 	CostSavedUSD float64 `json:"costSavedUsd"`
 }
 
+// ClientSavings is one coding tool's (MCP client's) aggregated usage/cost-savings totals.
+type ClientSavings struct {
+	ClientName   string  `json:"clientName"`
+	TotalCalls   int     `json:"totalCalls"`
+	TokensSaved  int     `json:"tokensSaved"`
+	CostSavedUSD float64 `json:"costSavedUsd"`
+}
+
 // ModelSavings is one LLM model's aggregated usage/cost-savings totals.
 type ModelSavings struct {
 	ModelID      string  `json:"modelId"`
@@ -93,6 +101,7 @@ type Store interface {
 	GetSavingsSummary(ctx context.Context, orgID, modelID string, since time.Time) (*SavingsSummary, error)
 	GetSavingsTimeseries(ctx context.Context, orgID, modelID string, since time.Time) ([]DailySavings, error)
 	GetSavingsByTool(ctx context.Context, orgID, modelID string, since time.Time) ([]ToolSavings, error)
+	GetSavingsByClient(ctx context.Context, orgID, modelID string, since time.Time) ([]ClientSavings, error)
 	GetSavingsByModel(ctx context.Context, orgID string, since time.Time) ([]ModelSavings, error)
 	GetSavingsByUser(ctx context.Context, orgID, modelID string, since time.Time) ([]UserSavings, error)
 }

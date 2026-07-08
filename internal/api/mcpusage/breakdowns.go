@@ -61,6 +61,33 @@ func (h *Handler) ByTool(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"byTool": rows})
 }
 
+// ByClient
+// @Summary  ByClient
+// @Tags     mcp
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/mcp/savings/by-client [get]
+func (h *Handler) ByClient(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	modelID := q.Get("model_id")
+	_, since := parsePeriod(q.Get("period"))
+
+	rows, err := h.store.GetSavingsByClient(r.Context(), r.PathValue("orgID"), modelID, since)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if rows == nil {
+		rows = []mcppkg.ClientSavings{}
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{"byClient": rows})
+}
+
 // ByModel
 // @Summary  ByModel
 // @Tags     mcp

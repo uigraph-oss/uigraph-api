@@ -172,6 +172,36 @@ func (d *DB) GetSavingsByTool(ctx context.Context, orgID, modelID string, since 
 	return out, rows.Err()
 }
 
+func (d *DB) GetSavingsByClient(ctx context.Context, orgID, modelID string, since time.Time) ([]mcpusage.ClientSavings, error) {
+	const q = `
+		SELECT
+		    COALESCE(e.client_name, 'unknown')                                            AS client_name,
+		    COUNT(*)                                                                       AS total_calls,
+		    COALESCE(SUM(e.tokens_saved), 0)                                               AS tokens_saved,
+		    COALESCE(SUM(e.tokens_saved::NUMERIC / 1000000 * m.input_cost_per_million), 0) AS cost_saved_usd
+		FROM mcp_usage_events e
+		LEFT JOIN llm_models m ON m.model_id = e.model_id
+		WHERE e.org_id = $1
+		  AND e.created_at >= $2
+		  AND ($3 = '' OR e.model_id = $3)
+		GROUP BY 1
+		ORDER BY cost_saved_usd DESC`
+	rows, err := d.db.QueryContext(ctx, q, orgID, since, modelID)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: GetSavingsByClient: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []mcpusage.ClientSavings
+	for rows.Next() {
+		var row mcpusage.ClientSavings
+		if scanErr := rows.Scan(&row.ClientName, &row.TotalCalls, &row.TokensSaved, &row.CostSavedUSD); scanErr != nil {
+			return nil, fmt.Errorf("postgres: GetSavingsByClient scan: %w", scanErr)
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
 func (d *DB) GetSavingsByModel(ctx context.Context, orgID string, since time.Time) ([]mcpusage.ModelSavings, error) {
 	const q = `
 		SELECT
