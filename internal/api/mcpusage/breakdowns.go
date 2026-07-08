@@ -132,6 +132,7 @@ func (h *Handler) ByModel(w http.ResponseWriter, r *http.Request) {
 			Provider:     m.Provider,
 			TotalCalls:   summary.TotalCalls,
 			TokensSaved:  summary.TotalTokensSaved,
+			CostRawUSD:   costUSD(summary.TotalTokensRawEquivalent, m.InputCostPerMillion),
 			CostSavedUSD: costUSD(summary.TotalTokensSaved, m.InputCostPerMillion),
 		})
 	}
