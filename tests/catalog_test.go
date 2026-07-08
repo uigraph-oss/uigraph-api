@@ -51,8 +51,8 @@ func TestServices_CRUD(t *testing.T) {
 
 	// Update
 	updated := mustDo(t, "PUT", "/api/v1/orgs/"+orgID+"/services/"+id, adminToken, M{
-		"status":      "deprecated",
-		"gitRepoUrl":  "https://github.com/example/payments",
+		"status":        "deprecated",
+		"gitRepoUrl":    "https://github.com/example/payments",
 		"lastCommitSha": "abc123",
 	})
 	if updated["status"] != "deprecated" {

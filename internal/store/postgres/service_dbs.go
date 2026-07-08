@@ -68,7 +68,7 @@ func (d *DB) ListServiceDBs(ctx context.Context, serviceID string) ([]catalog.Se
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListServiceDBs: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []catalog.ServiceDB
 	for rows.Next() {
@@ -172,7 +172,7 @@ func (d *DB) ListServiceDBVersions(ctx context.Context, serviceDBID string) ([]c
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListServiceDBVersions: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []catalog.ServiceDBVersion
 	for rows.Next() {

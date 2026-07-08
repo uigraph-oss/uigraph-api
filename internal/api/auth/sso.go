@@ -69,15 +69,15 @@ type createMappingRequest struct {
 }
 
 type upsertLDAPRequest struct {
-	Host          string `json:"host"`
-	Port          int    `json:"port"`
-	UseSSL        bool   `json:"useSsl"`
-	StartTLS      bool   `json:"startTls"`
-	SkipTLSVerify bool   `json:"skipTlsVerify"`
-	BindDN        string `json:"bindDn,omitempty"`
-	BindPassword  string `json:"bindPassword,omitempty"`
-	SearchBaseDN  string `json:"searchBaseDn"`
-	SearchFilter  string `json:"searchFilter"`
+	Host           string `json:"host"`
+	Port           int    `json:"port"`
+	UseSSL         bool   `json:"useSsl"`
+	StartTLS       bool   `json:"startTls"`
+	SkipTLSVerify  bool   `json:"skipTlsVerify"`
+	BindDN         string `json:"bindDn,omitempty"`
+	BindPassword   string `json:"bindPassword,omitempty"`
+	SearchBaseDN   string `json:"searchBaseDn"`
+	SearchFilter   string `json:"searchFilter"`
 	EmailAttribute string `json:"emailAttribute"`
 	NameAttribute  string `json:"nameAttribute"`
 	UsernameAttr   string `json:"usernameAttribute"`
@@ -89,7 +89,7 @@ type upsertSAMLRequest struct {
 	IDPMetadataURL  string `json:"idpMetadataUrl,omitempty"`
 	IDPMetadataXML  string `json:"idpMetadataXml,omitempty"`
 	SPEntityID      string `json:"spEntityId"`
-	SignRequests     bool   `json:"signRequests"`
+	SignRequests    bool   `json:"signRequests"`
 	NameIDFormat    string `json:"nameIdFormat"`
 	EmailAttribute  string `json:"emailAttribute"`
 	NameAttribute   string `json:"nameAttribute"`

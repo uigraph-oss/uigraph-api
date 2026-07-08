@@ -110,7 +110,7 @@ func (d *DB) ListDiagrams(ctx context.Context, orgID string, p diagram.ListParam
 	if err != nil {
 		return nil, 0, fmt.Errorf("postgres: ListDiagrams: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []diagram.Diagram
 	for rows.Next() {
@@ -205,7 +205,7 @@ func (d *DB) ListDiagramVersions(ctx context.Context, diagramID string) ([]diagr
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListDiagramVersions: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []diagram.Version
 	for rows.Next() {
@@ -254,7 +254,7 @@ func (d *DB) ListDiagramImages(ctx context.Context, diagramID string) ([]diagram
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListDiagramImages: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []diagram.Image
 	for rows.Next() {

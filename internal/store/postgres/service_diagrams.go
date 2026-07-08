@@ -74,7 +74,7 @@ func (d *DB) ListServiceDiagrams(ctx context.Context, serviceID string) ([]catal
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListServiceDiagrams: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []catalog.ServiceDiagram
 	for rows.Next() {

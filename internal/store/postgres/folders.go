@@ -60,7 +60,7 @@ func (d *DB) ListFolders(ctx context.Context, orgID string, t *folder.Type) ([]f
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListFolders: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []folder.Folder
 	for rows.Next() {

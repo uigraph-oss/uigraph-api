@@ -62,7 +62,7 @@ func (d *DB) ListFrameGroups(ctx context.Context, frameID string) ([]uimap.Frame
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListFrameGroups: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []uimap.FrameGroup
 	for rows.Next() {
@@ -166,7 +166,7 @@ func (d *DB) ListFrameLinks(ctx context.Context, frameID string) ([]uimap.FrameL
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListFrameLinks: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []uimap.FrameLink
 	for rows.Next() {
@@ -280,7 +280,7 @@ func (d *DB) ListFocalPointMeta(ctx context.Context, focalPointID string) ([]uim
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListFocalPointMeta: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []uimap.FocalPointMeta
 	for rows.Next() {
@@ -310,7 +310,7 @@ func (d *DB) ListFocalPointMetaByLink(ctx context.Context, orgID, linkID string)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListFocalPointMetaByLink: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []uimap.FocalPointMeta
 	for rows.Next() {
@@ -344,7 +344,7 @@ func (d *DB) ListComponentLinkUsages(ctx context.Context, orgID, linkID string) 
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListComponentLinkUsages: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []uimap.ComponentLinkUsage
 	for rows.Next() {

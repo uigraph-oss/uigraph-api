@@ -59,7 +59,7 @@ func (d *DB) ListOrgs(ctx context.Context) ([]org.Org, error) {
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListOrgs: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []org.Org
 	for rows.Next() {
@@ -78,7 +78,7 @@ func (d *DB) ListAutoJoinOrgs(ctx context.Context) ([]org.Org, error) {
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListAutoJoinOrgs: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []org.Org
 	for rows.Next() {

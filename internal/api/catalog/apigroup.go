@@ -197,7 +197,7 @@ func (h *Handler) GetAPIGroupSpec(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, r, err)
 		return
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 
 	content, err := io.ReadAll(rc)
 	if err != nil {

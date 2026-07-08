@@ -154,7 +154,7 @@ func (d *DB) ListUsers(ctx context.Context, orgID string) ([]org.User, error) {
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListUsers: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []org.User
 	for rows.Next() {
@@ -174,7 +174,7 @@ func (d *DB) ListAllUsers(ctx context.Context) ([]org.User, error) {
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListAllUsers: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []org.User
 	for rows.Next() {

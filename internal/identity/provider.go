@@ -28,23 +28,23 @@ type OAuthProviderConfig struct {
 
 // LDAPConfig holds the connection and attribute mapping for a global LDAP server.
 type LDAPConfig struct {
-	ID               string
-	Host             string
-	Port             int
-	UseSSL           bool
-	StartTLS         bool
-	SkipTLSVerify    bool
-	BindDN           string
-	BindPassword     string // encrypted at rest
-	SearchBaseDN     string
-	SearchFilter     string
-	EmailAttribute   string
-	NameAttribute    string
-	UsernameAttr     string
-	MemberOfAttr     string
-	AllowSignUp      bool
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	ID             string
+	Host           string
+	Port           int
+	UseSSL         bool
+	StartTLS       bool
+	SkipTLSVerify  bool
+	BindDN         string
+	BindPassword   string // encrypted at rest
+	SearchBaseDN   string
+	SearchFilter   string
+	EmailAttribute string
+	NameAttribute  string
+	UsernameAttr   string
+	MemberOfAttr   string
+	AllowSignUp    bool
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 // SAMLConfig holds the global SP and IdP configuration for SAML 2.0 SSO.

@@ -103,7 +103,7 @@ func (d *DB) ListMaps(ctx context.Context, orgID string, p uimap.ListParams) ([]
 	if err != nil {
 		return nil, 0, fmt.Errorf("postgres: ListMaps: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []uimap.Map
 	for rows.Next() {
@@ -245,7 +245,7 @@ func (d *DB) ListFrames(ctx context.Context, mapID string, p uimap.ListParams) (
 	if err != nil {
 		return nil, 0, fmt.Errorf("postgres: ListFrames: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []uimap.Frame
 	for rows.Next() {
@@ -363,7 +363,7 @@ func (d *DB) ListFocalPoints(ctx context.Context, frameID string) ([]uimap.Focal
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListFocalPoints: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []uimap.FocalPoint
 	for rows.Next() {

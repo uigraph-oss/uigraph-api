@@ -75,7 +75,7 @@ func HashAsset(ctx context.Context, c Downloader, assetID string) (string, error
 	if err != nil {
 		return "", err
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 	h := sha256.New()
 	if _, err := io.Copy(h, rc); err != nil {
 		return "", err

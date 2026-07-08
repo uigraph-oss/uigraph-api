@@ -113,7 +113,7 @@ func (w *Worker) Run(ctx context.Context) {
 		slog.ErrorContext(ctx, "screenshot worker: browser connect failed", "err", err)
 		return
 	}
-	defer browser.Close()
+	defer func() { _ = browser.Close() }()
 
 	slog.InfoContext(ctx, "screenshot worker started")
 	for {
@@ -195,7 +195,7 @@ func (w *Worker) capture(browser *rod.Browser, job queue.ScreenshotJob) ([]byte,
 	if err != nil {
 		return nil, fmt.Errorf("new page: %w", err)
 	}
-	defer page.Close()
+	defer func() { _ = page.Close() }()
 	page = page.Timeout(renderTimeout)
 
 	if _, err := page.SetExtraHeaders([]string{"X-API-Key", apiKey}); err != nil {

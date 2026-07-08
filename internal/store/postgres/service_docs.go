@@ -92,7 +92,7 @@ func (d *DB) ListServiceDocs(ctx context.Context, serviceID string) ([]catalog.S
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListServiceDocs: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []catalog.ServiceDoc
 	for rows.Next() {

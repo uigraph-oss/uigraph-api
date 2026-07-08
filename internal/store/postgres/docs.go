@@ -95,7 +95,7 @@ func (d *DB) ListDocs(ctx context.Context, orgID string, p docs.ListParams) ([]d
 	if err != nil {
 		return nil, 0, fmt.Errorf("postgres: ListDocs: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []docs.Doc
 	for rows.Next() {

@@ -33,7 +33,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	if err != nil {
 		return fmt.Errorf("server: open postgres: %w", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	slog.InfoContext(ctx, "running migrations")
 	if err := migrate.Run(ctx, db.DB()); err != nil {

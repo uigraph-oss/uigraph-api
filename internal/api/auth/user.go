@@ -40,7 +40,7 @@ func userToResponse(u org.User) userResponse {
 		ID: u.ID, Email: u.Email, Name: u.Name, Login: u.Login,
 		Disabled: u.Disabled, Role: u.Role,
 		LastSeenAt: u.LastSeenAt,
-		CreatedAt: u.CreatedAt, UpdatedAt: u.UpdatedAt,
+		CreatedAt:  u.CreatedAt, UpdatedAt: u.UpdatedAt,
 	}
 }
 

@@ -7,7 +7,6 @@ package asset
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/uigraph/app/internal/cache"
@@ -39,9 +38,7 @@ func (r *Resolver) Resolve(ctx context.Context, id string) (string, error) {
 		if err == nil {
 			return v, nil
 		}
-		if !errors.Is(err, cache.ErrNotFound) {
-			// Cache must never break the request; fall through to presigning.
-		}
+		// Cache errors must never break the request; fall through to presigning.
 	}
 
 	url, err := r.storage.PresignURL(ctx, storage.AssetKey(id), presignTTL)

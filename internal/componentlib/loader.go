@@ -100,9 +100,9 @@ func parseFocalPointFile() ([]Component, error) {
 			Description:  e.Description,
 			CategoryID:   CategoryID(KindFocalPoint, e.Category),
 			CategoryName: e.Category,
-			Tags:        e.Tags,
-			IsActive:    e.IsActive,
-			Order:       e.Order,
+			Tags:         e.Tags,
+			IsActive:     e.IsActive,
+			Order:        e.Order,
 		}
 		for _, f := range e.ComponentFields {
 			c.Fields = append(c.Fields, ComponentField{
@@ -139,9 +139,9 @@ func parseFlowDiagramFile() ([]Component, error) {
 			Description:  e.Description,
 			CategoryID:   CategoryID(KindFlowDiagram, e.Category),
 			CategoryName: e.Category,
-			Tags:        e.Tags,
-			IsActive:    e.IsActive,
-			Order:       e.Order,
+			Tags:         e.Tags,
+			IsActive:     e.IsActive,
+			Order:        e.Order,
 		}
 		for _, f := range e.FlowDiagramComponentFields {
 			c.Fields = append(c.Fields, ComponentField{

@@ -58,7 +58,7 @@ func (d *DB) ListSavedQueryFolders(ctx context.Context, serviceDBID string, scop
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListSavedQueryFolders: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []catalog.SavedQueryFolder
 	for rows.Next() {
@@ -162,7 +162,7 @@ func (d *DB) ListSavedQueries(ctx context.Context, serviceDBID string, scope cat
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListSavedQueries: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []catalog.SavedQuery
 	for rows.Next() {

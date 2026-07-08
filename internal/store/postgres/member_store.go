@@ -78,7 +78,7 @@ func (d *DB) ListMembers(ctx context.Context, orgID string) ([]org.OrgMember, er
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListMembers: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []org.OrgMember
 	for rows.Next() {
@@ -115,7 +115,7 @@ func (d *DB) ListOrgsForUser(ctx context.Context, userID string) ([]org.OrgMembe
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListOrgsForUser: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []org.OrgMembershipView
 	for rows.Next() {

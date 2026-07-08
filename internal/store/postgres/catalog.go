@@ -145,7 +145,7 @@ func (d *DB) ListServices(ctx context.Context, orgID string, p catalog.ListParam
 	if err != nil {
 		return nil, 0, fmt.Errorf("postgres: ListServices: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []catalog.Service
 	for rows.Next() {
@@ -174,7 +174,7 @@ func (d *DB) ListServiceStats(ctx context.Context, orgID string, serviceID *stri
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListServiceStats list services: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	stats := make([]catalog.ServiceStats, 0)
 	for rows.Next() {
@@ -499,7 +499,7 @@ func (d *DB) ListAPIGroups(ctx context.Context, serviceID string) ([]catalog.API
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListAPIGroups: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []catalog.APIGroup
 	for rows.Next() {
 		g, err := scanAPIGroup(rows)
@@ -593,7 +593,7 @@ func (d *DB) ListAPIGroupVersions(ctx context.Context, apiGroupID string) ([]cat
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListAPIGroupVersions: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []catalog.APIGroupVersion
 	for rows.Next() {
 		var v catalog.APIGroupVersion
@@ -699,7 +699,7 @@ func (d *DB) ListAPIEndpoints(ctx context.Context, apiGroupID string) ([]catalog
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListAPIEndpoints: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []catalog.APIEndpoint
 	for rows.Next() {
 		e, err := scanAPIEndpoint(rows)
@@ -782,7 +782,7 @@ func (d *DB) ListAPIEndpointsForVersion(ctx context.Context, apiGroupID, version
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListAPIEndpointsForVersion: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []catalog.APIEndpoint
 	for rows.Next() {
 		e, err := scanAPIEndpoint(rows)
@@ -800,7 +800,7 @@ func (d *DB) PublishAPIGroupVersion(ctx context.Context, in catalog.PublishAPIGr
 	if err != nil {
 		return v, fmt.Errorf("postgres: PublishAPIGroupVersion begin: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	now := time.Now().UTC()
 

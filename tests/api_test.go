@@ -50,7 +50,7 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "SKIP: postgres unavailable (%v)\n", err)
 		os.Exit(0)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	ctx := context.Background()
 	if err := migrate.Run(ctx, db.DB()); err != nil {
@@ -213,7 +213,7 @@ func TestOAuth_CallbackProvisionsUserAndSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("callback request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusFound {
 		t.Fatalf("want 302 from callback, got %d", resp.StatusCode)
 	}
@@ -235,7 +235,7 @@ func TestOAuth_CallbackProvisionsUserAndSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("me request: %v", err)
 	}
-	defer meResp.Body.Close()
+	defer func() { _ = meResp.Body.Close() }()
 	if meResp.StatusCode != http.StatusOK {
 		t.Fatalf("want 200 from /me, got %d", meResp.StatusCode)
 	}
@@ -256,7 +256,7 @@ func TestOAuth_CallbackRejectsBadState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("callback request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("want 400 on state mismatch, got %d", resp.StatusCode)
 	}
@@ -478,7 +478,7 @@ func mustDo(t interface {
 }, method, path, token string, body any) M {
 	t.Helper()
 	resp := do(method, path, token, body)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 400 {
 		var e M
 		_ = json.NewDecoder(resp.Body).Decode(&e)

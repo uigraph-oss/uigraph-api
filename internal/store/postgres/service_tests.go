@@ -59,7 +59,7 @@ func (d *DB) ListTestPacks(ctx context.Context, serviceID string) ([]catalog.Tes
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListTestPacks: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []catalog.TestPack
 	for rows.Next() {
 		p, scanErr := scanTestPack(rows)
@@ -183,7 +183,7 @@ func (d *DB) ListTestCases(ctx context.Context, serviceID string, testPackID *st
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListTestCases: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []catalog.TestCase
 	for rows.Next() {
 		tc, scanErr := scanTestCase(rows)
@@ -317,7 +317,7 @@ func (d *DB) ListTestRuns(ctx context.Context, serviceID string, testPackID *str
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListTestRuns: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []catalog.TestRun
 	for rows.Next() {
 		tr, scanErr := scanTestRun(rows)
@@ -373,7 +373,7 @@ func (d *DB) ListTestRunsSummary(ctx context.Context, serviceID string, filter c
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListTestRunsSummary: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []catalog.TestRunSummary
 	for rows.Next() {
 		var s catalog.TestRunSummary
@@ -467,7 +467,7 @@ func (d *DB) ListTestRunResults(ctx context.Context, serviceID, testRunID string
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListTestRunResults: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []catalog.TestRunResult
 	for rows.Next() {
 		rr, scanErr := scanTestRunResult(rows)

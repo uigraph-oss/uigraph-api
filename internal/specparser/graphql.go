@@ -472,7 +472,7 @@ func buildVariablesJSON(schema *ast.Schema, args ast.ArgumentDefinitionList, ind
 		v := m[k]
 		raw, _ := json.Marshal(v)
 		b.WriteString(indent)
-		b.WriteString(fmt.Sprintf("%q: %s", k, string(raw)))
+		fmt.Fprintf(&b, "%q: %s", k, string(raw))
 		if i < len(keys)-1 {
 			b.WriteString(",")
 		}

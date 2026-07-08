@@ -35,7 +35,7 @@ func (h *Handler) resolveSpec(ctx context.Context, spec string, specAssetID *str
 	if err != nil {
 		return "", fmt.Errorf("download spec asset: %w", err)
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 	data, err := io.ReadAll(rc)
 	if err != nil {
 		return "", fmt.Errorf("read spec asset: %w", err)
@@ -48,7 +48,7 @@ func (h *Handler) downloadSpec(ctx context.Context, key string) (string, error) 
 	if err != nil {
 		return "", err
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 	b, err := io.ReadAll(rc)
 	if err != nil {
 		return "", err

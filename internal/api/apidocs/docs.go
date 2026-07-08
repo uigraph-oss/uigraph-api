@@ -16,8 +16,8 @@ import (
 	docspkg "github.com/uigraph/app/internal/docs"
 	"github.com/uigraph/app/internal/httputil"
 	authmw "github.com/uigraph/app/internal/middleware"
-	storepkg "github.com/uigraph/app/internal/store"
 	"github.com/uigraph/app/internal/storage"
+	storepkg "github.com/uigraph/app/internal/store"
 )
 
 // @Summary  List

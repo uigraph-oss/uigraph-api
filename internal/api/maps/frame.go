@@ -73,9 +73,9 @@ func (h *Handler) CreateFrame(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Name          string  `json:"name"`
-		Description   string  `json:"description"`
-		TemplateType  string  `json:"templateType"`
+		Name              string  `json:"name"`
+		Description       string  `json:"description"`
+		TemplateType      string  `json:"templateType"`
 		ParentFrameID     *string `json:"parentFrameId"`
 		Order             float64 `json:"order"`
 		Screenshot        string  `json:"screenshot"`
@@ -184,9 +184,9 @@ func (h *Handler) UpdateFrame(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Name         *string  `json:"name"`
-		Description  *string  `json:"description"`
-		TemplateType *string  `json:"templateType"`
+		Name              *string  `json:"name"`
+		Description       *string  `json:"description"`
+		TemplateType      *string  `json:"templateType"`
 		Status            *string  `json:"status"`
 		Order             *float64 `json:"order"`
 		Screenshot        *string  `json:"screenshot"`
@@ -290,10 +290,10 @@ func (h *Handler) SyncFrames(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		FrameID      *string `json:"frameId"`
-		Name         string  `json:"name"`
-		TemplateType string  `json:"templateType"`
-		Description  string  `json:"description"`
+		FrameID           *string `json:"frameId"`
+		Name              string  `json:"name"`
+		TemplateType      string  `json:"templateType"`
+		Description       string  `json:"description"`
 		Source            *string `json:"source"`
 		Screenshot        string  `json:"screenshot"`
 		ScreenshotAssetID string  `json:"screenshotAssetId"`
@@ -433,7 +433,7 @@ func (h *Handler) uploadScreenshot(ctx context.Context, key, content string) err
 		if err != nil {
 			return err
 		}
-		defer src.Close()
+		defer func() { _ = src.Close() }()
 		if err := h.storage.Upload(ctx, key, "image/png", src, -1); err != nil {
 			return err
 		}

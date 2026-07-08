@@ -115,19 +115,19 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now().UTC()
 	dg := diagrampkg.Diagram{
-		ID:          id,
-		OrgID:       orgID,
-		FolderID:    body.FolderID,
-		TeamID:      body.TeamID,
-		Name:        body.Name,
-		ContentKey:  contentKey,
-		ContentHash: hash,
-		Source:      body.Source,
-		CreatedBy:   p.UserID,
+		ID:                  id,
+		OrgID:               orgID,
+		FolderID:            body.FolderID,
+		TeamID:              body.TeamID,
+		Name:                body.Name,
+		ContentKey:          contentKey,
+		ContentHash:         hash,
+		Source:              body.Source,
+		CreatedBy:           p.UserID,
 		CreatedByCommitHash: body.CommitHash,
 		UpdatedByCommitHash: body.CommitHash,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		CreatedAt:           now,
+		UpdatedAt:           now,
 	}
 	if err := h.store.CreateDiagram(r.Context(), dg); err != nil {
 		httputil.Error(w, r, err)
@@ -221,7 +221,7 @@ func (h *Handler) UpdateThumbnail(w http.ResponseWriter, r *http.Request) {
 		httputil.BadRequest(w, "missing file")
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	contentType := header.Header.Get("Content-Type")
 	if contentType == "" {
@@ -519,19 +519,19 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now().UTC()
 	dg := diagrampkg.Diagram{
-		ID:          id,
-		OrgID:       orgID,
-		FolderID:    body.FolderID,
-		TeamID:      body.TeamID,
-		Name:        body.Name,
-		ContentKey:  contentKey,
-		ContentHash: newHash,
-		Source:      body.Source,
-		CreatedBy:   p.UserID,
+		ID:                  id,
+		OrgID:               orgID,
+		FolderID:            body.FolderID,
+		TeamID:              body.TeamID,
+		Name:                body.Name,
+		ContentKey:          contentKey,
+		ContentHash:         newHash,
+		Source:              body.Source,
+		CreatedBy:           p.UserID,
 		CreatedByCommitHash: body.CommitHash,
 		UpdatedByCommitHash: body.CommitHash,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		CreatedAt:           now,
+		UpdatedAt:           now,
 	}
 	if err := h.store.CreateDiagram(r.Context(), dg); err != nil {
 		httputil.Error(w, r, err)
@@ -573,7 +573,7 @@ func (h *Handler) downloadContent(ctx context.Context, key string) (string, erro
 	if err != nil {
 		return "", err
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 	var buf bytes.Buffer
 	if _, err := io.Copy(&buf, rc); err != nil {
 		return "", err

@@ -87,7 +87,7 @@ func (d *DB) ListServiceAccounts(ctx context.Context, orgID string) ([]identity.
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListServiceAccounts: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []identity.ServiceAccount
 	for rows.Next() {
@@ -174,7 +174,7 @@ func (d *DB) ListTokens(ctx context.Context, serviceAccountID string) ([]identit
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListTokens: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []identity.Token
 	for rows.Next() {
