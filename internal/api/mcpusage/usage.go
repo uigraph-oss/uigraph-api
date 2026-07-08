@@ -33,18 +33,19 @@ func (h *Handler) Record(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		ToolName            string   `json:"toolName"`
 		ResourceIDs         []string `json:"resourceIds"`
-		ModelID             string   `json:"modelId"`
 		TokensServed        int      `json:"tokensServed"`
 		TokensRawEquivalent int      `json:"tokensRawEquivalent"`
 		TokensSaved         int      `json:"tokensSaved"`
 		ResponseSizeBytes   int      `json:"responseSizeBytes"`
+		ClientName          string   `json:"clientName"`
+		ClientVersion       string   `json:"clientVersion"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
 		return
 	}
-	if body.ToolName == "" || body.ModelID == "" {
-		httputil.BadRequest(w, "toolName and modelId are required")
+	if body.ToolName == "" {
+		httputil.BadRequest(w, "toolName is required")
 		return
 	}
 
@@ -53,12 +54,17 @@ func (h *Handler) Record(w http.ResponseWriter, r *http.Request) {
 		OrgID:               r.PathValue("orgID"),
 		ToolName:            body.ToolName,
 		ResourceIDs:         body.ResourceIDs,
-		ModelID:             body.ModelID,
 		TokensServed:        body.TokensServed,
 		TokensRawEquivalent: body.TokensRawEquivalent,
 		TokensSaved:         body.TokensSaved,
 		ResponseSizeBytes:   body.ResponseSizeBytes,
 		CreatedAt:           time.Now().UTC(),
+	}
+	if body.ClientName != "" {
+		e.ClientName = &body.ClientName
+	}
+	if body.ClientVersion != "" {
+		e.ClientVersion = &body.ClientVersion
 	}
 	userID := p.UserID
 	if p.Kind == identity.PrincipalServiceAccount {
