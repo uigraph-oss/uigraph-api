@@ -53,6 +53,9 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	if v := q.Get("teamId"); v != "" {
 		p.TeamID = &v
 	}
+	if v := q.Get("serviceId"); v != "" {
+		p.ServiceID = &v
+	}
 	if v := q.Get("search"); v != "" {
 		p.Search = &v
 	}
@@ -85,11 +88,12 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Name     string  `json:"name"`
-		FolderID *string `json:"folderId"`
-		TeamID   *string `json:"teamId"`
-		Source   *string `json:"source"`
-		Content  string  `json:"content"` // ReactFlow JSON
+		Name       string  `json:"name"`
+		FolderID   *string `json:"folderId"`
+		TeamID     *string `json:"teamId"`
+		Source     *string `json:"source"`
+		CommitHash *string `json:"commitHash"`
+		Content    string  `json:"content"` // ReactFlow JSON
 	}
 	if err := httputil.Decode(r, &body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -111,17 +115,19 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now().UTC()
 	dg := diagrampkg.Diagram{
-		ID:          id,
-		OrgID:       orgID,
-		FolderID:    body.FolderID,
-		TeamID:      body.TeamID,
-		Name:        body.Name,
-		ContentKey:  contentKey,
-		ContentHash: hash,
-		Source:      body.Source,
-		CreatedBy:   p.UserID,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID:                  id,
+		OrgID:               orgID,
+		FolderID:            body.FolderID,
+		TeamID:              body.TeamID,
+		Name:                body.Name,
+		ContentKey:          contentKey,
+		ContentHash:         hash,
+		Source:              body.Source,
+		CreatedBy:           p.UserID,
+		CreatedByCommitHash: body.CommitHash,
+		UpdatedByCommitHash: body.CommitHash,
+		CreatedAt:           now,
+		UpdatedAt:           now,
 	}
 	if err := h.store.CreateDiagram(r.Context(), dg); err != nil {
 		httputil.Error(w, r, err)
@@ -215,7 +221,7 @@ func (h *Handler) UpdateThumbnail(w http.ResponseWriter, r *http.Request) {
 		httputil.BadRequest(w, "missing file")
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	contentType := header.Header.Get("Content-Type")
 	if contentType == "" {
@@ -326,11 +332,12 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Name     *string `json:"name"`
-		FolderID *string `json:"folderId"`
-		TeamID   *string `json:"teamId"`
-		Source   *string `json:"source"`
-		Content  *string `json:"content"`
+		Name       *string `json:"name"`
+		FolderID   *string `json:"folderId"`
+		TeamID     *string `json:"teamId"`
+		Source     *string `json:"source"`
+		CommitHash *string `json:"commitHash"`
+		Content    *string `json:"content"`
 	}
 	if err := httputil.Decode(r, &body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -350,6 +357,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		dg.Source = body.Source
 	}
 	dg.UpdatedBy = &p.UserID
+	dg.UpdatedByCommitHash = body.CommitHash
 
 	contentChanged := false
 	if body.Content != nil {
@@ -424,12 +432,13 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		DiagramID *string `json:"diagramId"`
-		Name      string  `json:"name"`
-		FolderID  *string `json:"folderId"`
-		TeamID    *string `json:"teamId"`
-		Source    *string `json:"source"`
-		Content   string  `json:"content"`
+		DiagramID  *string `json:"diagramId"`
+		Name       string  `json:"name"`
+		FolderID   *string `json:"folderId"`
+		TeamID     *string `json:"teamId"`
+		Source     *string `json:"source"`
+		CommitHash *string `json:"commitHash"`
+		Content    string  `json:"content"`
 	}
 	if err := httputil.Decode(r, &body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -468,6 +477,7 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 		dg.ContentHash = newHash
 		dg.Source = body.Source
 		dg.UpdatedBy = &p.UserID
+		dg.UpdatedByCommitHash = body.CommitHash
 		if err := h.store.UpdateDiagram(r.Context(), *dg); err != nil {
 			httputil.Error(w, r, err)
 			return
@@ -509,17 +519,19 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now().UTC()
 	dg := diagrampkg.Diagram{
-		ID:          id,
-		OrgID:       orgID,
-		FolderID:    body.FolderID,
-		TeamID:      body.TeamID,
-		Name:        body.Name,
-		ContentKey:  contentKey,
-		ContentHash: newHash,
-		Source:      body.Source,
-		CreatedBy:   p.UserID,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID:                  id,
+		OrgID:               orgID,
+		FolderID:            body.FolderID,
+		TeamID:              body.TeamID,
+		Name:                body.Name,
+		ContentKey:          contentKey,
+		ContentHash:         newHash,
+		Source:              body.Source,
+		CreatedBy:           p.UserID,
+		CreatedByCommitHash: body.CommitHash,
+		UpdatedByCommitHash: body.CommitHash,
+		CreatedAt:           now,
+		UpdatedAt:           now,
 	}
 	if err := h.store.CreateDiagram(r.Context(), dg); err != nil {
 		httputil.Error(w, r, err)
@@ -561,7 +573,7 @@ func (h *Handler) downloadContent(ctx context.Context, key string) (string, erro
 	if err != nil {
 		return "", err
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 	var buf bytes.Buffer
 	if _, err := io.Copy(&buf, rc); err != nil {
 		return "", err

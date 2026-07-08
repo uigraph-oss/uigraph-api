@@ -38,8 +38,8 @@ type sessionStore interface {
 type SessionHandler struct {
 	store       sessionStore
 	assets      *asset.Resolver // presigns the avatar URL on /auth/me; may be nil
-	publicURL   string // externally reachable base URL, e.g. https://uigraph.example.com
-	frontendURL string // SPA base URL; empty falls back to publicURL
+	publicURL   string          // externally reachable base URL, e.g. https://uigraph.example.com
+	frontendURL string          // SPA base URL; empty falls back to publicURL
 }
 
 func NewSessionHandler(s sessionStore, assets *asset.Resolver, publicURL, frontendURL string) *SessionHandler {
@@ -98,10 +98,11 @@ type meResponse struct {
 }
 
 type myOrg struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	LogoURL string `json:"logoUrl,omitempty"`
-	Role    string `json:"role"`
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	LogoURL        string `json:"logoUrl,omitempty"`
+	Role           string `json:"role"`
+	OnboardingDone bool   `json:"onboardingDone"`
 }
 
 type providersResponse struct {
@@ -556,10 +557,11 @@ func (h *SessionHandler) MyOrgs(w http.ResponseWriter, r *http.Request) {
 	orgs := make([]myOrg, 0, len(memberships))
 	for _, m := range memberships {
 		orgs = append(orgs, myOrg{
-			ID:      m.Org.ID,
-			Name:    m.Org.Name,
-			LogoURL: h.avatarURL(r, m.Org.LogoAssetID),
-			Role:    m.Role,
+			ID:             m.Org.ID,
+			Name:           m.Org.Name,
+			LogoURL:        h.avatarURL(r, m.Org.LogoAssetID),
+			Role:           m.Role,
+			OnboardingDone: m.Org.OnboardingDone,
 		})
 	}
 	httputil.JSON(w, http.StatusOK, map[string]any{"orgs": orgs})

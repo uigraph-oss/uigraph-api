@@ -145,7 +145,7 @@ func (d *DB) ListUserSessions(ctx context.Context, userID string) ([]identity.Se
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListUserSessions: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []identity.Session
 	for rows.Next() {

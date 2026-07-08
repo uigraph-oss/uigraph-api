@@ -85,7 +85,7 @@ func applyMigration(ctx context.Context, db *sql.DB, version, ddl string) error 
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	if _, err = tx.ExecContext(ctx, ddl); err != nil {
 		return err

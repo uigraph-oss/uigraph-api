@@ -58,7 +58,7 @@ func (d *DB) ListUsageEvents(ctx context.Context, orgID string, f mcpusage.Filte
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListUsageEvents: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []mcpusage.UsageEvent
 	for rows.Next() {
 		var e mcpusage.UsageEvent
@@ -127,7 +127,7 @@ func (d *DB) GetSavingsTimeseries(ctx context.Context, orgID, modelID string, si
 	if err != nil {
 		return nil, fmt.Errorf("postgres: GetSavingsTimeseries: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []mcpusage.DailySavings
 	for rows.Next() {
 		var row mcpusage.DailySavings
@@ -160,7 +160,7 @@ func (d *DB) GetSavingsByTool(ctx context.Context, orgID, modelID string, since 
 	if err != nil {
 		return nil, fmt.Errorf("postgres: GetSavingsByTool: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []mcpusage.ToolSavings
 	for rows.Next() {
 		var row mcpusage.ToolSavings
@@ -191,7 +191,7 @@ func (d *DB) GetSavingsByModel(ctx context.Context, orgID string, since time.Tim
 	if err != nil {
 		return nil, fmt.Errorf("postgres: GetSavingsByModel: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []mcpusage.ModelSavings
 	for rows.Next() {
 		var row mcpusage.ModelSavings
@@ -222,7 +222,7 @@ func (d *DB) GetSavingsByUser(ctx context.Context, orgID, modelID string, since 
 	if err != nil {
 		return nil, fmt.Errorf("postgres: GetSavingsByUser: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []mcpusage.UserSavings
 	for rows.Next() {
 		var row mcpusage.UserSavings

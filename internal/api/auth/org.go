@@ -256,4 +256,34 @@ func (h *OrgHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// CompleteOnboarding marks the org's first-time onboarding as done.
+// POST /api/v1/orgs/{orgID}/onboarding-complete
+// @Summary  CompleteOnboarding
+// @Tags     orgs
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Success  204  "No Content"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/onboarding-complete [post]
+func (h *OrgHandler) CompleteOnboarding(w http.ResponseWriter, r *http.Request) {
+	orgID := r.PathValue("orgID")
+	o, err := h.store.GetOrg(r.Context(), orgID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if o == nil {
+		httputil.Error(w, r, store.ErrNotFound)
+		return
+	}
+	if err := h.store.SetOnboardingDone(r.Context(), orgID); err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func newUUID() string { return uuid.NewString() }

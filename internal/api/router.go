@@ -8,13 +8,13 @@ import (
 
 	"github.com/uigraph/app/internal/api/actor"
 	"github.com/uigraph/app/internal/api/admin"
+	docsapi "github.com/uigraph/app/internal/api/apidocs"
 	assetapi "github.com/uigraph/app/internal/api/asset"
 	"github.com/uigraph/app/internal/api/auth"
 	catalogapi "github.com/uigraph/app/internal/api/catalog"
 	commentapi "github.com/uigraph/app/internal/api/comment"
 	"github.com/uigraph/app/internal/api/component"
 	"github.com/uigraph/app/internal/api/diagram"
-	docsapi "github.com/uigraph/app/internal/api/apidocs"
 	figmaapi "github.com/uigraph/app/internal/api/figma"
 	"github.com/uigraph/app/internal/api/folder"
 	"github.com/uigraph/app/internal/api/health"
@@ -134,6 +134,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 
 	// Avatars — a user sets their own; a service account's is set by an admin (below).
 	avatarH := auth.NewAvatarHandler(s, st, c)
+	protected("POST", "/api/v1/users/me/avatar/prepare", avatarH.PrepareUserAvatarUpload)
 	protected("PUT", "/api/v1/users/me/avatar", avatarH.PutUserAvatar)
 	protected("DELETE", "/api/v1/users/me/avatar", avatarH.DeleteUserAvatar)
 
@@ -151,6 +152,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	protected("POST", "/api/v1/orgs", orgH.Create)
 	protected("GET", "/api/v1/orgs/{orgID}", orgH.Get)
 	requireScope(authz.ScopeOrgUpdate, "PUT", "/api/v1/orgs/{orgID}", orgH.Update)
+	requireScope(authz.ScopeOrgUpdate, "POST", "/api/v1/orgs/{orgID}/onboarding-complete", orgH.CompleteOnboarding)
 	requireScope(authz.ScopeOrgUpdate, "PUT", "/api/v1/orgs/{orgID}/logo", avatarH.PutOrgLogo)
 	requireScope(authz.ScopeOrgUpdate, "DELETE", "/api/v1/orgs/{orgID}/logo", avatarH.DeleteOrgLogo)
 	requireScope(authz.ScopeOrgDelete, "DELETE", "/api/v1/orgs/{orgID}", orgH.Delete)
@@ -182,6 +184,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	requireScope(authz.ScopeServiceAccountsCreate, "POST", "/api/v1/orgs/{orgID}/service-accounts", saH.Create)
 	requireScope(authz.ScopeServiceAccountsRead, "GET", "/api/v1/orgs/{orgID}/service-accounts/{saID}", saH.Get)
 	requireScope(authz.ScopeServiceAccountsEdit, "PUT", "/api/v1/orgs/{orgID}/service-accounts/{saID}", saH.Update)
+	requireScope(authz.ScopeServiceAccountsEdit, "POST", "/api/v1/orgs/{orgID}/service-accounts/{saID}/avatar/prepare", avatarH.PrepareServiceAccountAvatarUpload)
 	requireScope(authz.ScopeServiceAccountsEdit, "PUT", "/api/v1/orgs/{orgID}/service-accounts/{saID}/avatar", avatarH.PutServiceAccountAvatar)
 	requireScope(authz.ScopeServiceAccountsEdit, "DELETE", "/api/v1/orgs/{orgID}/service-accounts/{saID}/avatar", avatarH.DeleteServiceAccountAvatar)
 	requireScope(authz.ScopeServiceAccountsDelete, "DELETE", "/api/v1/orgs/{orgID}/service-accounts/{saID}", saH.Delete)
@@ -200,6 +203,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	serverAdmin("GET", "/api/v1/server/orgs/{orgID}", orgH.Get)
 	serverAdmin("PUT", "/api/v1/server/orgs/{orgID}", orgH.Update)
 	serverAdmin("DELETE", "/api/v1/server/orgs/{orgID}", orgH.Delete)
+	serverAdmin("POST", "/api/v1/server/orgs/{orgID}/logo/prepare", avatarH.PrepareOrgLogoUpload)
 	serverAdmin("PUT", "/api/v1/server/orgs/{orgID}/logo", avatarH.PutOrgLogo)
 	serverAdmin("DELETE", "/api/v1/server/orgs/{orgID}/logo", avatarH.DeleteOrgLogo)
 
@@ -208,6 +212,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	serverAdmin("GET", "/api/v1/sso/oauth", ssoH.ListOAuthProviders)
 	serverAdmin("PUT", "/api/v1/sso/oauth/{provider}", ssoH.UpsertOAuthProvider)
 	serverAdmin("DELETE", "/api/v1/sso/oauth/{provider}", ssoH.DeleteOAuthProvider)
+	serverAdmin("POST", "/api/v1/sso/oauth/{provider}/icon/prepare", ssoH.PrepareOAuthProviderIconUpload)
 	serverAdmin("PUT", "/api/v1/sso/oauth/{provider}/icon", ssoH.PutOAuthProviderIcon)
 	serverAdmin("DELETE", "/api/v1/sso/oauth/{provider}/icon", ssoH.DeleteOAuthProviderIcon)
 	serverAdmin("GET", "/api/v1/sso/role-mappings", ssoH.ListMappings)

@@ -10,8 +10,8 @@ import (
 	diagrampkg "github.com/uigraph/app/internal/diagram"
 	"github.com/uigraph/app/internal/httputil"
 	authmw "github.com/uigraph/app/internal/middleware"
-	storepkg "github.com/uigraph/app/internal/store"
 	"github.com/uigraph/app/internal/storage"
+	storepkg "github.com/uigraph/app/internal/store"
 )
 
 // ListVersions

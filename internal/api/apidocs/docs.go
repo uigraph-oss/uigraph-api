@@ -2,6 +2,7 @@ package apidocs
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
@@ -15,8 +16,8 @@ import (
 	docspkg "github.com/uigraph/app/internal/docs"
 	"github.com/uigraph/app/internal/httputil"
 	authmw "github.com/uigraph/app/internal/middleware"
-	storepkg "github.com/uigraph/app/internal/store"
 	"github.com/uigraph/app/internal/storage"
+	storepkg "github.com/uigraph/app/internal/store"
 )
 
 // @Summary  List
@@ -110,14 +111,14 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		httputil.BadRequest(w, err.Error())
 		return
 	}
-	if len(body.fileBytes) == 0 {
-		httputil.BadRequest(w, "file content is required")
+
+	fileAssetID, contentHash, err := h.resolveDocContent(r.Context(), body)
+	if err != nil {
+		httputil.Error(w, r, err)
 		return
 	}
-
-	fileAssetID := storage.NewFileAssetID()
-	if err := h.storage.Upload(r.Context(), storage.AssetKey(fileAssetID), body.fileType, bytes.NewReader(body.fileBytes), int64(len(body.fileBytes))); err != nil {
-		httputil.Error(w, r, err)
+	if fileAssetID == "" {
+		httputil.BadRequest(w, "file content is required")
 		return
 	}
 
@@ -131,7 +132,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		FileName:    body.fileName,
 		FileType:    body.fileType,
 		Description: body.description,
-		ContentHash: sha256Bytes(body.fileBytes),
+		ContentHash: contentHash,
 		CreatedBy:   p.UserID,
 		UpdatedBy:   &p.UserID,
 		CreatedAt:   now,
@@ -191,17 +192,17 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	doc.TeamID = body.teamID
 	doc.UpdatedBy = &p.UserID
 
-	if len(body.fileBytes) > 0 {
-		newAssetID := storage.NewFileAssetID()
-		if err := h.storage.Upload(r.Context(), storage.AssetKey(newAssetID), body.fileType, bytes.NewReader(body.fileBytes), int64(len(body.fileBytes))); err != nil {
+	if body.fileAssetID != "" || len(body.fileBytes) > 0 {
+		newAssetID, newHash, err := h.resolveDocContent(r.Context(), body)
+		if err != nil {
 			httputil.Error(w, r, err)
 			return
 		}
-		if doc.FileAssetID != "" {
+		if doc.FileAssetID != "" && doc.FileAssetID != newAssetID {
 			_ = h.storage.Delete(r.Context(), storage.AssetKey(doc.FileAssetID))
 		}
 		doc.FileAssetID = newAssetID
-		doc.ContentHash = sha256Bytes(body.fileBytes)
+		doc.ContentHash = newHash
 	}
 
 	if err := h.store.UpdateDoc(r.Context(), *doc); err != nil {
@@ -253,6 +254,25 @@ type docPayload struct {
 	folderID    *string
 	teamID      *string
 	fileBytes   []byte
+	fileAssetID string
+}
+
+func (h *Handler) resolveDocContent(ctx context.Context, body docPayload) (string, string, error) {
+	if body.fileAssetID != "" {
+		hash, err := storage.HashAsset(ctx, h.storage, body.fileAssetID)
+		if err != nil {
+			return "", "", err
+		}
+		return body.fileAssetID, hash, nil
+	}
+	if len(body.fileBytes) > 0 {
+		newAssetID := storage.NewFileAssetID()
+		if err := h.storage.Upload(ctx, storage.AssetKey(newAssetID), body.fileType, bytes.NewReader(body.fileBytes), int64(len(body.fileBytes))); err != nil {
+			return "", "", err
+		}
+		return newAssetID, sha256Bytes(body.fileBytes), nil
+	}
+	return "", "", nil
 }
 
 func decodeDocPayload(r *http.Request, existing *docspkg.Doc) (docPayload, error) {
@@ -263,6 +283,7 @@ func decodeDocPayload(r *http.Request, existing *docspkg.Doc) (docPayload, error
 		FolderID      *string `json:"folderId"`
 		TeamID        *string `json:"teamId"`
 		ContentBase64 *string `json:"contentBase64"`
+		FileAssetID   *string `json:"fileAssetId"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		return docPayload{}, fmt.Errorf("invalid request body")
@@ -296,6 +317,9 @@ func decodeDocPayload(r *http.Request, existing *docspkg.Doc) (docPayload, error
 	}
 	if out.fileName == "" {
 		return docPayload{}, fmt.Errorf("fileName is required")
+	}
+	if body.FileAssetID != nil {
+		out.fileAssetID = strings.TrimSpace(*body.FileAssetID)
 	}
 	if body.ContentBase64 != nil && strings.TrimSpace(*body.ContentBase64) != "" {
 		raw, err := base64.StdEncoding.DecodeString(*body.ContentBase64)

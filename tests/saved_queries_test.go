@@ -169,7 +169,7 @@ func TestSavedQueries_SyncIsRaceFree(t *testing.T) {
 			resp := do("POST", queriesPath(serviceID, dbID, "/sync"), adminToken, M{
 				"sourceRef": sourceRef, "title": fmt.Sprintf("Concurrent %d", i), "queryText": "select 1",
 			})
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 			if resp.StatusCode != http.StatusOK {
 				t.Errorf("sync %d: want 200, got %d", i, resp.StatusCode)
 			}

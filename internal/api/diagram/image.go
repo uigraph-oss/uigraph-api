@@ -11,8 +11,8 @@ import (
 	diagrampkg "github.com/uigraph/app/internal/diagram"
 	"github.com/uigraph/app/internal/httputil"
 	authmw "github.com/uigraph/app/internal/middleware"
-	storepkg "github.com/uigraph/app/internal/store"
 	"github.com/uigraph/app/internal/storage"
+	storepkg "github.com/uigraph/app/internal/store"
 )
 
 // ListImages
@@ -79,7 +79,7 @@ func (h *Handler) CreateImage(w http.ResponseWriter, r *http.Request) {
 		httputil.BadRequest(w, "missing file")
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	if contentType == "" {
 		contentType = header.Header.Get("Content-Type")

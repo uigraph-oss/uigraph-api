@@ -11,8 +11,8 @@ import (
 	catalogpkg "github.com/uigraph/app/internal/catalog"
 	"github.com/uigraph/app/internal/httputil"
 	authmw "github.com/uigraph/app/internal/middleware"
-	storepkg "github.com/uigraph/app/internal/store"
 	"github.com/uigraph/app/internal/storage"
+	storepkg "github.com/uigraph/app/internal/store"
 )
 
 // ── API Groups ────────────────────────────────────────────────────────────────
@@ -197,7 +197,7 @@ func (h *Handler) GetAPIGroupSpec(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, r, err)
 		return
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 
 	content, err := io.ReadAll(rc)
 	if err != nil {
@@ -268,6 +268,7 @@ func (h *Handler) UpdateAPIGroup(w http.ResponseWriter, r *http.Request) {
 		g.Protocol = *body.Protocol
 	}
 	g.UpdatedBy = &p.UserID
+	g.UpdatedByCommitHash = nil
 
 	if (body.Spec != nil || body.SpecAssetID != nil) && h.storage != nil {
 		rawSpec := ""
@@ -364,6 +365,7 @@ func (h *Handler) SyncAPIGroup(w http.ResponseWriter, r *http.Request) {
 		Protocol    string  `json:"protocol"`
 		Spec        string  `json:"spec"`
 		SpecAssetID *string `json:"specAssetId"`
+		CommitHash  *string `json:"commitHash"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -409,6 +411,7 @@ func (h *Handler) SyncAPIGroup(w http.ResponseWriter, r *http.Request) {
 		g.Name = body.Name
 		g.Protocol = body.Protocol
 		g.UpdatedBy = &p.UserID
+		g.UpdatedByCommitHash = body.CommitHash
 		if label != nil {
 			g.Version = *label
 		}
@@ -417,7 +420,7 @@ func (h *Handler) SyncAPIGroup(w http.ResponseWriter, r *http.Request) {
 		if specContent != "" && h.storage != nil {
 			if _, err := h.publishAPIGroupVersion(r.Context(), publishParams{
 				group: g, serviceID: serviceID, spec: specContent,
-				label: label, isAuto: true, actorID: p.UserID,
+				label: label, isAuto: true, actorID: p.UserID, commitHash: body.CommitHash,
 			}); err != nil {
 				httputil.Error(w, r, err)
 				return
@@ -437,7 +440,8 @@ func (h *Handler) SyncAPIGroup(w http.ResponseWriter, r *http.Request) {
 	g := catalogpkg.APIGroup{
 		ID: id, ServiceID: serviceID, OrgID: orgID,
 		Name: body.Name, Version: "v1", Protocol: body.Protocol,
-		CreatedBy: p.UserID, UpdatedBy: &p.UserID, CreatedAt: now, UpdatedAt: now,
+		CreatedBy: p.UserID, UpdatedBy: &p.UserID,
+		CreatedByCommitHash: body.CommitHash, CreatedAt: now, UpdatedAt: now,
 	}
 	if label != nil {
 		g.Version = *label
@@ -450,7 +454,7 @@ func (h *Handler) SyncAPIGroup(w http.ResponseWriter, r *http.Request) {
 	if specContent != "" && h.storage != nil {
 		if _, err := h.publishAPIGroupVersion(r.Context(), publishParams{
 			group: &g, serviceID: serviceID, spec: specContent,
-			label: label, isAuto: true, actorID: p.UserID,
+			label: label, isAuto: true, actorID: p.UserID, commitHash: body.CommitHash,
 		}); err != nil {
 			httputil.Error(w, r, err)
 			return

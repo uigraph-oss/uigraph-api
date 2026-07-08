@@ -8,7 +8,6 @@ package actor
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"time"
 
 	"github.com/uigraph/app/internal/asset"
@@ -54,7 +53,7 @@ type Actor struct {
 // Resolver resolves actor ids against the store, cached in Redis.
 type Resolver struct {
 	store  store.Store
-	cache  cache.Client   // may be nil
+	cache  cache.Client    // may be nil
 	assets *asset.Resolver // presigns avatar URLs; may be nil
 }
 
@@ -91,9 +90,7 @@ func (r *Resolver) resolveCached(ctx context.Context, id string) (*Actor, error)
 				return &a, nil
 			}
 		}
-		if err != nil && !errors.Is(err, cache.ErrNotFound) {
-			// Cache must never break the request; fall through to the store.
-		}
+		// Cache errors must never break the request; fall through to the store.
 	}
 
 	a, err := r.lookup(ctx, id)

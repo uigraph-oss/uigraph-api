@@ -142,7 +142,7 @@ func (d *DB) GetSSOMappings(ctx context.Context, orgID string) ([]authz.SSOMappi
 	if err != nil {
 		return nil, fmt.Errorf("postgres: GetSSOMappings: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []authz.SSOMapping
 	for rows.Next() {

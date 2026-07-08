@@ -115,6 +115,7 @@ func (h *Handler) CreateMeta(w http.ResponseWriter, r *http.Request) {
 		ComponentLinkTestPackID    *string         `json:"componentLinkTestPackId"`
 		ComponentLinkServiceDocID  *string         `json:"componentLinkServiceDocId"`
 		ComponentModalFields       json.RawMessage `json:"componentModalFields"`
+		CommitHash                 *string         `json:"commitHash"`
 	}
 	if err := httputil.Decode(r, &body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -134,6 +135,7 @@ func (h *Handler) CreateMeta(w http.ResponseWriter, r *http.Request) {
 		ComponentLinkServiceDocID:  body.ComponentLinkServiceDocID,
 		ComponentModalFields:       body.ComponentModalFields,
 		CreatedBy:                  p.UserID,
+		CreatedByCommitHash:        body.CommitHash,
 		CreatedAt:                  now,
 		UpdatedAt:                  now,
 	}
@@ -182,6 +184,7 @@ func (h *Handler) UpdateMeta(w http.ResponseWriter, r *http.Request) {
 		ComponentLinkTestPackID    *string         `json:"componentLinkTestPackId"`
 		ComponentLinkServiceDocID  *string         `json:"componentLinkServiceDocId"`
 		ComponentModalFields       json.RawMessage `json:"componentModalFields"`
+		CommitHash                 *string         `json:"commitHash"`
 	}
 	if err := httputil.Decode(r, &body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -206,6 +209,7 @@ func (h *Handler) UpdateMeta(w http.ResponseWriter, r *http.Request) {
 		m.ComponentModalFields = body.ComponentModalFields
 	}
 	m.UpdatedBy = &p.UserID
+	m.UpdatedByCommitHash = body.CommitHash
 
 	if err := h.store.UpdateFocalPointMeta(r.Context(), *m); err != nil {
 		httputil.Error(w, r, err)

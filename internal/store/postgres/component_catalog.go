@@ -105,7 +105,7 @@ func (d *DB) ListComponentsByKind(ctx context.Context, kind string) ([]component
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListComponentsByKind: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var comps []componentlib.Component
 	for rows.Next() {
@@ -139,7 +139,7 @@ func (d *DB) listComponentFields(ctx context.Context, componentID string) ([]com
 	if err != nil {
 		return nil, fmt.Errorf("postgres: listComponentFields: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []componentlib.ComponentField
 	for rows.Next() {

@@ -74,7 +74,7 @@ func StreamObject(w http.ResponseWriter, r *http.Request, download func(context.
 		Error(w, r, store.ErrNotFound)
 		return
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 
 	// Read up to 512 bytes to sniff the content type
 	head := make([]byte, 512)
@@ -101,4 +101,3 @@ func StreamObject(w http.ResponseWriter, r *http.Request, download func(context.
 	// Copy the rest of the body
 	_, _ = io.Copy(w, rc)
 }
-

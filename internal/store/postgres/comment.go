@@ -59,7 +59,7 @@ func (d *DB) ListComments(ctx context.Context, orgID, resourceID string) ([]comm
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListComments: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []comment.Comment
 	for rows.Next() {

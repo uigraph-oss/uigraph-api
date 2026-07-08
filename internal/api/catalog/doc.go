@@ -15,8 +15,8 @@ import (
 	docspkg "github.com/uigraph/app/internal/docs"
 	"github.com/uigraph/app/internal/httputil"
 	authmw "github.com/uigraph/app/internal/middleware"
-	storepkg "github.com/uigraph/app/internal/store"
 	"github.com/uigraph/app/internal/storage"
+	storepkg "github.com/uigraph/app/internal/store"
 )
 
 // ── Service docs ──────────────────────────────────────────────────────────────
@@ -77,8 +77,10 @@ func (h *Handler) CreateDoc(w http.ResponseWriter, r *http.Request) {
 		FileType      *string `json:"fileType"`
 		Description   *string `json:"description"`
 		ContentBase64 *string `json:"contentBase64"`
+		FileAssetID   *string `json:"fileAssetId"`
 		FolderID      *string `json:"folderId"`
 		TeamID        *string `json:"teamId"`
+		CommitHash    *string `json:"commitHash"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -102,13 +104,10 @@ func (h *Handler) CreateDoc(w http.ResponseWriter, r *http.Request) {
 			httputil.BadRequest(w, "storage is not configured")
 			return
 		}
-		if body.FileName == nil || strings.TrimSpace(*body.FileName) == "" || body.ContentBase64 == nil || strings.TrimSpace(*body.ContentBase64) == "" {
-			httputil.BadRequest(w, "fileName and contentBase64 are required when docId is not provided")
-			return
-		}
-		fileBytes, err := base64.StdEncoding.DecodeString(*body.ContentBase64)
-		if err != nil {
-			httputil.BadRequest(w, "contentBase64 must be valid base64")
+		hasBase64 := body.ContentBase64 != nil && strings.TrimSpace(*body.ContentBase64) != ""
+		hasAssetID := body.FileAssetID != nil && strings.TrimSpace(*body.FileAssetID) != ""
+		if body.FileName == nil || strings.TrimSpace(*body.FileName) == "" || (!hasBase64 && !hasAssetID) {
+			httputil.BadRequest(w, "fileName and contentBase64 or fileAssetId are required when docId is not provided")
 			return
 		}
 
@@ -121,10 +120,27 @@ func (h *Handler) CreateDoc(w http.ResponseWriter, r *http.Request) {
 			description = strings.TrimSpace(*body.Description)
 		}
 
-		fileAssetID := storage.NewFileAssetID()
-		if err := h.storage.Upload(r.Context(), storage.AssetKey(fileAssetID), fileType, bytes.NewReader(fileBytes), int64(len(fileBytes))); err != nil {
-			httputil.Error(w, r, err)
-			return
+		var fileAssetID, contentHash string
+		if hasAssetID {
+			fileAssetID = strings.TrimSpace(*body.FileAssetID)
+			hash, err := storage.HashAsset(r.Context(), h.storage, fileAssetID)
+			if err != nil {
+				httputil.Error(w, r, err)
+				return
+			}
+			contentHash = hash
+		} else {
+			fileBytes, err := base64.StdEncoding.DecodeString(*body.ContentBase64)
+			if err != nil {
+				httputil.BadRequest(w, "contentBase64 must be valid base64")
+				return
+			}
+			fileAssetID = storage.NewFileAssetID()
+			if err := h.storage.Upload(r.Context(), storage.AssetKey(fileAssetID), fileType, bytes.NewReader(fileBytes), int64(len(fileBytes))); err != nil {
+				httputil.Error(w, r, err)
+				return
+			}
+			contentHash = sha256Bytes(fileBytes)
 		}
 
 		now := time.Now().UTC()
@@ -137,7 +153,7 @@ func (h *Handler) CreateDoc(w http.ResponseWriter, r *http.Request) {
 			FileName:    strings.TrimSpace(*body.FileName),
 			FileType:    fileType,
 			Description: description,
-			ContentHash: sha256Bytes(fileBytes),
+			ContentHash: contentHash,
 			CreatedBy:   p.UserID,
 			UpdatedBy:   &p.UserID,
 			CreatedAt:   now,
@@ -152,14 +168,16 @@ func (h *Handler) CreateDoc(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now().UTC()
 	link := catalogpkg.ServiceDoc{
-		ServiceID: serviceID,
-		DocID:     doc.ID,
-		OrgID:     orgID,
-		CreatedBy: p.UserID,
-		UpdatedBy: &p.UserID,
-		CreatedAt: now,
-		UpdatedAt: now,
-		Doc:       doc,
+		ServiceID:           serviceID,
+		DocID:               doc.ID,
+		OrgID:               orgID,
+		CreatedBy:           p.UserID,
+		UpdatedBy:           &p.UserID,
+		CreatedByCommitHash: body.CommitHash,
+		UpdatedByCommitHash: body.CommitHash,
+		CreatedAt:           now,
+		UpdatedAt:           now,
+		Doc:                 doc,
 	}
 	if err := h.store.CreateServiceDoc(r.Context(), link); err != nil {
 		httputil.Error(w, r, err)
@@ -272,12 +290,13 @@ func (h *Handler) CreateDiagram(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		DiagramID *string `json:"diagramId"`
-		Name      *string `json:"name"`
-		Content   *string `json:"content"`
-		FolderID  *string `json:"folderId"`
-		TeamID    *string `json:"teamId"`
-		Source    *string `json:"source"`
+		DiagramID  *string `json:"diagramId"`
+		Name       *string `json:"name"`
+		Content    *string `json:"content"`
+		FolderID   *string `json:"folderId"`
+		TeamID     *string `json:"teamId"`
+		Source     *string `json:"source"`
+		CommitHash *string `json:"commitHash"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -358,14 +377,16 @@ func (h *Handler) CreateDiagram(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now().UTC()
 	link := catalogpkg.ServiceDiagram{
-		ServiceID: serviceID,
-		DiagramID: dg.ID,
-		OrgID:     orgID,
-		CreatedBy: p.UserID,
-		UpdatedBy: &p.UserID,
-		CreatedAt: now,
-		UpdatedAt: now,
-		Diagram:   dg,
+		ServiceID:           serviceID,
+		DiagramID:           dg.ID,
+		OrgID:               orgID,
+		CreatedBy:           p.UserID,
+		UpdatedBy:           &p.UserID,
+		CreatedByCommitHash: body.CommitHash,
+		UpdatedByCommitHash: body.CommitHash,
+		CreatedAt:           now,
+		UpdatedAt:           now,
+		Diagram:             dg,
 	}
 	if err := h.store.CreateServiceDiagram(r.Context(), link); err != nil {
 		httputil.Error(w, r, err)

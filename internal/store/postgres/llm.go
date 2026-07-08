@@ -20,7 +20,7 @@ func (d *DB) ListLLMModels(ctx context.Context) ([]llm.LLMModel, error) {
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListLLMModels: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []llm.LLMModel
 	for rows.Next() {
 		m, scanErr := scanLLMModel(rows)

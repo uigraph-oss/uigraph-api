@@ -11,7 +11,7 @@ import (
 
 const (
 	tokenPrefix    = "uig_"
-	tokenRandBytes = 32 // 256 bits → 64 hex chars after encoding
+	tokenRandBytes = 32                   // 256 bits → 64 hex chars after encoding
 	prefixLen      = len(tokenPrefix) + 8 // "uig_" + 8 random hex chars = 12 chars
 )
 

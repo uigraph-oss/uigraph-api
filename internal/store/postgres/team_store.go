@@ -68,7 +68,7 @@ func (d *DB) ListTeams(ctx context.Context, orgID string) ([]org.Team, error) {
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListTeams: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []org.Team
 	for rows.Next() {
@@ -130,7 +130,7 @@ func (d *DB) ListTeamMembers(ctx context.Context, teamID string) ([]org.TeamMemb
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListTeamMembers: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []org.TeamMember
 	for rows.Next() {

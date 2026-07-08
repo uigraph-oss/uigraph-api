@@ -17,8 +17,9 @@ func (d *DB) CreateDiagram(ctx context.Context, dg diagram.Diagram) error {
 	const q = `
 		INSERT INTO diagrams
 			(id, org_id, folder_id, team_id, name, content_key, content_hash, content_token_count,
-			 preview_asset_id, preview_content_hash, preview_status, source, created_by, updated_by, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`
+			 preview_asset_id, preview_content_hash, preview_status, source, created_by, updated_by,
+			 created_by_commit_hash, updated_by_commit_hash, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`
 	now := time.Now().UTC()
 	if dg.CreatedAt.IsZero() {
 		dg.CreatedAt = now
@@ -31,7 +32,8 @@ func (d *DB) CreateDiagram(ctx context.Context, dg diagram.Diagram) error {
 	}
 	_, err := d.db.ExecContext(ctx, q,
 		dg.ID, dg.OrgID, dg.FolderID, dg.TeamID, dg.Name, dg.ContentKey, dg.ContentHash, dg.ContentTokenCount,
-		dg.PreviewAssetID, dg.PreviewContentHash, dg.PreviewStatus, dg.Source, dg.CreatedBy, dg.UpdatedBy, dg.CreatedAt, dg.UpdatedAt,
+		dg.PreviewAssetID, dg.PreviewContentHash, dg.PreviewStatus, dg.Source, dg.CreatedBy, dg.UpdatedBy,
+		dg.CreatedByCommitHash, dg.UpdatedByCommitHash, dg.CreatedAt, dg.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("postgres: CreateDiagram: %w", err)
@@ -43,6 +45,7 @@ func (d *DB) GetDiagram(ctx context.Context, id string) (*diagram.Diagram, error
 	const q = `
 		SELECT id, org_id, folder_id, team_id, name, content_key, content_hash, content_token_count,
 		       preview_asset_id, preview_content_hash, preview_status, source, created_by, updated_by,
+		       created_by_commit_hash, updated_by_commit_hash,
 		       created_at, updated_at, deleted_at, deleted_by
 		FROM diagrams WHERE id = $1`
 	dg, err := scanDiagram(d.db.QueryRowContext(ctx, q, id))
@@ -65,6 +68,10 @@ func (d *DB) ListDiagrams(ctx context.Context, orgID string, p diagram.ListParam
 	if p.TeamID != nil {
 		args = append(args, *p.TeamID)
 		where += fmt.Sprintf(" AND team_id = $%d", len(args))
+	}
+	if p.ServiceID != nil {
+		args = append(args, *p.ServiceID)
+		where += fmt.Sprintf(" AND id IN (SELECT diagram_id FROM service_diagrams WHERE service_id = $%d AND deleted_at IS NULL)", len(args))
 	}
 	if p.Search != nil && *p.Search != "" {
 		args = append(args, "%"+*p.Search+"%")
@@ -89,6 +96,7 @@ func (d *DB) ListDiagrams(ctx context.Context, orgID string, p diagram.ListParam
 	q := `
 		SELECT id, org_id, folder_id, team_id, name, content_key, content_hash, content_token_count,
 		       preview_asset_id, preview_content_hash, preview_status, source, created_by, updated_by,
+		       created_by_commit_hash, updated_by_commit_hash,
 		       created_at, updated_at, deleted_at, deleted_by
 		FROM diagrams` + where + fmt.Sprintf(" ORDER BY %s %s", col, dir)
 	if p.Limit > 0 {
@@ -102,7 +110,7 @@ func (d *DB) ListDiagrams(ctx context.Context, orgID string, p diagram.ListParam
 	if err != nil {
 		return nil, 0, fmt.Errorf("postgres: ListDiagrams: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []diagram.Diagram
 	for rows.Next() {
@@ -119,11 +127,13 @@ func (d *DB) UpdateDiagram(ctx context.Context, dg diagram.Diagram) error {
 	const q = `
 		UPDATE diagrams
 		SET name=$1, folder_id=$2, team_id=$3, content_key=$4, content_hash=$5, content_token_count=$6,
-		    preview_asset_id=$7, preview_content_hash=$8, preview_status=$9, source=$10, updated_by=$11, updated_at=$12
-		WHERE id=$13 AND deleted_at IS NULL`
+		    preview_asset_id=$7, preview_content_hash=$8, preview_status=$9, source=$10, updated_by=$11,
+		    updated_by_commit_hash=$12, updated_at=$13
+		WHERE id=$14 AND deleted_at IS NULL`
 	_, err := d.db.ExecContext(ctx, q,
 		dg.Name, dg.FolderID, dg.TeamID, dg.ContentKey, dg.ContentHash, dg.ContentTokenCount,
-		dg.PreviewAssetID, dg.PreviewContentHash, dg.PreviewStatus, dg.Source, dg.UpdatedBy, time.Now().UTC(), dg.ID,
+		dg.PreviewAssetID, dg.PreviewContentHash, dg.PreviewStatus, dg.Source, dg.UpdatedBy,
+		dg.UpdatedByCommitHash, time.Now().UTC(), dg.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("postgres: UpdateDiagram: %w", err)
@@ -195,7 +205,7 @@ func (d *DB) ListDiagramVersions(ctx context.Context, diagramID string) ([]diagr
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListDiagramVersions: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []diagram.Version
 	for rows.Next() {
@@ -244,7 +254,7 @@ func (d *DB) ListDiagramImages(ctx context.Context, diagramID string) ([]diagram
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListDiagramImages: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []diagram.Image
 	for rows.Next() {
@@ -268,6 +278,7 @@ func scanDiagram(row interface{ Scan(...any) error }) (diagram.Diagram, error) {
 		&dg.ID, &dg.OrgID, &dg.FolderID, &dg.TeamID, &dg.Name,
 		&dg.ContentKey, &dg.ContentHash, &dg.ContentTokenCount, &dg.PreviewAssetID, &dg.PreviewContentHash,
 		&dg.PreviewStatus, &dg.Source, &dg.CreatedBy, &dg.UpdatedBy,
+		&dg.CreatedByCommitHash, &dg.UpdatedByCommitHash,
 		&dg.CreatedAt, &dg.UpdatedAt, &dg.DeletedAt, &dg.DeletedBy,
 	)
 }

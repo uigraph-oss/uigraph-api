@@ -188,7 +188,7 @@ func (d *DB) ListCustomComponents(ctx context.Context, orgID string) ([]componen
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListCustomComponents: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var comps []componentlib.Component
 	for rows.Next() {

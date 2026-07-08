@@ -452,4 +452,3 @@ func TestDiagrams_Versions_Restore(t *testing.T) {
 
 	do("DELETE", "/api/v1/orgs/"+orgID+"/diagrams/"+id, adminToken, nil)
 }
-

@@ -21,7 +21,7 @@ func Open(dsn string) (*DB, error) {
 		return nil, fmt.Errorf("postgres: open: %w", err)
 	}
 	if err := db.Ping(); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("postgres: ping: %w", err)
 	}
 	db.SetMaxOpenConns(25)

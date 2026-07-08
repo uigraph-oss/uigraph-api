@@ -50,7 +50,6 @@ func OktaEndpoints(domain string) (authURL, tokenURL, userinfoURL string) {
 	return base + "/authorize", base + "/token", base + "/userinfo"
 }
 
-
 // AuthCodeURL builds the provider authorization URL to redirect the browser to.
 func (p Provider) AuthCodeURL(redirectURI, state string) string {
 	q := url.Values{
@@ -95,7 +94,7 @@ func Exchange(ctx context.Context, p Provider, code, redirectURI string) (string
 	if err != nil {
 		return "", fmt.Errorf("oauth: token request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode != http.StatusOK {
@@ -135,7 +134,7 @@ func FetchUserInfo(ctx context.Context, p Provider, accessToken string) (map[str
 	if err != nil {
 		return nil, fmt.Errorf("oauth: userinfo request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode != http.StatusOK {
@@ -191,7 +190,7 @@ func fetchGitHubPrimaryEmail(ctx context.Context, accessToken string) (string, e
 	if err != nil {
 		return "", fmt.Errorf("oauth: github emails request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode != http.StatusOK {

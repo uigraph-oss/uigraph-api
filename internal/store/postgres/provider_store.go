@@ -97,7 +97,7 @@ func (d *DB) ListOAuthProviders(ctx context.Context) ([]identity.OAuthProviderCo
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListOAuthProviders: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []identity.OAuthProviderConfig
 	for rows.Next() {

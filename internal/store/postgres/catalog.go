@@ -41,8 +41,8 @@ func (d *DB) CreateService(ctx context.Context, s catalog.Service) error {
 			(id, org_id, folder_id, team_id, name, description,
 			 status, tier, category, language,
 			 git_repo_url, jira_project_url, slack_channel_url, last_commit_sha,
-			 labels, metadata, created_by, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`
+			 labels, metadata, created_by, created_by_commit_hash, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`
 	now := time.Now().UTC()
 	if s.CreatedAt.IsZero() {
 		s.CreatedAt = now
@@ -65,7 +65,7 @@ func (d *DB) CreateService(ctx context.Context, s catalog.Service) error {
 		s.Status, s.Tier, s.Category, s.Language,
 		s.GitRepoURL, s.JiraProjectURL, s.SlackChannelURL, s.LastCommitSha,
 		pq.Array(labels), meta,
-		s.CreatedBy, s.CreatedAt, s.UpdatedAt,
+		s.CreatedBy, s.CreatedByCommitHash, s.CreatedAt, s.UpdatedAt,
 	)
 	if err != nil {
 		if uniqueViolation(err, "idx_services_org_name") {
@@ -82,6 +82,7 @@ func (d *DB) GetService(ctx context.Context, id string) (*catalog.Service, error
 		       status, tier, category, language,
 		       git_repo_url, jira_project_url, slack_channel_url, last_commit_sha,
 		       labels, metadata, created_by, updated_by,
+		       created_by_commit_hash, updated_by_commit_hash,
 		       created_at, updated_at, deleted_at, deleted_by
 		FROM services WHERE id = $1`
 	s, err := scanService(d.db.QueryRowContext(ctx, q, id))
@@ -130,6 +131,7 @@ func (d *DB) ListServices(ctx context.Context, orgID string, p catalog.ListParam
 		       status, tier, category, language,
 		       git_repo_url, jira_project_url, slack_channel_url, last_commit_sha,
 		       labels, metadata, created_by, updated_by,
+		       created_by_commit_hash, updated_by_commit_hash,
 		       created_at, updated_at, deleted_at, deleted_by
 		FROM services` + where + fmt.Sprintf(" ORDER BY %s %s", col, dir)
 	if p.Limit > 0 {
@@ -143,7 +145,7 @@ func (d *DB) ListServices(ctx context.Context, orgID string, p catalog.ListParam
 	if err != nil {
 		return nil, 0, fmt.Errorf("postgres: ListServices: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []catalog.Service
 	for rows.Next() {
@@ -172,7 +174,7 @@ func (d *DB) ListServiceStats(ctx context.Context, orgID string, serviceID *stri
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListServiceStats list services: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	stats := make([]catalog.ServiceStats, 0)
 	for rows.Next() {
@@ -388,8 +390,8 @@ func (d *DB) UpdateService(ctx context.Context, s catalog.Service) error {
 		SET name=$1, description=$2, status=$3, tier=$4, category=$5, language=$6,
 		    git_repo_url=$7, jira_project_url=$8, slack_channel_url=$9, last_commit_sha=$10,
 		    labels=$11, metadata=$12, folder_id=$13, team_id=$14,
-		    updated_by=$15, updated_at=$16
-		WHERE id=$17 AND deleted_at IS NULL`
+		    updated_by=$15, updated_by_commit_hash=$16, updated_at=$17
+		WHERE id=$18 AND deleted_at IS NULL`
 	meta := s.Metadata
 	if meta == nil {
 		meta = json.RawMessage("{}")
@@ -403,7 +405,7 @@ func (d *DB) UpdateService(ctx context.Context, s catalog.Service) error {
 		s.Name, s.Description, s.Status, s.Tier, s.Category, s.Language,
 		s.GitRepoURL, s.JiraProjectURL, s.SlackChannelURL, s.LastCommitSha,
 		pq.Array(labels), meta, s.FolderID, s.TeamID,
-		s.UpdatedBy, time.Now().UTC(), s.ID,
+		s.UpdatedBy, s.UpdatedByCommitHash, time.Now().UTC(), s.ID,
 	)
 	if err != nil {
 		if uniqueViolation(err, "idx_services_org_name") {
@@ -431,6 +433,7 @@ func scanService(row interface{ Scan(...any) error }) (catalog.Service, error) {
 		&s.GitRepoURL, &s.JiraProjectURL, &s.SlackChannelURL, &s.LastCommitSha,
 		&labels, &meta,
 		&s.CreatedBy, &s.UpdatedBy,
+		&s.CreatedByCommitHash, &s.UpdatedByCommitHash,
 		&s.CreatedAt, &s.UpdatedAt, &s.DeletedAt, &s.DeletedBy,
 	)
 	if err != nil {
@@ -448,8 +451,8 @@ func (d *DB) CreateAPIGroup(ctx context.Context, g catalog.APIGroup) error {
 	const q = `
 		INSERT INTO api_groups
 			(id, service_id, org_id, name, version, label, protocol,
-			 spec_key, spec_hash, created_by, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`
+			 spec_key, spec_hash, created_by, created_by_commit_hash, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`
 	now := time.Now().UTC()
 	if g.CreatedAt.IsZero() {
 		g.CreatedAt = now
@@ -462,7 +465,7 @@ func (d *DB) CreateAPIGroup(ctx context.Context, g catalog.APIGroup) error {
 		g.ID, g.ServiceID, g.OrgID,
 		g.Name, g.Version, g.Label, g.Protocol,
 		g.SpecKey, g.SpecHash,
-		g.CreatedBy, g.CreatedAt, g.UpdatedAt,
+		g.CreatedBy, g.CreatedByCommitHash, g.CreatedAt, g.UpdatedAt,
 	)
 	return wrapErr("CreateAPIGroup", err)
 }
@@ -471,7 +474,8 @@ func (d *DB) GetAPIGroup(ctx context.Context, id string) (*catalog.APIGroup, err
 	const q = `
 		SELECT id, service_id, org_id, name, version, label, protocol,
 		       spec_key, spec_hash,
-		       created_by, updated_by, created_at, updated_at, deleted_at, deleted_by
+		       created_by, updated_by, created_by_commit_hash, updated_by_commit_hash,
+		       created_at, updated_at, deleted_at, deleted_by
 		FROM api_groups WHERE id = $1`
 	g, err := scanAPIGroup(d.db.QueryRowContext(ctx, q, id))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -487,14 +491,15 @@ func (d *DB) ListAPIGroups(ctx context.Context, serviceID string) ([]catalog.API
 	const q = `
 		SELECT id, service_id, org_id, name, version, label, protocol,
 		       spec_key, spec_hash,
-		       created_by, updated_by, created_at, updated_at, deleted_at, deleted_by
+		       created_by, updated_by, created_by_commit_hash, updated_by_commit_hash,
+		       created_at, updated_at, deleted_at, deleted_by
 		FROM api_groups WHERE service_id = $1 AND deleted_at IS NULL
 		ORDER BY created_at ASC`
 	rows, err := d.db.QueryContext(ctx, q, serviceID)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListAPIGroups: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []catalog.APIGroup
 	for rows.Next() {
 		g, err := scanAPIGroup(rows)
@@ -511,13 +516,13 @@ func (d *DB) UpdateAPIGroup(ctx context.Context, g catalog.APIGroup) error {
 		UPDATE api_groups
 		SET name=$1, version=$2, label=$3, protocol=$4,
 		    spec_key=$5, spec_hash=$6,
-		    updated_by=$7, updated_at=$8
-		WHERE id=$9 AND deleted_at IS NULL`
+		    updated_by=$7, updated_by_commit_hash=$8, updated_at=$9
+		WHERE id=$10 AND deleted_at IS NULL`
 	_, err := d.db.ExecContext(
 		ctx, q,
 		g.Name, g.Version, g.Label, g.Protocol,
 		g.SpecKey, g.SpecHash,
-		g.UpdatedBy, time.Now().UTC(), g.ID,
+		g.UpdatedBy, g.UpdatedByCommitHash, time.Now().UTC(), g.ID,
 	)
 	return wrapErr("UpdateAPIGroup", err)
 }
@@ -535,6 +540,7 @@ func scanAPIGroup(row interface{ Scan(...any) error }) (catalog.APIGroup, error)
 		&g.Name, &g.Version, &g.Label, &g.Protocol,
 		&g.SpecKey, &g.SpecHash,
 		&g.CreatedBy, &g.UpdatedBy,
+		&g.CreatedByCommitHash, &g.UpdatedByCommitHash,
 		&g.CreatedAt, &g.UpdatedAt, &g.DeletedAt, &g.DeletedBy,
 	)
 }
@@ -543,8 +549,8 @@ func (d *DB) CreateAPIGroupVersion(ctx context.Context, v catalog.APIGroupVersio
 	const q = `
 		INSERT INTO api_group_versions
 			(id, api_group_id, version_number, label, spec_key, spec_hash,
-			 is_auto_version, created_by, created_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`
+			 is_auto_version, created_by, created_by_commit_hash, created_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`
 	if v.CreatedAt.IsZero() {
 		v.CreatedAt = time.Now().UTC()
 	}
@@ -552,7 +558,7 @@ func (d *DB) CreateAPIGroupVersion(ctx context.Context, v catalog.APIGroupVersio
 		ctx, q,
 		v.ID, v.APIGroupID, v.VersionNumber, v.Label,
 		v.SpecKey, v.SpecHash, v.IsAutoVersion,
-		v.CreatedBy, v.CreatedAt,
+		v.CreatedBy, v.CreatedByCommitHash, v.CreatedAt,
 	)
 	return wrapErr("CreateAPIGroupVersion", err)
 }
@@ -560,13 +566,13 @@ func (d *DB) CreateAPIGroupVersion(ctx context.Context, v catalog.APIGroupVersio
 func (d *DB) GetAPIGroupVersion(ctx context.Context, id string) (*catalog.APIGroupVersion, error) {
 	const q = `
 		SELECT id, api_group_id, version_number, label, spec_key, spec_hash,
-		       is_auto_version, created_by, created_at
+		       is_auto_version, created_by, created_by_commit_hash, created_at
 		FROM api_group_versions WHERE id = $1`
 	var v catalog.APIGroupVersion
 	err := d.db.QueryRowContext(ctx, q, id).Scan(
 		&v.ID, &v.APIGroupID, &v.VersionNumber, &v.Label,
 		&v.SpecKey, &v.SpecHash, &v.IsAutoVersion,
-		&v.CreatedBy, &v.CreatedAt,
+		&v.CreatedBy, &v.CreatedByCommitHash, &v.CreatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -580,14 +586,14 @@ func (d *DB) GetAPIGroupVersion(ctx context.Context, id string) (*catalog.APIGro
 func (d *DB) ListAPIGroupVersions(ctx context.Context, apiGroupID string) ([]catalog.APIGroupVersion, error) {
 	const q = `
 		SELECT id, api_group_id, version_number, label, spec_key, spec_hash,
-		       is_auto_version, created_by, created_at
+		       is_auto_version, created_by, created_by_commit_hash, created_at
 		FROM api_group_versions WHERE api_group_id = $1
 		ORDER BY version_number DESC`
 	rows, err := d.db.QueryContext(ctx, q, apiGroupID)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListAPIGroupVersions: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []catalog.APIGroupVersion
 	for rows.Next() {
 		var v catalog.APIGroupVersion
@@ -616,8 +622,8 @@ func (d *DB) CreateAPIEndpoint(ctx context.Context, e catalog.APIEndpoint) error
 			 operation_id, method, path, summary, description,
 			 tags, token_count, parameters, request_body, responses,
 			 example_requests, example_responses, ord,
-			 created_by, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`
+			 created_by, created_by_commit_hash, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`
 	now := time.Now().UTC()
 	if e.CreatedAt.IsZero() {
 		e.CreatedAt = now
@@ -654,7 +660,7 @@ func (d *DB) CreateAPIEndpoint(ctx context.Context, e catalog.APIEndpoint) error
 		e.ID, e.APIGroupID, e.APIGroupVersionID, e.ServiceID, e.OrgID,
 		e.OperationID, e.Method, e.Path, e.Summary, e.Description,
 		pq.Array(tags), e.TokenCount, params, reqBody, resps, exampleReqs, exampleResps, e.Order,
-		e.CreatedBy, e.CreatedAt, e.UpdatedAt,
+		e.CreatedBy, e.CreatedByCommitHash, e.CreatedAt, e.UpdatedAt,
 	)
 	return wrapErr("CreateAPIEndpoint", err)
 }
@@ -665,7 +671,8 @@ func (d *DB) GetAPIEndpoint(ctx context.Context, id string) (*catalog.APIEndpoin
 		       operation_id, method, path, summary, description,
 		       tags, token_count, parameters, request_body, responses,
 		       example_requests, example_responses, ord,
-		       created_by, updated_by, created_at, updated_at, deleted_at, deleted_by
+		       created_by, updated_by, created_by_commit_hash, updated_by_commit_hash,
+		       created_at, updated_at, deleted_at, deleted_by
 		FROM api_endpoints WHERE id = $1`
 	e, err := scanAPIEndpoint(d.db.QueryRowContext(ctx, q, id))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -683,7 +690,8 @@ func (d *DB) ListAPIEndpoints(ctx context.Context, apiGroupID string) ([]catalog
 		       operation_id, method, path, summary, description,
 		       tags, token_count, parameters, request_body, responses,
 		       example_requests, example_responses, ord,
-		       created_by, updated_by, created_at, updated_at, deleted_at, deleted_by
+		       created_by, updated_by, created_by_commit_hash, updated_by_commit_hash,
+		       created_at, updated_at, deleted_at, deleted_by
 		FROM api_endpoints
 		WHERE api_group_id = $1 AND api_group_version_id IS NULL AND deleted_at IS NULL
 		ORDER BY ord ASC, created_at ASC`
@@ -691,7 +699,7 @@ func (d *DB) ListAPIEndpoints(ctx context.Context, apiGroupID string) ([]catalog
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListAPIEndpoints: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []catalog.APIEndpoint
 	for rows.Next() {
 		e, err := scanAPIEndpoint(rows)
@@ -709,8 +717,8 @@ func (d *DB) UpdateAPIEndpoint(ctx context.Context, e catalog.APIEndpoint) error
 		SET operation_id=$1, method=$2, path=$3, summary=$4, description=$5,
 		    tags=$6, token_count=$7, parameters=$8, request_body=$9, responses=$10,
 		    example_requests=$11, example_responses=$12, ord=$13,
-		    updated_by=$14, updated_at=$15
-		WHERE id=$16 AND deleted_at IS NULL`
+		    updated_by=$14, updated_by_commit_hash=$15, updated_at=$16
+		WHERE id=$17 AND deleted_at IS NULL`
 	tags := e.Tags
 	if tags == nil {
 		tags = []string{}
@@ -720,7 +728,7 @@ func (d *DB) UpdateAPIEndpoint(ctx context.Context, e catalog.APIEndpoint) error
 		e.OperationID, e.Method, e.Path, e.Summary, e.Description,
 		pq.Array(tags), e.TokenCount, e.Parameters, e.RequestBody, e.Responses,
 		e.ExampleRequests, e.ExampleResponses, e.Order,
-		e.UpdatedBy, time.Now().UTC(), e.ID,
+		e.UpdatedBy, e.UpdatedByCommitHash, time.Now().UTC(), e.ID,
 	)
 	return wrapErr("UpdateAPIEndpoint", err)
 }
@@ -745,12 +753,14 @@ func (d *DB) CopyEndpointsForVersion(ctx context.Context, apiGroupID, versionID,
 			 operation_id, method, path, summary, description,
 			 tags, token_count, parameters, request_body, responses,
 			 example_requests, example_responses, ord,
-			 created_by, updated_by, created_at, updated_at)
+			 created_by, updated_by, created_at, updated_at,
+			 created_by_commit_hash, updated_by_commit_hash)
 		SELECT gen_random_uuid(), api_group_id, $2, service_id, org_id,
 		       operation_id, method, path, summary, description,
 		       tags, token_count, parameters, request_body, responses,
 		       example_requests, example_responses, ord,
-		       created_by, $3, created_at, NOW()
+		       created_by, $3, created_at, NOW(),
+		       created_by_commit_hash, updated_by_commit_hash
 		FROM api_endpoints
 		WHERE api_group_id = $1 AND api_group_version_id IS NULL AND deleted_at IS NULL`
 	_, err := d.db.ExecContext(ctx, q, apiGroupID, versionID, actorID)
@@ -763,7 +773,8 @@ func (d *DB) ListAPIEndpointsForVersion(ctx context.Context, apiGroupID, version
 		       operation_id, method, path, summary, description,
 		       tags, token_count, parameters, request_body, responses,
 		       example_requests, example_responses, ord,
-		       created_by, updated_by, created_at, updated_at, deleted_at, deleted_by
+		       created_by, updated_by, created_by_commit_hash, updated_by_commit_hash,
+		       created_at, updated_at, deleted_at, deleted_by
 		FROM api_endpoints
 		WHERE api_group_id = $1 AND api_group_version_id = $2 AND deleted_at IS NULL
 		ORDER BY ord ASC, created_at ASC`
@@ -771,7 +782,7 @@ func (d *DB) ListAPIEndpointsForVersion(ctx context.Context, apiGroupID, version
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListAPIEndpointsForVersion: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []catalog.APIEndpoint
 	for rows.Next() {
 		e, err := scanAPIEndpoint(rows)
@@ -789,7 +800,7 @@ func (d *DB) PublishAPIGroupVersion(ctx context.Context, in catalog.PublishAPIGr
 	if err != nil {
 		return v, fmt.Errorf("postgres: PublishAPIGroupVersion begin: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	now := time.Now().UTC()
 
@@ -832,10 +843,10 @@ func (d *DB) PublishAPIGroupVersion(ctx context.Context, in catalog.PublishAPIGr
 		ctx,
 		`INSERT INTO api_group_versions
 			(id, api_group_id, version_number, label, spec_key, spec_hash,
-			 is_auto_version, created_by, created_at)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+			 is_auto_version, created_by, created_by_commit_hash, created_at)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
 		v.ID, v.APIGroupID, v.VersionNumber, v.Label,
-		v.SpecKey, v.SpecHash, v.IsAutoVersion, v.CreatedBy, v.CreatedAt,
+		v.SpecKey, v.SpecHash, v.IsAutoVersion, v.CreatedBy, v.CreatedByCommitHash, v.CreatedAt,
 	); err != nil {
 		return v, fmt.Errorf("postgres: PublishAPIGroupVersion insert version: %w", err)
 	}
@@ -847,12 +858,14 @@ func (d *DB) PublishAPIGroupVersion(ctx context.Context, in catalog.PublishAPIGr
 			 operation_id, method, path, summary, description,
 			 tags, token_count, parameters, request_body, responses,
 			 example_requests, example_responses, ord,
-			 created_by, updated_by, created_at, updated_at)
+			 created_by, updated_by, created_at, updated_at,
+			 created_by_commit_hash, updated_by_commit_hash)
 		 SELECT gen_random_uuid(), api_group_id, $2, service_id, org_id,
 		        operation_id, method, path, summary, description,
 		        tags, token_count, parameters, request_body, responses,
 		        example_requests, example_responses, ord,
-		        created_by, $3, created_at, NOW()
+		        created_by, $3, created_at, NOW(),
+		        created_by_commit_hash, updated_by_commit_hash
 		 FROM api_endpoints
 		 WHERE api_group_id = $1 AND api_group_version_id IS NULL AND deleted_at IS NULL`,
 		in.Group.ID, v.ID, in.ActorID,
@@ -864,10 +877,10 @@ func (d *DB) PublishAPIGroupVersion(ctx context.Context, in catalog.PublishAPIGr
 		ctx,
 		`UPDATE api_groups
 		 SET name=$1, version=$2, label=$3, protocol=$4,
-		     spec_key=$5, spec_hash=$6, updated_by=$7, updated_at=$8
-		 WHERE id=$9 AND deleted_at IS NULL`,
+		     spec_key=$5, spec_hash=$6, updated_by=$7, updated_by_commit_hash=$8, updated_at=$9
+		 WHERE id=$10 AND deleted_at IS NULL`,
 		in.Group.Name, in.Group.Version, in.Group.Label, in.Group.Protocol,
-		in.Group.SpecKey, in.Group.SpecHash, in.Group.UpdatedBy, now, in.Group.ID,
+		in.Group.SpecKey, in.Group.SpecHash, in.Group.UpdatedBy, in.Group.UpdatedByCommitHash, now, in.Group.ID,
 	); err != nil {
 		return v, fmt.Errorf("postgres: PublishAPIGroupVersion update group: %w", err)
 	}
@@ -917,12 +930,12 @@ func insertAPIEndpointTx(ctx context.Context, tx *sql.Tx, e catalog.APIEndpoint)
 			 operation_id, method, path, summary, description,
 			 tags, token_count, parameters, request_body, responses,
 			 example_requests, example_responses, ord,
-			 created_by, created_at, updated_at)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
+			 created_by, created_by_commit_hash, created_at, updated_at)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`,
 		e.ID, e.APIGroupID, e.APIGroupVersionID, e.ServiceID, e.OrgID,
 		e.OperationID, e.Method, e.Path, e.Summary, e.Description,
 		pq.Array(tags), e.TokenCount, params, reqBody, resps, exampleReqs, exampleResps, e.Order,
-		e.CreatedBy, e.CreatedAt, e.UpdatedAt,
+		e.CreatedBy, e.CreatedByCommitHash, e.CreatedAt, e.UpdatedAt,
 	)
 	return err
 }
@@ -936,6 +949,7 @@ func scanAPIEndpoint(row interface{ Scan(...any) error }) (catalog.APIEndpoint, 
 		&e.OperationID, &e.Method, &e.Path, &e.Summary, &e.Description,
 		&tags, &e.TokenCount, &params, &reqBody, &resps, &exampleReqs, &exampleResps, &e.Order,
 		&e.CreatedBy, &e.UpdatedBy,
+		&e.CreatedByCommitHash, &e.UpdatedByCommitHash,
 		&e.CreatedAt, &e.UpdatedAt, &e.DeletedAt, &e.DeletedBy,
 	)
 	if err != nil {

@@ -97,7 +97,7 @@ func (c *Client) tokenRequest(ctx context.Context, endpoint string, form url.Val
 	if err != nil {
 		return Tokens{}, fmt.Errorf("figma: token request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode != http.StatusOK {
 		return Tokens{}, fmt.Errorf("figma: token endpoint returned %d: %s", resp.StatusCode, body)
@@ -167,7 +167,7 @@ func (c *Client) apiGet(ctx context.Context, accessToken, path string, dst any) 
 	if err != nil {
 		return fmt.Errorf("figma: request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		return ErrUnauthorized
