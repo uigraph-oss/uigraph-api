@@ -22,11 +22,16 @@ func (h *Handler) Summary(w http.ResponseWriter, r *http.Request) {
 	modelID := q.Get("model_id")
 	period, since := parsePeriod(q.Get("period"))
 
-	summary, err := h.store.GetSavingsSummary(r.Context(), r.PathValue("orgID"), modelID, since)
+	summary, err := h.store.GetSavingsSummary(r.Context(), r.PathValue("orgID"), since)
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
 	}
+	m := h.pricing.PriceFor(modelID)
 	summary.Period = period
+	summary.ModelID = m.ModelID
+	summary.CostServedUSD = costUSD(summary.TotalTokensServed, m.InputCostPerMillion)
+	summary.CostRawUSD = costUSD(summary.TotalTokensRawEquivalent, m.InputCostPerMillion)
+	summary.CostSavedUSD = costUSD(summary.TotalTokensSaved, m.InputCostPerMillion)
 	httputil.JSON(w, http.StatusOK, summary)
 }
