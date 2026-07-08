@@ -23,6 +23,7 @@ type UsageEvent struct {
 	ResponseSizeBytes   int       `json:"responseSizeBytes"`
 	ClientName          *string   `json:"clientName,omitempty"`
 	ClientVersion       *string   `json:"clientVersion,omitempty"`
+	DurationMs          int       `json:"durationMs"`
 	CreatedAt           time.Time `json:"createdAt"`
 }
 
@@ -40,6 +41,9 @@ type SavingsSummary struct {
 	CostRawUSD               float64 `json:"costRawUsd"`
 	CostSavedUSD             float64 `json:"costSavedUsd"`
 	UniqueUsersCount         int     `json:"uniqueUsersCount"`
+	TotalDurationMs          int     `json:"totalDurationMs"`
+	EstAgentTimeMs           int     `json:"estAgentTimeMs"`
+	TimeSavedMs              int     `json:"timeSavedMs"`
 }
 
 // DailySavings is one day's aggregated usage/cost-savings totals.
@@ -52,22 +56,30 @@ type DailySavings struct {
 	CostServedUSD            float64   `json:"costServedUsd"`
 	CostRawUSD               float64   `json:"costRawUsd"`
 	CostSavedUSD             float64   `json:"costSavedUsd"`
+	TotalDurationMs          int       `json:"totalDurationMs"`
+	EstAgentTimeMs           int       `json:"estAgentTimeMs"`
+	TimeSavedMs              int       `json:"timeSavedMs"`
 }
 
 // ToolSavings is one MCP tool's aggregated usage/cost-savings totals.
 type ToolSavings struct {
-	ToolName     string  `json:"toolName"`
-	TotalCalls   int     `json:"totalCalls"`
-	TokensSaved  int     `json:"tokensSaved"`
-	CostSavedUSD float64 `json:"costSavedUsd"`
+	ToolName            string  `json:"toolName"`
+	TotalCalls          int     `json:"totalCalls"`
+	TokensSaved         int     `json:"tokensSaved"`
+	TokensRawEquivalent int     `json:"tokensRawEquivalent"`
+	CostSavedUSD        float64 `json:"costSavedUsd"`
+	TotalDurationMs     int     `json:"totalDurationMs"`
+	EstAgentTimeMs      int     `json:"estAgentTimeMs"`
+	TimeSavedMs         int     `json:"timeSavedMs"`
 }
 
 // ClientSavings is one coding tool's (MCP client's) aggregated usage/cost-savings totals.
 type ClientSavings struct {
-	ClientName   string  `json:"clientName"`
-	TotalCalls   int     `json:"totalCalls"`
-	TokensSaved  int     `json:"tokensSaved"`
-	CostSavedUSD float64 `json:"costSavedUsd"`
+	ClientName      string  `json:"clientName"`
+	TotalCalls      int     `json:"totalCalls"`
+	TokensSaved     int     `json:"tokensSaved"`
+	CostSavedUSD    float64 `json:"costSavedUsd"`
+	TotalDurationMs int     `json:"totalDurationMs"`
 }
 
 // ModelSavings is one LLM model's aggregated usage/cost-savings totals.
@@ -89,6 +101,7 @@ type UserSavings struct {
 	TotalCalls       int     `json:"totalCalls"`
 	TokensSaved      int     `json:"tokensSaved"`
 	CostSavedUSD     float64 `json:"costSavedUsd"`
+	TotalDurationMs  int     `json:"totalDurationMs"`
 }
 
 // Filter narrows ListUsageEvents results.

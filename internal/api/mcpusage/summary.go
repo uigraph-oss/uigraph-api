@@ -27,11 +27,22 @@ func (h *Handler) Summary(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, r, err)
 		return
 	}
+	tools, err := h.store.GetSavingsByTool(r.Context(), r.PathValue("orgID"), since)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
 	m := h.pricing.PriceFor(modelID)
 	summary.Period = period
 	summary.ModelID = m.ModelID
 	summary.CostServedUSD = costUSD(summary.TotalTokensServed, m.InputCostPerMillion)
 	summary.CostRawUSD = costUSD(summary.TotalTokensRawEquivalent, m.InputCostPerMillion)
 	summary.CostSavedUSD = costUSD(summary.TotalTokensSaved, m.InputCostPerMillion)
+	estAgent := 0
+	for _, t := range tools {
+		estAgent += estAgentTimeMs(t.ToolName, t.TokensRawEquivalent)
+	}
+	summary.EstAgentTimeMs = estAgent
+	summary.TimeSavedMs = timeSavedMs(estAgent, summary.TotalDurationMs)
 	httputil.JSON(w, http.StatusOK, summary)
 }

@@ -14,8 +14,8 @@ func (d *DB) CreateUsageEvent(ctx context.Context, e mcpusage.UsageEvent) error 
 		INSERT INTO mcp_usage_events
 			(id, org_id, user_id, service_account_id, tool_name, resource_ids,
 			 tokens_served, tokens_raw_equivalent, tokens_saved,
-			 response_size_bytes, client_name, client_version, created_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`
+			 response_size_bytes, client_name, client_version, duration_ms, created_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`
 	ids := e.ResourceIDs
 	if ids == nil {
 		ids = []string{}
@@ -24,7 +24,7 @@ func (d *DB) CreateUsageEvent(ctx context.Context, e mcpusage.UsageEvent) error 
 		e.ID, e.OrgID, e.UserID, e.ServiceAccountID,
 		e.ToolName, pq.Array(ids),
 		e.TokensServed, e.TokensRawEquivalent, e.TokensSaved,
-		e.ResponseSizeBytes, e.ClientName, e.ClientVersion, time.Now().UTC(),
+		e.ResponseSizeBytes, e.ClientName, e.ClientVersion, e.DurationMs, time.Now().UTC(),
 	)
 	return wrapErr("CreateUsageEvent", err)
 }
@@ -84,14 +84,15 @@ func (d *DB) GetSavingsSummary(ctx context.Context, orgID string, since time.Tim
 		    COALESCE(SUM(e.tokens_served), 0)              AS total_tokens_served,
 		    COALESCE(SUM(e.tokens_raw_equivalent), 0)      AS total_tokens_raw_equivalent,
 		    COALESCE(SUM(e.tokens_saved), 0)               AS total_tokens_saved,
-		    COUNT(DISTINCT e.user_id)                      AS unique_users_count
+		    COUNT(DISTINCT e.user_id)                      AS unique_users_count,
+		    COALESCE(SUM(e.duration_ms), 0)                AS total_duration_ms
 		FROM mcp_usage_events e
 		WHERE e.org_id = $1
 		  AND e.created_at >= $2`
 	var s mcpusage.SavingsSummary
 	err := d.db.QueryRowContext(ctx, q, orgID, since).Scan(
 		&s.TotalCalls, &s.TotalTokensServed, &s.TotalTokensRawEquivalent, &s.TotalTokensSaved,
-		&s.UniqueUsersCount,
+		&s.UniqueUsersCount, &s.TotalDurationMs,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: GetSavingsSummary: %w", err)
@@ -107,7 +108,8 @@ func (d *DB) GetSavingsTimeseries(ctx context.Context, orgID string, since time.
 		    COUNT(*)                                       AS total_calls,
 		    COALESCE(SUM(e.tokens_served), 0)              AS total_tokens_served,
 		    COALESCE(SUM(e.tokens_raw_equivalent), 0)      AS total_tokens_raw_equivalent,
-		    COALESCE(SUM(e.tokens_saved), 0)               AS total_tokens_saved
+		    COALESCE(SUM(e.tokens_saved), 0)               AS total_tokens_saved,
+		    COALESCE(SUM(e.duration_ms), 0)                AS total_duration_ms
 		FROM mcp_usage_events e
 		WHERE e.org_id = $1
 		  AND e.created_at >= $2
@@ -123,6 +125,7 @@ func (d *DB) GetSavingsTimeseries(ctx context.Context, orgID string, since time.
 		var row mcpusage.DailySavings
 		if scanErr := rows.Scan(
 			&row.Date, &row.TotalCalls, &row.TotalTokensServed, &row.TotalTokensRawEquivalent, &row.TotalTokensSaved,
+			&row.TotalDurationMs,
 		); scanErr != nil {
 			return nil, fmt.Errorf("postgres: GetSavingsTimeseries scan: %w", scanErr)
 		}
@@ -135,8 +138,10 @@ func (d *DB) GetSavingsByTool(ctx context.Context, orgID string, since time.Time
 	const q = `
 		SELECT
 		    e.tool_name,
-		    COUNT(*)                            AS total_calls,
-		    COALESCE(SUM(e.tokens_saved), 0)    AS tokens_saved
+		    COUNT(*)                                   AS total_calls,
+		    COALESCE(SUM(e.tokens_saved), 0)           AS tokens_saved,
+		    COALESCE(SUM(e.tokens_raw_equivalent), 0)  AS tokens_raw_equivalent,
+		    COALESCE(SUM(e.duration_ms), 0)            AS total_duration_ms
 		FROM mcp_usage_events e
 		WHERE e.org_id = $1
 		  AND e.created_at >= $2
@@ -150,7 +155,7 @@ func (d *DB) GetSavingsByTool(ctx context.Context, orgID string, since time.Time
 	var out []mcpusage.ToolSavings
 	for rows.Next() {
 		var row mcpusage.ToolSavings
-		if scanErr := rows.Scan(&row.ToolName, &row.TotalCalls, &row.TokensSaved); scanErr != nil {
+		if scanErr := rows.Scan(&row.ToolName, &row.TotalCalls, &row.TokensSaved, &row.TokensRawEquivalent, &row.TotalDurationMs); scanErr != nil {
 			return nil, fmt.Errorf("postgres: GetSavingsByTool scan: %w", scanErr)
 		}
 		out = append(out, row)
@@ -163,7 +168,8 @@ func (d *DB) GetSavingsByClient(ctx context.Context, orgID string, since time.Ti
 		SELECT
 		    COALESCE(e.client_name, 'unknown')  AS client_name,
 		    COUNT(*)                            AS total_calls,
-		    COALESCE(SUM(e.tokens_saved), 0)    AS tokens_saved
+		    COALESCE(SUM(e.tokens_saved), 0)    AS tokens_saved,
+		    COALESCE(SUM(e.duration_ms), 0)     AS total_duration_ms
 		FROM mcp_usage_events e
 		WHERE e.org_id = $1
 		  AND e.created_at >= $2
@@ -177,7 +183,7 @@ func (d *DB) GetSavingsByClient(ctx context.Context, orgID string, since time.Ti
 	var out []mcpusage.ClientSavings
 	for rows.Next() {
 		var row mcpusage.ClientSavings
-		if scanErr := rows.Scan(&row.ClientName, &row.TotalCalls, &row.TokensSaved); scanErr != nil {
+		if scanErr := rows.Scan(&row.ClientName, &row.TotalCalls, &row.TokensSaved, &row.TotalDurationMs); scanErr != nil {
 			return nil, fmt.Errorf("postgres: GetSavingsByClient scan: %w", scanErr)
 		}
 		out = append(out, row)
@@ -191,7 +197,8 @@ func (d *DB) GetSavingsByUser(ctx context.Context, orgID string, since time.Time
 		    e.user_id,
 		    e.service_account_id,
 		    COUNT(*)                            AS total_calls,
-		    COALESCE(SUM(e.tokens_saved), 0)    AS tokens_saved
+		    COALESCE(SUM(e.tokens_saved), 0)    AS tokens_saved,
+		    COALESCE(SUM(e.duration_ms), 0)     AS total_duration_ms
 		FROM mcp_usage_events e
 		WHERE e.org_id = $1
 		  AND e.created_at >= $2
@@ -205,7 +212,7 @@ func (d *DB) GetSavingsByUser(ctx context.Context, orgID string, since time.Time
 	var out []mcpusage.UserSavings
 	for rows.Next() {
 		var row mcpusage.UserSavings
-		if scanErr := rows.Scan(&row.UserID, &row.ServiceAccountID, &row.TotalCalls, &row.TokensSaved); scanErr != nil {
+		if scanErr := rows.Scan(&row.UserID, &row.ServiceAccountID, &row.TotalCalls, &row.TokensSaved, &row.TotalDurationMs); scanErr != nil {
 			return nil, fmt.Errorf("postgres: GetSavingsByUser scan: %w", scanErr)
 		}
 		out = append(out, row)
