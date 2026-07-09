@@ -600,7 +600,7 @@ func (d *DB) ListAPIGroupVersions(ctx context.Context, apiGroupID string) ([]cat
 		if err := rows.Scan(
 			&v.ID, &v.APIGroupID, &v.VersionNumber, &v.Label,
 			&v.SpecKey, &v.SpecHash, &v.IsAutoVersion,
-			&v.CreatedBy, &v.CreatedAt,
+			&v.CreatedBy, &v.CreatedByCommitHash, &v.CreatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("postgres: ListAPIGroupVersions scan: %w", err)
 		}
