@@ -221,7 +221,7 @@ func (d *DB) serviceStatsForID(ctx context.Context, orgID, serviceID string) (ca
 	}
 	out.DocCount = docCount
 
-	dbTableCount, err := d.countOptionalServiceRows(ctx, "service_dbs", orgID, serviceID)
+	dbTableCount, err := d.countServiceDBTables(ctx, orgID, serviceID)
 	if err != nil {
 		return out, err
 	}
@@ -269,6 +269,75 @@ func (d *DB) countOptionalServiceRows(ctx context.Context, tableName, orgID, ser
 		return 0, fmt.Errorf("postgres: ListServiceStats %s count: %w", tableName, err)
 	}
 	return count, nil
+}
+
+func (d *DB) countServiceDBTables(ctx context.Context, orgID, serviceID string) (int, error) {
+	exists, err := d.tableExists(ctx, "service_dbs")
+	if err != nil || !exists {
+		return 0, err
+	}
+
+	const q = `
+		SELECT schema_json
+		FROM service_dbs
+		WHERE service_id = $1 AND org_id = $2 AND deleted_at IS NULL`
+	rows, err := d.db.QueryContext(ctx, q, serviceID, orgID)
+	if err != nil {
+		return 0, fmt.Errorf("postgres: ListServiceStats service_dbs tables: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	total := 0
+	for rows.Next() {
+		var raw []byte
+		if err := rows.Scan(&raw); err != nil {
+			return 0, fmt.Errorf("postgres: ListServiceStats service_dbs scan: %w", err)
+		}
+		total += countTablesInSchemaJSON(raw)
+	}
+	return total, rows.Err()
+}
+
+func countTablesInSchemaJSON(raw []byte) int {
+	if len(raw) == 0 {
+		return 0
+	}
+	var asString string
+	if err := json.Unmarshal(raw, &asString); err == nil {
+		raw = []byte(asString)
+	}
+	var parsed struct {
+		Tables      []json.RawMessage `json:"tables"`
+		NoSQLSchema struct {
+			Dynamo *struct {
+				Table json.RawMessage `json:"table"`
+			} `json:"dynamo"`
+			Mongo *struct {
+				Collections []json.RawMessage `json:"collections"`
+			} `json:"mongo"`
+			JSON *struct {
+				Collections []json.RawMessage `json:"collections"`
+			} `json:"json"`
+		} `json:"noSQLSchema"`
+	}
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return 0
+	}
+
+	count := len(parsed.Tables)
+	if dyn := parsed.NoSQLSchema.Dynamo; dyn != nil {
+		table := strings.TrimSpace(string(dyn.Table))
+		if table != "" && table != "null" {
+			count++
+		}
+	}
+	if mongo := parsed.NoSQLSchema.Mongo; mongo != nil {
+		count += len(mongo.Collections)
+	}
+	if jsonDoc := parsed.NoSQLSchema.JSON; jsonDoc != nil {
+		count += len(jsonDoc.Collections)
+	}
+	return count
 }
 
 func (d *DB) countOptionalTestCases(ctx context.Context, orgID, serviceID string) (int, error) {
