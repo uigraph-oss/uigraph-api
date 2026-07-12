@@ -9,11 +9,14 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/uigraph/app/internal/cache"
 	catalogpkg "github.com/uigraph/app/internal/catalog"
 	"github.com/uigraph/app/internal/httputil"
 	authmw "github.com/uigraph/app/internal/middleware"
 	storepkg "github.com/uigraph/app/internal/store"
 )
+
+const serviceStatsTTL = 60 * time.Second
 
 // List
 // @Summary  List
@@ -72,11 +75,34 @@ func (h *Handler) ListStats(w http.ResponseWriter, r *http.Request) {
 		serviceID = &v
 	}
 
+	scope := "all"
+	if serviceID != nil {
+		scope = *serviceID
+	}
+	key := cache.ServiceStatsKey(orgID, scope)
+
+	if h.cache != nil {
+		if cached, err := h.cache.Get(r.Context(), key); err == nil {
+			var stats []catalogpkg.ServiceStats
+			if json.Unmarshal([]byte(cached), &stats) == nil {
+				httputil.JSON(w, http.StatusOK, map[string]any{"stats": stats})
+				return
+			}
+		}
+	}
+
 	stats, err := h.store.ListServiceStats(r.Context(), orgID, serviceID)
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
 	}
+
+	if h.cache != nil {
+		if encoded, err := json.Marshal(stats); err == nil {
+			_ = h.cache.Set(r.Context(), key, string(encoded), serviceStatsTTL)
+		}
+	}
+
 	httputil.JSON(w, http.StatusOK, map[string]any{"stats": stats})
 }
 

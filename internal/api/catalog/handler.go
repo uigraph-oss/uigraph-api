@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/uigraph/app/internal/cache"
 	catalogpkg "github.com/uigraph/app/internal/catalog"
 	diagrampkg "github.com/uigraph/app/internal/diagram"
 	docspkg "github.com/uigraph/app/internal/docs"
@@ -133,11 +134,12 @@ type Handler struct {
 	store   store
 	storage objectStore
 	queue   *queue.Queue // may be nil
+	cache   cache.Client // may be nil
 }
 
 // New constructs a Handler.
-func New(s store, st objectStore, q *queue.Queue) *Handler {
-	return &Handler{store: s, storage: st, queue: q}
+func New(s store, st objectStore, q *queue.Queue, c cache.Client) *Handler {
+	return &Handler{store: s, storage: st, queue: q, cache: c}
 }
 
 func (h *Handler) enqueueScreenshot(ctx context.Context, orgID, diagramID string) {
@@ -156,9 +158,10 @@ func Register(
 	s store,
 	st objectStore,
 	q *queue.Queue,
+	c cache.Client,
 	requireScope func(scope, method, pattern string, h http.HandlerFunc),
 ) {
-	h := New(s, st, q)
+	h := New(s, st, q, c)
 	// By-id lookups (resolve a leaf id to its full record incl. parent ids)
 	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/endpoints/{endpointID}", h.GetAPIEndpointByID)
 	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/test-packs/{testPackID}", h.GetTestPackByID)

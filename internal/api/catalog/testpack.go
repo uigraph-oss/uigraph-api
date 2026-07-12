@@ -488,6 +488,8 @@ func (h *Handler) CreateTestRun(w http.ResponseWriter, r *http.Request) {
 	tr.UpdatedBy = &p.UserID
 	tr.ExecutedBy = p.UserID
 	tr.ExecutedAt = now
+	tr.StartedBy = &p.UserID
+	tr.StartedAt = &now
 	tr.CreatedAt = now
 	tr.UpdatedAt = now
 	if tr.Status == "" {
