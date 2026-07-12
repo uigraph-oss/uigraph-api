@@ -35,6 +35,10 @@ func AssetURLKey(id string) string {
 	return "asset:url:" + id
 }
 
+func ServiceStatsKey(orgID, serviceID string) string {
+	return "service:stats:" + orgID + ":" + serviceID
+}
+
 type redisClient struct {
 	rc *redis.Client
 }

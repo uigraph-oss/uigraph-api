@@ -260,7 +260,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	component.Register(mux, s, st, protected, scopeFn)
 
 	// ── Services + API Groups + API Endpoints ─────────────────────────────
-	catalogapi.Register(mux, s, st, q, scopeFn)
+	catalogapi.Register(mux, s, st, q, c, scopeFn)
 
 	// ── Maps + Frames + Focal Points + Canvas ─────────────────────────────
 	mapspkg.Register(mux, s, st, scopeFn)
