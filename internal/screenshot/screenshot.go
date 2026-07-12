@@ -223,7 +223,7 @@ func (w *Worker) capture(browser *rod.Browser, job queue.ScreenshotJob) ([]byte,
 	if err := page.SetViewport(&proto.EmulationSetDeviceMetricsOverride{
 		Width:             int(math.Ceil(x + cw)),
 		Height:            int(math.Ceil(y + ch)),
-		DeviceScaleFactor: 2,
+		DeviceScaleFactor: 3,
 	}); err != nil {
 		return nil, fmt.Errorf("set viewport: %w", err)
 	}
