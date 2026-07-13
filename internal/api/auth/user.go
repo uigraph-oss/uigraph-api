@@ -1,11 +1,13 @@
 package auth
 
 import (
+	"context"
 	"net/http"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/uigraph/app/internal/asset"
 	"github.com/uigraph/app/internal/cache"
 	"github.com/uigraph/app/internal/httputil"
 	"github.com/uigraph/app/internal/org"
@@ -13,12 +15,13 @@ import (
 )
 
 type UserHandler struct {
-	store org.UserStore
-	cache cache.Client // may be nil
+	store  org.UserStore
+	cache  cache.Client    // may be nil
+	assets *asset.Resolver // presigns avatar URLs; may be nil
 }
 
-func NewUserHandler(s org.UserStore, c cache.Client) *UserHandler {
-	return &UserHandler{store: s, cache: c}
+func NewUserHandler(s org.UserStore, c cache.Client, assets *asset.Resolver) *UserHandler {
+	return &UserHandler{store: s, cache: c, assets: assets}
 }
 
 // ── Request / Response types ─────────────────────────────────────────────────
@@ -30,15 +33,30 @@ type userResponse struct {
 	Login      string     `json:"login"`
 	Disabled   bool       `json:"disabled"`
 	Role       string     `json:"role"`
+	AvatarURL  string     `json:"avatarUrl,omitempty"`
 	LastSeenAt *time.Time `json:"lastSeenAt,omitempty"`
 	CreatedAt  time.Time  `json:"createdAt"`
 	UpdatedAt  time.Time  `json:"updatedAt"`
 }
 
-func userToResponse(u org.User) userResponse {
+// avatarURL presigns the avatar asset id, returning "" when there is no avatar
+// or no resolver configured.
+func (h *UserHandler) avatarURL(ctx context.Context, assetID *string) string {
+	if assetID == nil || *assetID == "" || h.assets == nil {
+		return ""
+	}
+	u, err := h.assets.Resolve(ctx, *assetID)
+	if err != nil {
+		return ""
+	}
+	return u
+}
+
+func (h *UserHandler) userToResponse(ctx context.Context, u org.User) userResponse {
 	return userResponse{
 		ID: u.ID, Email: u.Email, Name: u.Name, Login: u.Login,
 		Disabled: u.Disabled, Role: u.Role,
+		AvatarURL:  h.avatarURL(ctx, u.AvatarAssetID),
 		LastSeenAt: u.LastSeenAt,
 		CreatedAt:  u.CreatedAt, UpdatedAt: u.UpdatedAt,
 	}
@@ -78,7 +96,7 @@ func (h *UserHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]userResponse, len(users))
 	for i, u := range users {
-		out[i] = userToResponse(u)
+		out[i] = h.userToResponse(r.Context(), u)
 	}
 	httputil.JSON(w, http.StatusOK, map[string]any{"users": out})
 }
@@ -138,7 +156,7 @@ func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, r, err)
 		return
 	}
-	httputil.JSON(w, http.StatusCreated, userToResponse(u))
+	httputil.JSON(w, http.StatusCreated, h.userToResponse(r.Context(), u))
 }
 
 // Get returns a single user by ID.
@@ -164,7 +182,7 @@ func (h *UserHandler) Get(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, r, store.ErrNotFound)
 		return
 	}
-	httputil.JSON(w, http.StatusOK, userToResponse(*u))
+	httputil.JSON(w, http.StatusOK, h.userToResponse(r.Context(), *u))
 }
 
 // Update changes a user's name, role, or disabled status.
@@ -212,7 +230,7 @@ func (h *UserHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if h.cache != nil {
 		_ = h.cache.Del(r.Context(), cache.ActorKey(userID))
 	}
-	httputil.JSON(w, http.StatusOK, userToResponse(*u))
+	httputil.JSON(w, http.StatusOK, h.userToResponse(r.Context(), *u))
 }
 
 // Disable marks a user as disabled.

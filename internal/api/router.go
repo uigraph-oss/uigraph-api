@@ -139,7 +139,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	protected("DELETE", "/api/v1/users/me/avatar", avatarH.DeleteUserAvatar)
 
 	// Users (global — server-admin only)
-	userH := auth.NewUserHandler(s, c)
+	userH := auth.NewUserHandler(s, c, assetResolver)
 	serverAdmin("GET", "/api/v1/users", userH.List)
 	serverAdmin("POST", "/api/v1/users", userH.Create)
 	serverAdmin("GET", "/api/v1/users/{userID}", userH.Get)
