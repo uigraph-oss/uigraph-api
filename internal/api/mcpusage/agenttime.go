@@ -1,6 +1,6 @@
 package mcpusage
 
-const fallbackAgentTokensPerSecond = 50.0
+const fallbackAgentTokensPerSecond = 75.0
 
 var agentTokensPerSecondByTool = map[string]float64{}
 

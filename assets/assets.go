@@ -5,3 +5,6 @@ import "embed"
 
 //go:embed component-icons/focal/*.svg component-icons/flow/*.svg
 var ComponentIcons embed.FS
+
+//go:embed models.dev.json
+var ModelsDevAPI []byte
