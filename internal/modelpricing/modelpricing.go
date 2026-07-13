@@ -1,16 +1,11 @@
 package modelpricing
 
 import (
-	"context"
 	"encoding/json"
-	"net/http"
 	"sync"
-	"time"
+
+	"github.com/uigraph/app/assets"
 )
-
-const apiURL = "https://models.dev/api.json"
-
-const refreshInterval = 24 * time.Hour
 
 type Model struct {
 	ModelID              string  `json:"modelId"`
@@ -36,36 +31,16 @@ var catalog = []Model{
 type Provider struct {
 	mu     sync.RWMutex
 	models []Model
-	client *http.Client
 }
 
 func New() *Provider {
-	p := &Provider{client: &http.Client{Timeout: 30 * time.Second}}
+	p := &Provider{}
 	p.models = append([]Model(nil), catalog...)
-	_ = p.refresh(context.Background())
-	go p.loop()
+	p.load()
 	return p
 }
 
-func (p *Provider) loop() {
-	t := time.NewTicker(refreshInterval)
-	defer t.Stop()
-	for range t.C {
-		_ = p.refresh(context.Background())
-	}
-}
-
-func (p *Provider) refresh(ctx context.Context) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
-	if err != nil {
-		return err
-	}
-	resp, err := p.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
+func (p *Provider) load() {
 	var raw map[string]struct {
 		Models map[string]struct {
 			Name string `json:"name"`
@@ -75,8 +50,8 @@ func (p *Provider) refresh(ctx context.Context) error {
 			} `json:"cost"`
 		} `json:"models"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
-		return err
+	if err := json.Unmarshal(assets.ModelsDevAPI, &raw); err != nil {
+		return
 	}
 
 	updated := make([]Model, len(catalog))
@@ -100,7 +75,6 @@ func (p *Provider) refresh(ctx context.Context) error {
 	p.mu.Lock()
 	p.models = updated
 	p.mu.Unlock()
-	return nil
 }
 
 func (p *Provider) Models() []Model {
