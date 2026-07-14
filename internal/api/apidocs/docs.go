@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -81,6 +82,47 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httputil.JSON(w, http.StatusOK, doc)
+}
+
+// @Summary  GetContent
+// @Tags     docs
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    docID  path  string  true  "docID"
+// @Success  200  {string}  string  "raw file bytes"
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/docs/{docID}/content [get]
+func (h *Handler) GetContent(w http.ResponseWriter, r *http.Request) {
+	orgID := r.PathValue("orgID")
+	doc, err := h.store.GetDoc(r.Context(), r.PathValue("docID"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if doc == nil || doc.DeletedAt != nil || doc.OrgID != orgID {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+	if doc.FileAssetID == "" {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+	rc, err := h.storage.Download(r.Context(), storage.AssetKey(doc.FileAssetID))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	defer rc.Close()
+	contentType := doc.FileType
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.Copy(w, rc)
 }
 
 // @Summary  Create

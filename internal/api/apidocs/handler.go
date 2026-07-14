@@ -47,6 +47,7 @@ func Register(
 	requireScope("docs:read", "GET", "/api/v1/orgs/{orgID}/docs", h.List)
 	requireScope("docs:write", "POST", "/api/v1/orgs/{orgID}/docs", h.Create)
 	requireScope("docs:read", "GET", "/api/v1/orgs/{orgID}/docs/{docID}", h.Get)
+	requireScope("docs:read", "GET", "/api/v1/orgs/{orgID}/docs/{docID}/content", h.GetContent)
 	requireScope("docs:write", "PUT", "/api/v1/orgs/{orgID}/docs/{docID}", h.Update)
 	requireScope("docs:write", "DELETE", "/api/v1/orgs/{orgID}/docs/{docID}", h.Delete)
 }
