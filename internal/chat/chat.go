@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 )
 
@@ -21,12 +22,13 @@ type ChatSession struct {
 }
 
 type ChatMessage struct {
-	ID            string    `json:"id"`
-	OrgID         string    `json:"orgId"`
-	ChatSessionID string    `json:"chatSessionId"`
-	Role          string    `json:"role"`
-	Content       string    `json:"content"`
-	CreatedAt     time.Time `json:"createdAt"`
+	ID            string          `json:"id"`
+	OrgID         string          `json:"orgId"`
+	ChatSessionID string          `json:"chatSessionId"`
+	Role          string          `json:"role"`
+	Content       string          `json:"content"`
+	Parts         json.RawMessage `json:"parts,omitempty"`
+	CreatedAt     time.Time       `json:"createdAt"`
 }
 
 type Store interface {

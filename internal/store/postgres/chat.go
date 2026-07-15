@@ -99,13 +99,17 @@ func scanChatSession(row interface{ Scan(...any) error }) (chat.ChatSession, err
 func (d *DB) CreateChatMessage(ctx context.Context, m chat.ChatMessage) error {
 	const q = `
 		INSERT INTO chat_messages
-			(id, org_id, chat_session_id, role, content, created_at)
-		VALUES ($1,$2,$3,$4,$5,$6)`
+			(id, org_id, chat_session_id, role, content, parts, created_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7)`
 	if m.CreatedAt.IsZero() {
 		m.CreatedAt = time.Now().UTC()
 	}
+	var parts any
+	if len(m.Parts) > 0 {
+		parts = []byte(m.Parts)
+	}
 	if _, err := d.db.ExecContext(ctx, q,
-		m.ID, m.OrgID, m.ChatSessionID, m.Role, m.Content, m.CreatedAt,
+		m.ID, m.OrgID, m.ChatSessionID, m.Role, m.Content, parts, m.CreatedAt,
 	); err != nil {
 		return wrapErr("CreateChatMessage", err)
 	}
@@ -118,7 +122,7 @@ func (d *DB) CreateChatMessage(ctx context.Context, m chat.ChatMessage) error {
 
 func (d *DB) ListChatMessages(ctx context.Context, chatSessionID string) ([]chat.ChatMessage, error) {
 	const q = `
-		SELECT id, org_id, chat_session_id, role, content, created_at
+		SELECT id, org_id, chat_session_id, role, content, parts, created_at
 		FROM chat_messages
 		WHERE chat_session_id = $1
 		ORDER BY created_at ASC`
@@ -141,8 +145,10 @@ func (d *DB) ListChatMessages(ctx context.Context, chatSessionID string) ([]chat
 
 func scanChatMessage(row interface{ Scan(...any) error }) (chat.ChatMessage, error) {
 	var m chat.ChatMessage
+	var parts []byte
 	err := row.Scan(
-		&m.ID, &m.OrgID, &m.ChatSessionID, &m.Role, &m.Content, &m.CreatedAt,
+		&m.ID, &m.OrgID, &m.ChatSessionID, &m.Role, &m.Content, &parts, &m.CreatedAt,
 	)
+	m.Parts = parts
 	return m, err
 }

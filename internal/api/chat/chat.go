@@ -222,8 +222,9 @@ func (h *Handler) CreateMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Role    string `json:"role"`
-		Content string `json:"content"`
+		Role    string          `json:"role"`
+		Content string          `json:"content"`
+		Parts   json.RawMessage `json:"parts"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -244,6 +245,7 @@ func (h *Handler) CreateMessage(w http.ResponseWriter, r *http.Request) {
 		ChatSessionID: sessionID,
 		Role:          body.Role,
 		Content:       body.Content,
+		Parts:         body.Parts,
 		CreatedAt:     time.Now().UTC(),
 	}
 	if err := h.store.CreateChatMessage(r.Context(), m); err != nil {
