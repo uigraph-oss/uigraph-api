@@ -12,7 +12,6 @@ import (
 	authmw "github.com/uigraph/app/internal/middleware"
 )
 
-// ListSessions
 // @Summary  ListChatSessions
 // @Tags     chat
 // @Security BearerAuth
@@ -36,7 +35,6 @@ func (h *Handler) ListSessions(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"sessions": sessions})
 }
 
-// CreateSession
 // @Summary  CreateChatSession
 // @Tags     chat
 // @Security BearerAuth
@@ -85,7 +83,6 @@ func (h *Handler) CreateSession(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusCreated, s)
 }
 
-// GetSession returns a session together with its ordered messages.
 // @Summary  GetChatSession
 // @Tags     chat
 // @Security BearerAuth
@@ -111,7 +108,6 @@ func (h *Handler) GetSession(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"session": s, "messages": messages})
 }
 
-// UpdateSession updates a session's title and/or pinned state.
 // @Summary  UpdateChatSession
 // @Tags     chat
 // @Security BearerAuth
@@ -156,7 +152,6 @@ func (h *Handler) UpdateSession(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, s)
 }
 
-// DeleteSession
 // @Summary  DeleteChatSession
 // @Tags     chat
 // @Security BearerAuth
@@ -182,7 +177,6 @@ func (h *Handler) DeleteSession(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ListMessages returns a session's ordered messages.
 // @Summary  ListChatMessages
 // @Tags     chat
 // @Security BearerAuth
@@ -207,8 +201,6 @@ func (h *Handler) ListMessages(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"messages": messages})
 }
 
-// CreateMessage appends a message to a session. Called by the frontend for user
-// messages and by uigraph-gateway for assistant messages.
 // @Summary  CreateChatMessage
 // @Tags     chat
 // @Security BearerAuth

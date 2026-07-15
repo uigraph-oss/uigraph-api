@@ -109,7 +109,6 @@ func (d *DB) CreateChatMessage(ctx context.Context, m chat.ChatMessage) error {
 	); err != nil {
 		return wrapErr("CreateChatMessage", err)
 	}
-	// Bump the session's updated_at so it sorts to the top of the list.
 	_, err := d.db.ExecContext(ctx,
 		`UPDATE chat_sessions SET updated_at=$1 WHERE id=$2 AND deleted_at IS NULL`,
 		m.CreatedAt, m.ChatSessionID,

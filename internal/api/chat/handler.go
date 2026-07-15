@@ -1,6 +1,3 @@
-// Package chat provides HTTP handlers for AI chat sessions and messages.
-// Sessions are personal to the user who created them; all routes are scoped to
-// the {orgID} path segment and the authenticated principal.
 package chat
 
 import (
@@ -13,8 +10,6 @@ import (
 	storepkg "github.com/uigraph/app/internal/store"
 )
 
-// store is the minimal persistence interface this package needs.
-// postgres.DB satisfies it automatically.
 type store interface {
 	CreateChatSession(ctx context.Context, s chatpkg.ChatSession) error
 	GetChatSession(ctx context.Context, id string) (*chatpkg.ChatSession, error)
@@ -25,18 +20,14 @@ type store interface {
 	ListChatMessages(ctx context.Context, chatSessionID string) ([]chatpkg.ChatMessage, error)
 }
 
-// Handler serves /api/v1/orgs/{orgID}/chat-sessions and nested messages.
 type Handler struct {
 	store store
 }
 
-// New constructs a Handler.
 func New(s store) *Handler {
 	return &Handler{store: s}
 }
 
-// Register wires chat routes into mux.
-// requireScope signature: func(scope, method, pattern string, h http.HandlerFunc)
 func Register(
 	mux *http.ServeMux,
 	s store,
@@ -52,9 +43,6 @@ func Register(
 	requireScope("chat:write", "POST", "/api/v1/orgs/{orgID}/chat-sessions/{sessionID}/messages", h.CreateMessage)
 }
 
-// ownedSession loads a session and verifies it belongs to orgID and is owned by
-// the authenticated user. It writes the appropriate error and returns ok=false
-// when the session is missing, deleted, or not owned by the caller.
 func (h *Handler) ownedSession(w http.ResponseWriter, r *http.Request, sessionID string) (*chatpkg.ChatSession, bool) {
 	orgID := r.PathValue("orgID")
 	p, ok := authmw.PrincipalFromCtx(r.Context())

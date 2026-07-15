@@ -1,6 +1,3 @@
-// Package chat defines the ChatSession and ChatMessage domain types and their
-// store interface. Chat sessions are per-user AI assistant conversations scoped
-// to an org; each session owns an ordered list of messages.
 package chat
 
 import (
@@ -8,7 +5,6 @@ import (
 	"time"
 )
 
-// ChatSession is a single AI assistant conversation owned by one user.
 type ChatSession struct {
 	ID           string     `json:"id"`
 	OrgID        string     `json:"orgId"`
@@ -24,7 +20,6 @@ type ChatSession struct {
 	DeletedBy    *string    `json:"deletedBy,omitempty"`
 }
 
-// ChatMessage is a single turn in a session. Messages are immutable once written.
 type ChatMessage struct {
 	ID            string    `json:"id"`
 	OrgID         string    `json:"orgId"`
@@ -34,7 +29,6 @@ type ChatMessage struct {
 	CreatedAt     time.Time `json:"createdAt"`
 }
 
-// Store is the persistence interface for chat sessions and messages.
 type Store interface {
 	CreateChatSession(ctx context.Context, s ChatSession) error
 	GetChatSession(ctx context.Context, id string) (*ChatSession, error)

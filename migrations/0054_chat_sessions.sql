@@ -1,8 +1,3 @@
--- Chat sessions: per-user AI assistant conversations, scoped to an org. Each
--- session owns an ordered list of chat_messages. Sessions are personal to the
--- user who created them (owner_user_id). Messages are never edited; the assistant
--- reply is written by uigraph-gateway after streaming completes.
-
 CREATE TABLE chat_sessions (
     id              UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
     org_id          UUID        NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,

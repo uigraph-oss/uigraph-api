@@ -266,7 +266,6 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	// ── Maps + Frames + Focal Points + Canvas ─────────────────────────────
 	mapspkg.Register(mux, s, st, scopeFn)
 
-	// ── AI chat sessions + messages ───────────────────────────────────────
 	chatapi.Register(mux, s, scopeFn)
 
 	// ── Comments ──────────────────────────────────────────────────────────
