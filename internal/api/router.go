@@ -34,23 +34,11 @@ import (
 	"github.com/uigraph/app/internal/store"
 )
 
-// New builds and returns the root HTTP handler for uigraph-app.
-// Routes:
-//
-//	/healthz                                  — liveness + readiness probes (unauthenticated)
-//	/livez                                    — liveness probe
-//	/api/v1/auth/*                            — session, OAuth callbacks
-//	/api/v1/users/*                           — user management  (requires auth)
-//	/api/v1/orgs/*                            — org + nested resources (requires auth)
-//	/api/v1/orgs/{orgID}/folders/*            — folder hierarchy
-//	/api/v1/orgs/{orgID}/diagrams/*           — diagrams + versions
-//	/api/v1/orgs/{orgID}/maps/*               — maps + frames + focal points + canvas
 func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st storage.Client, c cache.Client, q *queue.Queue) http.Handler {
 	mux := http.NewServeMux()
 	mw := authmw.New(bearer, s)
 	authorizer := authz.New(s, s)
 
-	// ── Unauthenticated ───────────────────────────────────────────────────
 	healthHandler := &health.Handler{}
 	mux.HandleFunc("GET /healthz", healthHandler.Healthz)
 	mux.HandleFunc("GET /livez", healthHandler.Livez)
@@ -63,15 +51,10 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	mux.HandleFunc("GET /api/v1/auth/callback/{provider}", sessionH.OAuthCallback)
 	mux.HandleFunc("POST /api/v1/auth/saml/acs", sessionH.SAMLCallback)
 
-	// ── Authenticated ─────────────────────────────────────────────────────
 	protected := func(method, pattern string, h http.HandlerFunc) {
 		mux.Handle(method+" "+pattern, mw.Handler(http.HandlerFunc(h)))
 	}
 
-	// requireScope authenticates the request and authorizes it against scope.
-	// Service accounts are checked against their granted scopes; users are checked
-	// against the scopes resolved from their org role in the {orgID} path segment.
-	// The global server_admin axis is intentionally not consulted here.
 	requireScope := func(scope authz.Scope, method, pattern string, h http.HandlerFunc) {
 		guarded := func(w http.ResponseWriter, r *http.Request) {
 			p, ok := authmw.PrincipalFromCtx(r.Context())
@@ -102,14 +85,10 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 		mux.Handle(method+" "+pattern, mw.Handler(http.HandlerFunc(guarded)))
 	}
 
-	// scopeFn bridges the typed authz.Scope requireScope to the plain-string
-	// signature expected by the per-domain Register() functions.
 	scopeFn := func(scope, method, pattern string, h http.HandlerFunc) {
 		requireScope(authz.Scope(scope), method, pattern, h)
 	}
 
-	// serverAdmin requires the authenticated principal to hold the global
-	// server_admin role. Applied to global user management and SSO configuration.
 	serverAdmin := func(method, pattern string, h http.HandlerFunc) {
 		guarded := func(w http.ResponseWriter, r *http.Request) {
 			p, ok := authmw.PrincipalFromCtx(r.Context())
@@ -127,19 +106,16 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 		mux.Handle(method+" "+pattern, mw.Handler(http.HandlerFunc(guarded)))
 	}
 
-	// Session
 	protected("POST", "/api/v1/auth/logout", sessionH.Logout)
 	protected("POST", "/api/v1/auth/session-token", sessionH.SessionToken)
 	protected("GET", "/api/v1/auth/me", sessionH.Me)
 	protected("GET", "/api/v1/auth/orgs", sessionH.MyOrgs)
 
-	// Avatars — a user sets their own; a service account's is set by an admin (below).
 	avatarH := auth.NewAvatarHandler(s, st, c)
 	protected("POST", "/api/v1/users/me/avatar/prepare", avatarH.PrepareUserAvatarUpload)
 	protected("PUT", "/api/v1/users/me/avatar", avatarH.PutUserAvatar)
 	protected("DELETE", "/api/v1/users/me/avatar", avatarH.DeleteUserAvatar)
 
-	// Users (global — server-admin only)
 	userH := auth.NewUserHandler(s, c, assetResolver)
 	serverAdmin("GET", "/api/v1/users", userH.List)
 	serverAdmin("POST", "/api/v1/users", userH.Create)
@@ -147,7 +123,6 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	serverAdmin("PUT", "/api/v1/users/{userID}", userH.Update)
 	serverAdmin("DELETE", "/api/v1/users/{userID}", userH.Disable)
 
-	// Orgs
 	orgH := auth.NewOrgHandler(s, s, s, assetResolver)
 	protected("GET", "/api/v1/orgs", orgH.List)
 	protected("POST", "/api/v1/orgs", orgH.Create)
@@ -158,18 +133,15 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	requireScope(authz.ScopeOrgUpdate, "DELETE", "/api/v1/orgs/{orgID}/logo", avatarH.DeleteOrgLogo)
 	requireScope(authz.ScopeOrgDelete, "DELETE", "/api/v1/orgs/{orgID}", orgH.Delete)
 
-	// Scopes catalog — shared by role assignment and service-account assignment.
 	saH := auth.NewServiceAccountHandler(s, c)
 	requireScope(authz.ScopeMembersRead, "GET", "/api/v1/orgs/{orgID}/scopes", saH.ListScopes)
 
-	// Members
 	memberH := auth.NewMemberHandler(s, s, s)
 	requireScope(authz.ScopeMembersRead, "GET", "/api/v1/orgs/{orgID}/members", memberH.List)
 	requireScope(authz.ScopeMembersAdd, "POST", "/api/v1/orgs/{orgID}/members", memberH.Add)
 	requireScope(authz.ScopeMembersUpdateRole, "PUT", "/api/v1/orgs/{orgID}/members/{userID}", memberH.UpdateMember)
 	requireScope(authz.ScopeMembersRemove, "DELETE", "/api/v1/orgs/{orgID}/members/{userID}", memberH.Remove)
 
-	// Teams
 	teamH := auth.NewTeamHandler(s)
 	requireScope(authz.ScopeTeamsRead, "GET", "/api/v1/orgs/{orgID}/teams", teamH.List)
 	requireScope(authz.ScopeTeamsCreate, "POST", "/api/v1/orgs/{orgID}/teams", teamH.Create)
@@ -180,7 +152,6 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	requireScope(authz.ScopeTeamsAddMember, "POST", "/api/v1/orgs/{orgID}/teams/{teamID}/members", teamH.AddMember)
 	requireScope(authz.ScopeTeamsRemoveMember, "DELETE", "/api/v1/orgs/{orgID}/teams/{teamID}/members/{userID}", teamH.RemoveMember)
 
-	// Service accounts
 	requireScope(authz.ScopeServiceAccountsRead, "GET", "/api/v1/orgs/{orgID}/service-accounts", saH.List)
 	requireScope(authz.ScopeServiceAccountsCreate, "POST", "/api/v1/orgs/{orgID}/service-accounts", saH.Create)
 	requireScope(authz.ScopeServiceAccountsRead, "GET", "/api/v1/orgs/{orgID}/service-accounts/{saID}", saH.Get)
@@ -193,12 +164,10 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	requireScope(authz.ScopeServiceAccountsCreateToken, "POST", "/api/v1/orgs/{orgID}/service-accounts/{saID}/tokens", saH.CreateToken)
 	requireScope(authz.ScopeServiceAccountsRevokeToken, "DELETE", "/api/v1/orgs/{orgID}/service-accounts/{saID}/tokens/{tokenID}", saH.RevokeToken)
 
-	// Server overview (global — server-admin only)
 	adminH := admin.New(s, cfg)
 	serverAdmin("GET", "/api/v1/server/overview", adminH.Overview)
 	serverAdmin("GET", "/api/v1/server/config", adminH.Config)
 
-	// Server org management (global — server-admin only)
 	serverAdmin("GET", "/api/v1/server/orgs", orgH.List)
 	serverAdmin("POST", "/api/v1/server/orgs", orgH.Create)
 	serverAdmin("GET", "/api/v1/server/orgs/{orgID}", orgH.Get)
@@ -208,7 +177,6 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	serverAdmin("PUT", "/api/v1/server/orgs/{orgID}/logo", avatarH.PutOrgLogo)
 	serverAdmin("DELETE", "/api/v1/server/orgs/{orgID}/logo", avatarH.DeleteOrgLogo)
 
-	// SSO (global — server-admin only)
 	ssoH := auth.NewSSOHandler(s, st, assetResolver)
 	serverAdmin("GET", "/api/v1/sso/oauth", ssoH.ListOAuthProviders)
 	serverAdmin("PUT", "/api/v1/sso/oauth/{provider}", ssoH.UpsertOAuthProvider)
@@ -228,23 +196,14 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	serverAdmin("PUT", "/api/v1/sso/scim", ssoH.UpsertSCIM)
 	serverAdmin("POST", "/api/v1/sso/scim/rotate-token", ssoH.RotateSCIMToken)
 
-	// ── Folders ───────────────────────────────────────────────────────────
 	folder.Register(mux, s, scopeFn)
 
-	// ── Actors ────────────────────────────────────────────────────────────
-	// Resolves created_by / updated_by / deleted_by ids to public user or
-	// service-account info. Available to any authenticated principal.
 	actor.Register(mux, s, c, st, protected)
 
-	// ── Assets ────────────────────────────────────────────────────────────
-	// Resolves an asset id (preview_asset_id / asset_id / screenshot_asset_id)
-	// to a presigned GET URL. Available to any authenticated principal.
 	assetapi.Register(mux, st, c, protected)
 
-	// ── Diagrams ──────────────────────────────────────────────────────────
 	diagram.Register(mux, s, st, c, q, scopeFn)
 
-	// ── Docs ──────────────────────────────────────────────────────────────
 	docsapi.Register(mux, s, st, scopeFn)
 
 	figmaRedirect := cfg.FigmaRedirectURI
@@ -257,21 +216,16 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 		figmaapi.Register(mux, figmaH, protected)
 	}
 
-	// ── Component palettes + icons ────────────────────────────────────────
 	component.Register(mux, s, st, protected, scopeFn)
 
-	// ── Services + API Groups + API Endpoints ─────────────────────────────
 	catalogapi.Register(mux, s, st, q, c, scopeFn)
 
-	// ── Maps + Frames + Focal Points + Canvas ─────────────────────────────
 	mapspkg.Register(mux, s, st, scopeFn)
 
 	chatapi.Register(mux, s, scopeFn)
 
-	// ── Comments ──────────────────────────────────────────────────────────
 	commentapi.Register(mux, s, scopeFn)
 
-	// ── MCP Usage + Savings ───────────────────────────────────────────────
 	pricing := modelpricing.New()
 	mcpusageapi.Register(mux, s, pricing, scopeFn)
 
