@@ -5,6 +5,7 @@ import (
 
 	"github.com/uigraph/app/internal/authz"
 	"github.com/uigraph/app/internal/catalog"
+	"github.com/uigraph/app/internal/chat"
 	"github.com/uigraph/app/internal/comment"
 	"github.com/uigraph/app/internal/componentlib"
 	"github.com/uigraph/app/internal/diagram"
@@ -39,6 +40,7 @@ type Store interface {
 	docs.Store
 	uimap.Store
 	catalog.Store
+	chat.Store
 	componentlib.Store
 	comment.Store
 	mcpusage.Store

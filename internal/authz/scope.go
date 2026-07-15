@@ -24,6 +24,9 @@ const (
 	ScopeServicesRead  Scope = "services:read"
 	ScopeServicesWrite Scope = "services:write"
 
+	ScopeChatRead  Scope = "chat:read"
+	ScopeChatWrite Scope = "chat:write"
+
 	ScopeFoldersRead  Scope = "folders:read"
 	ScopeFoldersWrite Scope = "folders:write"
 
@@ -56,6 +59,7 @@ var AllScopes = []Scope{
 	ScopeDocsRead, ScopeDocsWrite,
 	ScopeMapsRead, ScopeMapsWrite,
 	ScopeServicesRead, ScopeServicesWrite,
+	ScopeChatRead, ScopeChatWrite,
 	ScopeFoldersRead, ScopeFoldersWrite,
 	ScopeMembersRead, ScopeMembersAdd, ScopeMembersRemove, ScopeMembersUpdateRole,
 	ScopeTeamsRead, ScopeTeamsCreate, ScopeTeamsEdit, ScopeTeamsDelete, ScopeTeamsAddMember, ScopeTeamsRemoveMember,
@@ -69,16 +73,16 @@ var AllScopes = []Scope{
 // The admin role uses per-resource wildcards, which are deterministic.
 var RoleScopes = map[Role][]Scope{
 	RoleViewer: {
-		ScopeDiagramsRead, ScopeDocsRead, ScopeMapsRead, ScopeServicesRead, ScopeFoldersRead,
+		ScopeDiagramsRead, ScopeDocsRead, ScopeMapsRead, ScopeServicesRead, ScopeChatRead, ScopeFoldersRead,
 		ScopeMembersRead, ScopeTeamsRead, ScopeServiceAccountsRead,
 	},
 	RoleEditor: {
-		ScopeDiagramsRead, ScopeDocsRead, ScopeMapsRead, ScopeServicesRead, ScopeFoldersRead,
+		ScopeDiagramsRead, ScopeDocsRead, ScopeMapsRead, ScopeServicesRead, ScopeChatRead, ScopeFoldersRead,
 		ScopeMembersRead, ScopeTeamsRead, ScopeServiceAccountsRead,
-		ScopeDiagramsWrite, ScopeDocsWrite, ScopeMapsWrite, ScopeServicesWrite, ScopeFoldersWrite,
+		ScopeDiagramsWrite, ScopeDocsWrite, ScopeMapsWrite, ScopeServicesWrite, ScopeChatWrite, ScopeFoldersWrite,
 	},
 	RoleAdmin: {
-		"diagrams:*", "docs:*", "maps:*", "services:*", "folders:*",
+		"diagrams:*", "docs:*", "maps:*", "services:*", "chat:*", "folders:*",
 		"members:*", "teams:*", "serviceaccounts:*", "org:*",
 	},
 }
