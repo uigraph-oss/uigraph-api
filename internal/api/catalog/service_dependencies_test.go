@@ -257,7 +257,7 @@ func TestSyncDependencies_success(t *testing.T) {
 	}
 	h := New(s, nil, nil, nil)
 
-	body := `{"dependencies":[{"name":"payments","service":"Stripe","type":"http","criticality":"hard","api":"v1"}]}`
+	body := `{"dependencies":[{"name":"payments","service":"Stripe","type":"http","criticality":"hard","apiGroupName":"v1"}]}`
 	r := withDepAuth(depRequest(http.MethodPost, "/api/v1/orgs/org-1/services/svc-1/dependencies/sync", []byte(body)))
 	r.SetPathValue("serviceID", "svc-1")
 	w := httptest.NewRecorder()
@@ -304,7 +304,7 @@ func TestSyncDependencies_duplicateName_returns400(t *testing.T) {
 	}
 	h := New(s, nil, nil, nil)
 
-	body := `{"dependencies":[{"name":"dup","service":"S1","type":"http","criticality":"hard","api":"v1"},{"name":"dup","service":"S2","type":"event","criticality":"soft"}]}`
+	body := `{"dependencies":[{"name":"dup","service":"S1","type":"http","criticality":"hard","apiGroupName":"v1"},{"name":"dup","service":"S2","type":"database","criticality":"soft"}]}`
 	r := withDepAuth(depRequest(http.MethodPost, "/api/v1/orgs/org-1/services/svc-1/dependencies/sync", []byte(body)))
 	r.SetPathValue("serviceID", "svc-1")
 	w := httptest.NewRecorder()
@@ -414,7 +414,7 @@ func TestGetServiceDependencyGraph_returnsGraph(t *testing.T) {
 		depGraphFn: func(_ context.Context, orgID, serviceID string) (catalogpkg.DependencyGraph, error) {
 			return catalogpkg.DependencyGraph{
 				Nodes: []catalogpkg.DependencyGraphNode{
-					{ID: "svc-1", Name: "My Service", OnboardingStatus: "onboarded"},
+					{ID: "svc-1", Name: "My Service"},
 				},
 				Edges: []catalogpkg.ServiceDependencyEdge{
 					{ServiceDependency: catalogpkg.ServiceDependency{Name: "payments", Type: "http"}},
@@ -451,8 +451,8 @@ func TestGetDependencyGraph_orgWide_returnsGraph(t *testing.T) {
 		depGraphFn: func(_ context.Context, orgID, serviceID string) (catalogpkg.DependencyGraph, error) {
 			return catalogpkg.DependencyGraph{
 				Nodes: []catalogpkg.DependencyGraphNode{
-					{ID: "svc-a", Name: "Service A", OnboardingStatus: "onboarded"},
-					{ID: "svc-b", Name: "Service B", OnboardingStatus: "onboarded"},
+					{ID: "svc-a", Name: "Service A"},
+					{ID: "svc-b", Name: "Service B"},
 				},
 				Edges: []catalogpkg.ServiceDependencyEdge{
 					{ServiceDependency: catalogpkg.ServiceDependency{Name: "dep", Type: "http"}},
@@ -488,8 +488,8 @@ func TestGetImpact_returnsGraph(t *testing.T) {
 		impactFn: func(_ context.Context, orgID, serviceID, direction string, maxDepth int) (catalogpkg.DependencyGraph, error) {
 			return catalogpkg.DependencyGraph{
 				Nodes: []catalogpkg.DependencyGraphNode{
-					{ID: "svc-1", Name: "My Service", OnboardingStatus: "onboarded"},
-					{ID: "svc-2", Name: "Downstream", OnboardingStatus: "onboarded"},
+					{ID: "svc-1", Name: "My Service"},
+					{ID: "svc-2", Name: "Downstream"},
 				},
 				Edges: []catalogpkg.ServiceDependencyEdge{
 					{ServiceDependency: catalogpkg.ServiceDependency{Name: "dep", Type: "http"}, Direction: "downstream"},

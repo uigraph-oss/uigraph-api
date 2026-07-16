@@ -28,9 +28,10 @@ func (h *Handler) SyncDependencies(w http.ResponseWriter, r *http.Request) {
 			Service     string   `json:"service"`
 			Type        string   `json:"type"`
 			Criticality string   `json:"criticality"`
-			Description string   `json:"description"`
-			API         *string  `json:"api"`
-			Operations  []string `json:"operations"`
+			Description      string   `json:"description"`
+			APIGroupName     *string  `json:"apiGroupName"`
+			APIEndpointNames []string `json:"apiEndpointNames"`
+			DatabaseName     *string  `json:"databaseName"`
 		} `json:"dependencies"`
 		CommitHash *string `json:"commitHash"`
 	}
@@ -50,31 +51,27 @@ func (h *Handler) SyncDependencies(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		names[input.Name] = true
-		if input.Type != "http" && input.Type != "grpc" && input.Type != "event" && input.Type != "queue" && input.Type != "database" {
-			httputil.BadRequest(w, "dependency type must be http, grpc, event, queue, or database")
+		if input.Type != "" && input.Type != "http" && input.Type != "graphql" && input.Type != "grpc" && input.Type != "database" {
+			httputil.BadRequest(w, "dependency type must be http, graphql, grpc, or database")
 			return
 		}
 		if input.Criticality != "hard" && input.Criticality != "soft" {
 			httputil.BadRequest(w, "dependency criticality must be hard or soft")
 			return
 		}
-		if input.Type != "http" && input.Type != "grpc" && (input.API != nil || len(input.Operations) > 0) {
-			httputil.BadRequest(w, "api and operations are only allowed for http or grpc dependencies")
-			return
-		}
-		operations := map[string]bool{}
-		for _, operation := range input.Operations {
-			if operation == "" {
-				httputil.BadRequest(w, "operation names must not be empty")
+		endpointNames := map[string]bool{}
+		for _, endpointName := range input.APIEndpointNames {
+			if endpointName == "" {
+				httputil.BadRequest(w, "api endpoint names must not be empty")
 				return
 			}
-			if operations[operation] {
-				httputil.BadRequest(w, "operation names must be unique within a dependency")
+			if endpointNames[endpointName] {
+				httputil.BadRequest(w, "api endpoint names must be unique within a dependency")
 				return
 			}
-			operations[operation] = true
+			endpointNames[endpointName] = true
 		}
-		dependencies = append(dependencies, catalog.ServiceDependency{Name: input.Name, ProviderServiceName: input.Service, Type: input.Type, Criticality: input.Criticality, Description: input.Description, APIName: input.API, Operations: input.Operations})
+		dependencies = append(dependencies, catalog.ServiceDependency{Name: input.Name, ProviderServiceName: input.Service, Type: input.Type, Criticality: input.Criticality, Description: input.Description, APIGroupName: input.APIGroupName, APIEndpointNames: input.APIEndpointNames, DatabaseName: input.DatabaseName})
 	}
 	if err := h.store.SyncServiceDependencies(r.Context(), r.PathValue("orgID"), serviceID, p.UserID, body.CommitHash, dependencies); err != nil {
 		if errors.Is(err, storepkg.ErrInvalidDependency) {

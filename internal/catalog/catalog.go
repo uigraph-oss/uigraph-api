@@ -60,8 +60,9 @@ type ServiceDependency struct {
 	Type                string     `json:"type"`
 	Criticality         string     `json:"criticality"`
 	Description         string     `json:"description"`
-	APIName             *string    `json:"api,omitempty"`
-	Operations          []string   `json:"operations"`
+	APIGroupName        *string    `json:"apiGroupName,omitempty"`
+	APIEndpointNames    []string   `json:"apiEndpointNames"`
+	DatabaseName        *string    `json:"databaseName,omitempty"`
 	CreatedBy           string     `json:"createdBy"`
 	UpdatedBy           *string    `json:"updatedBy,omitempty"`
 	CreatedByCommitHash *string    `json:"createdByCommitHash,omitempty"`
@@ -76,7 +77,6 @@ type ServiceDependencyEdge struct {
 	ServiceDependency
 	Consumer         *Service `json:"consumer,omitempty"`
 	Provider         *Service `json:"provider,omitempty"`
-	OnboardingStatus string   `json:"onboardingStatus"`
 	Direction        string   `json:"direction"`
 }
 
@@ -89,7 +89,6 @@ type DependencyGraphNode struct {
 	ID               string   `json:"id"`
 	Name             string   `json:"name"`
 	Service          *Service `json:"service,omitempty"`
-	OnboardingStatus string   `json:"onboardingStatus"`
 }
 
 // ── API Group ─────────────────────────────────────────────────────────────────
