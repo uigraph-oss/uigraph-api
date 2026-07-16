@@ -24,6 +24,10 @@ type store interface {
 	GetService(ctx context.Context, id string) (*catalogpkg.Service, error)
 	UpdateService(ctx context.Context, s catalogpkg.Service) error
 	SoftDeleteService(ctx context.Context, id, actorID string) error
+	SyncServiceDependencies(ctx context.Context, orgID, serviceID, actorID string, commitHash *string, dependencies []catalogpkg.ServiceDependency) error
+	ListServiceDependencies(ctx context.Context, orgID, serviceID, direction, criticality string) ([]catalogpkg.ServiceDependencyEdge, error)
+	DependencyGraph(ctx context.Context, orgID, serviceID string) (catalogpkg.DependencyGraph, error)
+	Impact(ctx context.Context, orgID, serviceID, direction string, maxDepth int) (catalogpkg.DependencyGraph, error)
 
 	// Service docs
 	ListServiceDocs(ctx context.Context, serviceID string) ([]catalogpkg.ServiceDoc, error)
@@ -173,6 +177,11 @@ func Register(
 	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/services/{serviceID}", h.Get)
 	requireScope("services:write", "PUT", "/api/v1/orgs/{orgID}/services/{serviceID}", h.Update)
 	requireScope("services:write", "DELETE", "/api/v1/orgs/{orgID}/services/{serviceID}", h.Delete)
+	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/dependency-graph", h.GetDependencyGraph)
+	requireScope("services:write", "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/dependencies/sync", h.SyncDependencies)
+	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/dependencies", h.ListDependencies)
+	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/dependency-graph", h.GetServiceDependencyGraph)
+	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/impact", h.GetImpact)
 	// API groups — /sync before /{apiGroupID}
 	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups", h.ListAPIGroups)
 	requireScope("services:write", "POST", "/api/v1/orgs/{orgID}/services/{serviceID}/api-groups", h.CreateAPIGroup)

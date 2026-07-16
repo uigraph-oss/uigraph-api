@@ -23,6 +23,10 @@ type Store interface {
 	UpdateService(ctx context.Context, s Service) error
 	SoftDeleteService(ctx context.Context, id, deletedBy string) error
 	ListServiceStats(ctx context.Context, orgID string, serviceID *string) ([]ServiceStats, error)
+	SyncServiceDependencies(ctx context.Context, orgID, serviceID, actorID string, commitHash *string, dependencies []ServiceDependency) error
+	ListServiceDependencies(ctx context.Context, orgID, serviceID, direction, criticality string) ([]ServiceDependencyEdge, error)
+	DependencyGraph(ctx context.Context, orgID, serviceID string) (DependencyGraph, error)
+	Impact(ctx context.Context, orgID, serviceID, direction string, maxDepth int) (DependencyGraph, error)
 
 	// API groups
 	CreateAPIGroup(ctx context.Context, g APIGroup) error
