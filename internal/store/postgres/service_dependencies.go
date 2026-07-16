@@ -157,15 +157,40 @@ func (d *DB) DependencyGraph(ctx context.Context, orgID, serviceID string) (cata
 		}
 		return graphFromEdges(edges), nil
 	}
-	upstream, err := d.ListServiceDependencies(ctx, orgID, serviceID, "upstream", "")
+	upstream, err := d.dependencyGraph(ctx, orgID, serviceID, "upstream", 0)
 	if err != nil {
 		return catalog.DependencyGraph{}, err
 	}
-	downstream, err := d.ListServiceDependencies(ctx, orgID, serviceID, "downstream", "")
+	downstream, err := d.dependencyGraph(ctx, orgID, serviceID, "downstream", 0)
 	if err != nil {
 		return catalog.DependencyGraph{}, err
 	}
-	return graphFromEdges(append(upstream, downstream...)), nil
+	return mergeGraphs(upstream, downstream), nil
+}
+
+func mergeGraphs(a, b catalog.DependencyGraph) catalog.DependencyGraph {
+	graph := catalog.DependencyGraph{Nodes: []catalog.DependencyGraphNode{}, Edges: []catalog.ServiceDependencyEdge{}}
+	seenNode := map[string]bool{}
+	for _, list := range [][]catalog.DependencyGraphNode{a.Nodes, b.Nodes} {
+		for _, node := range list {
+			if seenNode[node.ID] {
+				continue
+			}
+			seenNode[node.ID] = true
+			graph.Nodes = append(graph.Nodes, node)
+		}
+	}
+	seenEdge := map[string]bool{}
+	for _, list := range [][]catalog.ServiceDependencyEdge{a.Edges, b.Edges} {
+		for _, edge := range list {
+			if seenEdge[edge.ID] {
+				continue
+			}
+			seenEdge[edge.ID] = true
+			graph.Edges = append(graph.Edges, edge)
+		}
+	}
+	return graph
 }
 
 func (d *DB) Impact(ctx context.Context, orgID, serviceID, direction string, maxDepth int) (catalog.DependencyGraph, error) {
