@@ -51,6 +51,46 @@ type ServiceStats struct {
 	TestCaseCount int    `json:"testCaseCount"`
 }
 
+type ServiceDependency struct {
+	ID                  string     `json:"id"`
+	SourceServiceID     string     `json:"sourceServiceId"`
+	OrgID               string     `json:"orgId"`
+	Name                string     `json:"name"`
+	ProviderServiceName string     `json:"providerName"`
+	Type                string     `json:"type"`
+	Criticality         string     `json:"criticality"`
+	Description         string     `json:"description"`
+	APIGroupName        *string    `json:"apiGroupName,omitempty"`
+	APIEndpointNames    []string   `json:"apiEndpointNames"`
+	DatabaseName        *string    `json:"databaseName,omitempty"`
+	CreatedBy           string     `json:"createdBy"`
+	UpdatedBy           *string    `json:"updatedBy,omitempty"`
+	CreatedByCommitHash *string    `json:"createdByCommitHash,omitempty"`
+	UpdatedByCommitHash *string    `json:"updatedByCommitHash,omitempty"`
+	CreatedAt           time.Time  `json:"createdAt"`
+	UpdatedAt           time.Time  `json:"updatedAt"`
+	DeletedAt           *time.Time `json:"deletedAt,omitempty"`
+	DeletedBy           *string    `json:"deletedBy,omitempty"`
+}
+
+type ServiceDependencyEdge struct {
+	ServiceDependency
+	Consumer         *Service `json:"consumer,omitempty"`
+	Provider         *Service `json:"provider,omitempty"`
+	Direction        string   `json:"direction"`
+}
+
+type DependencyGraph struct {
+	Nodes []DependencyGraphNode   `json:"nodes"`
+	Edges []ServiceDependencyEdge `json:"edges"`
+}
+
+type DependencyGraphNode struct {
+	ID               string   `json:"id"`
+	Name             string   `json:"name"`
+	Service          *Service `json:"service,omitempty"`
+}
+
 // ── API Group ─────────────────────────────────────────────────────────────────
 
 // APIGroup is a versioned collection of API endpoints for a service.

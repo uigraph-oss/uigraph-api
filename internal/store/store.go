@@ -23,6 +23,7 @@ var (
 	ErrTeamNotFound         = errors.New("team not found")
 	ErrServiceNameExists    = errors.New("service name already exists")
 	ErrDataSourceNameExists = errors.New("data source name already exists")
+	ErrInvalidDependency    = errors.New("invalid service dependency")
 )
 
 type Store interface {
