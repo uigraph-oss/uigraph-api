@@ -2,7 +2,6 @@ package api
 
 import (
 	"net/http"
-	"strings"
 
 	authmw "github.com/uigraph/app/internal/middleware"
 
@@ -206,12 +205,8 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 
 	docsapi.Register(mux, s, st, scopeFn)
 
-	figmaRedirect := cfg.FigmaRedirectURI
-	if figmaRedirect == "" {
-		figmaRedirect = strings.TrimRight(cfg.PublicURL, "/") + "/api/v1/figma/callback"
-	}
 	if cipher, err := crypto.NewCipher(cfg.SecretKey); err == nil {
-		figmaClient := figma.New(cfg.FigmaClientID, cfg.FigmaClientSecret, figmaRedirect)
+		figmaClient := figma.New(cfg.FigmaClientID, cfg.FigmaClientSecret, cfg.FigmaRedirectURI)
 		figmaH := figmaapi.New(s, figmaClient, cipher, cfg.PublicURL, cfg.FrontendURL)
 		figmaapi.Register(mux, figmaH, protected)
 	}
