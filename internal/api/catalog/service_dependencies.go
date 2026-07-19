@@ -129,6 +129,12 @@ func (h *Handler) GetDependencyGraph(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, r, err)
 		return
 	}
+	if r.URL.Query().Get("format") == "mermaid" {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(catalog.RenderMermaid(graph)))
+		return
+	}
 	httputil.JSON(w, http.StatusOK, graph)
 }
 
