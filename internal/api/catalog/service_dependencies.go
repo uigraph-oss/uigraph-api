@@ -115,21 +115,21 @@ func (h *Handler) GetServiceDependencyGraph(w http.ResponseWriter, r *http.Reque
 	if !h.ensureServiceInOrg(w, r, serviceID) {
 		return
 	}
-	graph, err := h.store.DependencyGraph(r.Context(), r.PathValue("orgID"), serviceID)
+	edges, err := h.store.DependencyGraph(r.Context(), r.PathValue("orgID"), serviceID)
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
 	}
-	httputil.JSON(w, http.StatusOK, graph)
+	httputil.JSON(w, http.StatusOK, map[string]any{"edges": edges})
 }
 
 func (h *Handler) GetDependencyGraph(w http.ResponseWriter, r *http.Request) {
-	graph, err := h.store.DependencyGraph(r.Context(), r.PathValue("orgID"), "")
+	edges, err := h.store.DependencyGraph(r.Context(), r.PathValue("orgID"), "")
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
 	}
-	httputil.JSON(w, http.StatusOK, graph)
+	httputil.JSON(w, http.StatusOK, map[string]any{"edges": edges})
 }
 
 func (h *Handler) GetImpact(w http.ResponseWriter, r *http.Request) {
@@ -151,10 +151,10 @@ func (h *Handler) GetImpact(w http.ResponseWriter, r *http.Request) {
 		}
 		maxDepth = parsed
 	}
-	graph, err := h.store.Impact(r.Context(), r.PathValue("orgID"), serviceID, direction, maxDepth)
+	edges, err := h.store.Impact(r.Context(), r.PathValue("orgID"), serviceID, direction, maxDepth)
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
 	}
-	httputil.JSON(w, http.StatusOK, graph)
+	httputil.JSON(w, http.StatusOK, map[string]any{"edges": edges})
 }

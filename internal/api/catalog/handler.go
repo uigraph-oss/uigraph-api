@@ -26,8 +26,8 @@ type store interface {
 	SoftDeleteService(ctx context.Context, id, actorID string) error
 	SyncServiceDependencies(ctx context.Context, orgID, serviceID, actorID string, commitHash *string, dependencies []catalogpkg.ServiceDependency) error
 	ListServiceDependencies(ctx context.Context, orgID, serviceID, direction, criticality string) ([]catalogpkg.ServiceDependencyEdge, error)
-	DependencyGraph(ctx context.Context, orgID, serviceID string) (catalogpkg.DependencyGraph, error)
-	Impact(ctx context.Context, orgID, serviceID, direction string, maxDepth int) (catalogpkg.DependencyGraph, error)
+	DependencyGraph(ctx context.Context, orgID, serviceID string) ([]catalogpkg.ServiceDependencyEdge, error)
+	Impact(ctx context.Context, orgID, serviceID, direction string, maxDepth int) ([]catalogpkg.ServiceDependencyEdge, error)
 
 	// Service docs
 	ListServiceDocs(ctx context.Context, serviceID string) ([]catalogpkg.ServiceDoc, error)

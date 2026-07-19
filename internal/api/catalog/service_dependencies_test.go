@@ -23,8 +23,8 @@ type fakeDependencyStore struct {
 	getSvcFn              func(ctx context.Context, id string) (*catalogpkg.Service, error)
 	syncDepsFn            func(ctx context.Context, orgID, serviceID, actorID string, commitHash *string, dependencies []catalogpkg.ServiceDependency) error
 	listDepsFn            func(ctx context.Context, orgID, serviceID, direction, criticality string) ([]catalogpkg.ServiceDependencyEdge, error)
-	depGraphFn            func(ctx context.Context, orgID, serviceID string) (catalogpkg.DependencyGraph, error)
-	impactFn              func(ctx context.Context, orgID, serviceID, direction string, maxDepth int) (catalogpkg.DependencyGraph, error)
+	depGraphFn            func(ctx context.Context, orgID, serviceID string) ([]catalogpkg.ServiceDependencyEdge, error)
+	impactFn              func(ctx context.Context, orgID, serviceID, direction string, maxDepth int) ([]catalogpkg.ServiceDependencyEdge, error)
 }
 
 func (f *fakeDependencyStore) GetService(ctx context.Context, id string) (*catalogpkg.Service, error) {
@@ -39,11 +39,11 @@ func (f *fakeDependencyStore) ListServiceDependencies(ctx context.Context, orgID
 	return f.listDepsFn(ctx, orgID, serviceID, direction, criticality)
 }
 
-func (f *fakeDependencyStore) DependencyGraph(ctx context.Context, orgID, serviceID string) (catalogpkg.DependencyGraph, error) {
+func (f *fakeDependencyStore) DependencyGraph(ctx context.Context, orgID, serviceID string) ([]catalogpkg.ServiceDependencyEdge, error) {
 	return f.depGraphFn(ctx, orgID, serviceID)
 }
 
-func (f *fakeDependencyStore) Impact(ctx context.Context, orgID, serviceID, direction string, maxDepth int) (catalogpkg.DependencyGraph, error) {
+func (f *fakeDependencyStore) Impact(ctx context.Context, orgID, serviceID, direction string, maxDepth int) ([]catalogpkg.ServiceDependencyEdge, error) {
 	return f.impactFn(ctx, orgID, serviceID, direction, maxDepth)
 }
 
@@ -411,14 +411,9 @@ func TestGetServiceDependencyGraph_returnsGraph(t *testing.T) {
 		getSvcFn: func(_ context.Context, id string) (*catalogpkg.Service, error) {
 			return &catalogpkg.Service{ID: id, OrgID: "org-1"}, nil
 		},
-		depGraphFn: func(_ context.Context, orgID, serviceID string) (catalogpkg.DependencyGraph, error) {
-			return catalogpkg.DependencyGraph{
-				Nodes: []catalogpkg.DependencyGraphNode{
-					{ID: "svc-1", Name: "My Service"},
-				},
-				Edges: []catalogpkg.ServiceDependencyEdge{
-					{ServiceDependency: catalogpkg.ServiceDependency{Name: "payments", Type: "http"}},
-				},
+		depGraphFn: func(_ context.Context, orgID, serviceID string) ([]catalogpkg.ServiceDependencyEdge, error) {
+			return []catalogpkg.ServiceDependencyEdge{
+				{ServiceDependency: catalogpkg.ServiceDependency{Name: "payments", Type: "http"}},
 			}, nil
 		},
 	}
@@ -432,12 +427,14 @@ func TestGetServiceDependencyGraph_returnsGraph(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
-	var resp catalogpkg.DependencyGraph
+	var resp struct {
+		Edges []catalogpkg.ServiceDependencyEdge `json:"edges"`
+	}
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatal(err)
 	}
-	if len(resp.Nodes) != 1 || resp.Nodes[0].ID != "svc-1" {
-		t.Fatalf("unexpected graph: %+v", resp)
+	if len(resp.Edges) != 1 || resp.Edges[0].Name != "payments" {
+		t.Fatalf("unexpected edges: %+v", resp)
 	}
 }
 
@@ -448,15 +445,10 @@ func TestGetDependencyGraph_orgWide_returnsGraph(t *testing.T) {
 		getSvcFn: func(_ context.Context, id string) (*catalogpkg.Service, error) {
 			return &catalogpkg.Service{ID: id, OrgID: "org-1"}, nil
 		},
-		depGraphFn: func(_ context.Context, orgID, serviceID string) (catalogpkg.DependencyGraph, error) {
-			return catalogpkg.DependencyGraph{
-				Nodes: []catalogpkg.DependencyGraphNode{
-					{ID: "svc-a", Name: "Service A"},
-					{ID: "svc-b", Name: "Service B"},
-				},
-				Edges: []catalogpkg.ServiceDependencyEdge{
-					{ServiceDependency: catalogpkg.ServiceDependency{Name: "dep", Type: "http"}},
-				},
+		depGraphFn: func(_ context.Context, orgID, serviceID string) ([]catalogpkg.ServiceDependencyEdge, error) {
+			return []catalogpkg.ServiceDependencyEdge{
+				{ServiceDependency: catalogpkg.ServiceDependency{Name: "dep-a", Type: "http"}},
+				{ServiceDependency: catalogpkg.ServiceDependency{Name: "dep-b", Type: "http"}},
 			}, nil
 		},
 	}
@@ -469,12 +461,14 @@ func TestGetDependencyGraph_orgWide_returnsGraph(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
-	var resp catalogpkg.DependencyGraph
+	var resp struct {
+		Edges []catalogpkg.ServiceDependencyEdge `json:"edges"`
+	}
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatal(err)
 	}
-	if len(resp.Nodes) != 2 {
-		t.Fatalf("expected 2 nodes, got %d", len(resp.Nodes))
+	if len(resp.Edges) != 2 {
+		t.Fatalf("expected 2 edges, got %d", len(resp.Edges))
 	}
 }
 
@@ -485,15 +479,9 @@ func TestGetImpact_returnsGraph(t *testing.T) {
 		getSvcFn: func(_ context.Context, id string) (*catalogpkg.Service, error) {
 			return &catalogpkg.Service{ID: id, OrgID: "org-1"}, nil
 		},
-		impactFn: func(_ context.Context, orgID, serviceID, direction string, maxDepth int) (catalogpkg.DependencyGraph, error) {
-			return catalogpkg.DependencyGraph{
-				Nodes: []catalogpkg.DependencyGraphNode{
-					{ID: "svc-1", Name: "My Service"},
-					{ID: "svc-2", Name: "Downstream"},
-				},
-				Edges: []catalogpkg.ServiceDependencyEdge{
-					{ServiceDependency: catalogpkg.ServiceDependency{Name: "dep", Type: "http"}, Direction: "downstream"},
-				},
+		impactFn: func(_ context.Context, orgID, serviceID, direction string, maxDepth int) ([]catalogpkg.ServiceDependencyEdge, error) {
+			return []catalogpkg.ServiceDependencyEdge{
+				{ServiceDependency: catalogpkg.ServiceDependency{Name: "dep", Type: "http"}, Direction: "downstream"},
 			}, nil
 		},
 	}
@@ -507,12 +495,14 @@ func TestGetImpact_returnsGraph(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
-	var resp catalogpkg.DependencyGraph
+	var resp struct {
+		Edges []catalogpkg.ServiceDependencyEdge `json:"edges"`
+	}
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatal(err)
 	}
-	if len(resp.Nodes) != 2 {
-		t.Fatalf("expected 2 nodes, got %d", len(resp.Nodes))
+	if len(resp.Edges) != 1 || resp.Edges[0].Name != "dep" {
+		t.Fatalf("unexpected edges: %+v", resp)
 	}
 }
 

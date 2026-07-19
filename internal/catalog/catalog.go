@@ -80,16 +80,6 @@ type ServiceDependencyEdge struct {
 	Direction        string   `json:"direction"`
 }
 
-type DependencyGraph struct {
-	Nodes []DependencyGraphNode   `json:"nodes"`
-	Edges []ServiceDependencyEdge `json:"edges"`
-}
-
-type DependencyGraphNode struct {
-	ID               string   `json:"id"`
-	Name             string   `json:"name"`
-	Service          *Service `json:"service,omitempty"`
-}
 
 // ── API Group ─────────────────────────────────────────────────────────────────
 
