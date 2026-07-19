@@ -115,7 +115,7 @@ func (h *Handler) GetContent(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, r, err)
 		return
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 	contentType := doc.FileType
 	if contentType == "" {
 		contentType = "application/octet-stream"

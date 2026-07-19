@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -559,15 +558,3 @@ func TestGetImpact_maxDepthTooHigh_returns400(t *testing.T) {
 		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
 	}
 }
-
-// ── Unused store methods (compilation safety) ──────────────────────────────
-
-type nopReadCloser struct{}
-
-func (nopReadCloser) Read([]byte) (int, error) { return 0, io.EOF }
-func (nopReadCloser) Close() error              { return nil }
-
-type fakeObjectStore struct{}
-func (*fakeObjectStore) Upload(_ context.Context, _, _ string, _ io.Reader, _ int64) error { return nil }
-func (*fakeObjectStore) Download(_ context.Context, _ string) (io.ReadCloser, error)        { return nopReadCloser{}, nil }
-func (*fakeObjectStore) Delete(_ context.Context, _ string) error                           { return nil }
