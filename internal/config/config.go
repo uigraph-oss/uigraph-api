@@ -69,7 +69,6 @@ type Config struct {
 
 	FigmaClientID     string
 	FigmaClientSecret string
-	FigmaRedirectURI  string
 
 	// Migrations
 	MigrationsDir string // path to SQL files; defaults to embedded
@@ -105,7 +104,6 @@ func Load() (*Config, error) {
 		ChromiumPath:          env("UIGRAPH_CHROMIUM_PATH", ""),
 		FigmaClientID:         env("FIGMA_CLIENT_ID", ""),
 		FigmaClientSecret:     env("FIGMA_CLIENT_SECRET", ""),
-		FigmaRedirectURI:      env("FIGMA_REDIRECT_URI", ""),
 		MigrationsDir:         env("MIGRATIONS_DIR", ""),
 	}
 
