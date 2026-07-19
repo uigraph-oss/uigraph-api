@@ -25,8 +25,8 @@ type Store interface {
 	ListServiceStats(ctx context.Context, orgID string, serviceID *string) ([]ServiceStats, error)
 	SyncServiceDependencies(ctx context.Context, orgID, serviceID, actorID string, commitHash *string, dependencies []ServiceDependency) error
 	ListServiceDependencies(ctx context.Context, orgID, serviceID, direction, criticality string) ([]ServiceDependencyEdge, error)
-	DependencyGraph(ctx context.Context, orgID, serviceID string) (DependencyGraph, error)
-	Impact(ctx context.Context, orgID, serviceID, direction string, maxDepth int) (DependencyGraph, error)
+	DependencyGraph(ctx context.Context, orgID, serviceID string) ([]ServiceDependencyEdge, error)
+	Impact(ctx context.Context, orgID, serviceID, direction string, maxDepth int) ([]ServiceDependencyEdge, error)
 
 	// API groups
 	CreateAPIGroup(ctx context.Context, g APIGroup) error

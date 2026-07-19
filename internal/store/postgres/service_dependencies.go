@@ -118,55 +118,41 @@ func scanDependencyEdges(rows *sql.Rows, direction string) ([]catalog.ServiceDep
 	return result, rows.Err()
 }
 
-func (d *DB) DependencyGraph(ctx context.Context, orgID, serviceID string) (catalog.DependencyGraph, error) {
+func (d *DB) DependencyGraph(ctx context.Context, orgID, serviceID string) ([]catalog.ServiceDependencyEdge, error) {
 	if serviceID == "" {
-		edges, err := d.allDependencyEdges(ctx, orgID)
-		if err != nil {
-			return catalog.DependencyGraph{}, err
-		}
-		return graphFromEdges(edges), nil
+		return d.allDependencyEdges(ctx, orgID)
 	}
 	upstream, err := d.dependencyGraph(ctx, orgID, serviceID, "upstream", 0)
 	if err != nil {
-		return catalog.DependencyGraph{}, err
+		return nil, err
 	}
 	downstream, err := d.dependencyGraph(ctx, orgID, serviceID, "downstream", 0)
 	if err != nil {
-		return catalog.DependencyGraph{}, err
+		return nil, err
 	}
-	return mergeGraphs(upstream, downstream), nil
+	return dedupeEdges(upstream, downstream), nil
 }
 
-func mergeGraphs(a, b catalog.DependencyGraph) catalog.DependencyGraph {
-	graph := catalog.DependencyGraph{Nodes: []catalog.DependencyGraphNode{}, Edges: []catalog.ServiceDependencyEdge{}}
-	seenNode := map[string]bool{}
-	for _, list := range [][]catalog.DependencyGraphNode{a.Nodes, b.Nodes} {
-		for _, node := range list {
-			if seenNode[node.ID] {
-				continue
-			}
-			seenNode[node.ID] = true
-			graph.Nodes = append(graph.Nodes, node)
-		}
-	}
-	seenEdge := map[string]bool{}
-	for _, list := range [][]catalog.ServiceDependencyEdge{a.Edges, b.Edges} {
+func dedupeEdges(a, b []catalog.ServiceDependencyEdge) []catalog.ServiceDependencyEdge {
+	edges := []catalog.ServiceDependencyEdge{}
+	seen := map[string]bool{}
+	for _, list := range [][]catalog.ServiceDependencyEdge{a, b} {
 		for _, edge := range list {
-			if seenEdge[edge.ID] {
+			if seen[edge.ID] {
 				continue
 			}
-			seenEdge[edge.ID] = true
-			graph.Edges = append(graph.Edges, edge)
+			seen[edge.ID] = true
+			edges = append(edges, edge)
 		}
 	}
-	return graph
+	return edges
 }
 
-func (d *DB) Impact(ctx context.Context, orgID, serviceID, direction string, maxDepth int) (catalog.DependencyGraph, error) {
+func (d *DB) Impact(ctx context.Context, orgID, serviceID, direction string, maxDepth int) ([]catalog.ServiceDependencyEdge, error) {
 	return d.dependencyGraph(ctx, orgID, serviceID, direction, maxDepth)
 }
 
-func (d *DB) dependencyGraph(ctx context.Context, orgID, serviceID, direction string, maxDepth int) (catalog.DependencyGraph, error) {
+func (d *DB) dependencyGraph(ctx context.Context, orgID, serviceID, direction string, maxDepth int) ([]catalog.ServiceDependencyEdge, error) {
 	if maxDepth <= 0 {
 		maxDepth = 10
 	}
@@ -179,30 +165,29 @@ func (d *DB) dependencyGraph(ctx context.Context, orgID, serviceID, direction st
 	cte += `) SELECT DISTINCT service_id FROM walk`
 	rows, err := d.db.QueryContext(ctx, cte, orgID, serviceID, maxDepth)
 	if err != nil {
-		return catalog.DependencyGraph{}, fmt.Errorf("postgres: dependency graph walk: %w", err)
+		return nil, fmt.Errorf("postgres: dependency graph walk: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 	ids := []string{}
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
-			return catalog.DependencyGraph{}, err
+			return nil, err
 		}
 		ids = append(ids, id)
 	}
 	if err := rows.Err(); err != nil {
-		return catalog.DependencyGraph{}, err
+		return nil, err
 	}
 	all, err := d.allDependencyEdges(ctx, orgID)
 	if err != nil {
-		return catalog.DependencyGraph{}, err
+		return nil, err
 	}
 	allowed := map[string]bool{}
 	for _, id := range ids {
 		allowed[id] = true
 	}
-	graph := catalog.DependencyGraph{Nodes: []catalog.DependencyGraphNode{}, Edges: []catalog.ServiceDependencyEdge{}}
-	nodes := map[string]catalog.DependencyGraphNode{}
+	edges := []catalog.ServiceDependencyEdge{}
 	for _, edge := range all {
 		providerID := "ghost:" + edge.ProviderServiceName
 		if edge.Provider != nil {
@@ -211,40 +196,9 @@ func (d *DB) dependencyGraph(ctx context.Context, orgID, serviceID, direction st
 		if !allowed[edge.SourceServiceID] || (edge.Provider != nil && !allowed[providerID]) {
 			continue
 		}
-		graph.Edges = append(graph.Edges, edge)
-		if edge.Consumer != nil {
-			nodes[edge.Consumer.ID] = catalog.DependencyGraphNode{ID: edge.Consumer.ID, Name: edge.Consumer.Name, Service: edge.Consumer}
-		}
-		if edge.Provider != nil {
-			nodes[providerID] = catalog.DependencyGraphNode{ID: providerID, Name: edge.Provider.Name, Service: edge.Provider}
-		} else {
-			nodes[providerID] = catalog.DependencyGraphNode{ID: providerID, Name: edge.ProviderServiceName}
-		}
+		edges = append(edges, edge)
 	}
-	for _, node := range nodes {
-		graph.Nodes = append(graph.Nodes, node)
-	}
-	return graph, nil
-}
-
-func graphFromEdges(edges []catalog.ServiceDependencyEdge) catalog.DependencyGraph {
-	graph := catalog.DependencyGraph{Edges: edges, Nodes: []catalog.DependencyGraphNode{}}
-	nodes := map[string]catalog.DependencyGraphNode{}
-	for _, edge := range edges {
-		if edge.Consumer != nil {
-			nodes[edge.Consumer.ID] = catalog.DependencyGraphNode{ID: edge.Consumer.ID, Name: edge.Consumer.Name, Service: edge.Consumer}
-		}
-		if edge.Provider != nil {
-			nodes[edge.Provider.ID] = catalog.DependencyGraphNode{ID: edge.Provider.ID, Name: edge.Provider.Name, Service: edge.Provider}
-			continue
-		}
-		id := "ghost:" + edge.ProviderServiceName
-		nodes[id] = catalog.DependencyGraphNode{ID: id, Name: edge.ProviderServiceName}
-	}
-	for _, node := range nodes {
-		graph.Nodes = append(graph.Nodes, node)
-	}
-	return graph
+	return edges, nil
 }
 
 func (d *DB) allDependencyEdges(ctx context.Context, orgID string) ([]catalog.ServiceDependencyEdge, error) {
