@@ -21,6 +21,7 @@ import (
 	"github.com/uigraph/app/internal/api/health"
 	mapspkg "github.com/uigraph/app/internal/api/maps"
 	mcpusageapi "github.com/uigraph/app/internal/api/mcpusage"
+	mlstudioapi "github.com/uigraph/app/internal/api/mlstudio"
 	"github.com/uigraph/app/internal/asset"
 	"github.com/uigraph/app/internal/authz"
 	"github.com/uigraph/app/internal/cache"
@@ -225,6 +226,8 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 
 	pricing := modelpricing.New()
 	mcpusageapi.Register(mux, s, pricing, scopeFn)
+
+	mlstudioapi.Register(mux, s, scopeFn)
 
 	return authmw.CORS(mux)
 }

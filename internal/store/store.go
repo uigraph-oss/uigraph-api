@@ -13,6 +13,7 @@ import (
 	"github.com/uigraph/app/internal/folder"
 	"github.com/uigraph/app/internal/identity"
 	"github.com/uigraph/app/internal/mcpusage"
+	"github.com/uigraph/app/internal/mlstudio"
 	"github.com/uigraph/app/internal/org"
 	"github.com/uigraph/app/internal/uimap"
 )
@@ -45,4 +46,5 @@ type Store interface {
 	componentlib.Store
 	comment.Store
 	mcpusage.Store
+	mlstudio.Store
 }

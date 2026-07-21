@@ -49,6 +49,9 @@ const (
 	ScopeServiceAccountsCreateToken Scope = "serviceaccounts:create-token"
 	ScopeServiceAccountsRevokeToken Scope = "serviceaccounts:revoke-token"
 
+	ScopeMLStudioRead  Scope = "mlstudio:read"
+	ScopeMLStudioWrite Scope = "mlstudio:write"
+
 	ScopeOrgUpdate Scope = "org:update"
 	ScopeOrgDelete Scope = "org:delete"
 )
@@ -65,6 +68,7 @@ var AllScopes = []Scope{
 	ScopeTeamsRead, ScopeTeamsCreate, ScopeTeamsEdit, ScopeTeamsDelete, ScopeTeamsAddMember, ScopeTeamsRemoveMember,
 	ScopeServiceAccountsRead, ScopeServiceAccountsCreate, ScopeServiceAccountsEdit, ScopeServiceAccountsDelete,
 	ScopeServiceAccountsCreateToken, ScopeServiceAccountsRevokeToken,
+	ScopeMLStudioRead, ScopeMLStudioWrite,
 	ScopeOrgUpdate, ScopeOrgDelete,
 }
 
@@ -74,16 +78,17 @@ var AllScopes = []Scope{
 var RoleScopes = map[Role][]Scope{
 	RoleViewer: {
 		ScopeDiagramsRead, ScopeDocsRead, ScopeMapsRead, ScopeServicesRead, ScopeChatRead, ScopeFoldersRead,
-		ScopeMembersRead, ScopeTeamsRead, ScopeServiceAccountsRead,
+		ScopeMembersRead, ScopeTeamsRead, ScopeServiceAccountsRead, ScopeMLStudioRead,
 	},
 	RoleEditor: {
 		ScopeDiagramsRead, ScopeDocsRead, ScopeMapsRead, ScopeServicesRead, ScopeChatRead, ScopeFoldersRead,
-		ScopeMembersRead, ScopeTeamsRead, ScopeServiceAccountsRead,
+		ScopeMembersRead, ScopeTeamsRead, ScopeServiceAccountsRead, ScopeMLStudioRead,
 		ScopeDiagramsWrite, ScopeDocsWrite, ScopeMapsWrite, ScopeServicesWrite, ScopeChatWrite, ScopeFoldersWrite,
+		ScopeMLStudioWrite,
 	},
 	RoleAdmin: {
 		"diagrams:*", "docs:*", "maps:*", "services:*", "chat:*", "folders:*",
-		"members:*", "teams:*", "serviceaccounts:*", "org:*",
+		"members:*", "teams:*", "serviceaccounts:*", "mlstudio:*", "org:*",
 	},
 }
 
