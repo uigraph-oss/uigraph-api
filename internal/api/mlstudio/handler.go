@@ -35,6 +35,7 @@ func Register(
 	requireScope("mlstudio:write", "POST", base+"/runs/{runId}/series/sync", h.SyncRunSeries)
 	requireScope("mlstudio:write", "POST", base+"/artifacts/sync", h.SyncArtifacts)
 	requireScope("mlstudio:write", "POST", base+"/datasets/sync", h.SyncDatasets)
+	requireScope("mlstudio:write", "POST", base+"/evaluation-datasets/sync", h.SyncEvaluationDatasets)
 	requireScope("mlstudio:write", "POST", base+"/evaluations/sync", h.SyncEvaluations)
 
 	requireScope("mlstudio:write", "PATCH", base+"/models/{modelId}", h.UpdateModel)
@@ -55,6 +56,8 @@ func Register(
 	requireScope("mlstudio:read", "GET", base+"/runs/{runId}/artifacts", h.ListRunArtifacts)
 	requireScope("mlstudio:read", "GET", base+"/datasets", h.ListDatasets)
 	requireScope("mlstudio:read", "GET", base+"/datasets/{datasetId}", h.GetDataset)
+	requireScope("mlstudio:read", "GET", base+"/evaluation-datasets", h.ListEvaluationDatasets)
+	requireScope("mlstudio:read", "GET", base+"/evaluation-datasets/{datasetId}", h.GetEvaluationDataset)
 
 	requireScope("mlstudio:write", "POST", base+"/deployments", h.CreateDeployment)
 	requireScope("mlstudio:read", "GET", base+"/deployments", h.ListDeployments)

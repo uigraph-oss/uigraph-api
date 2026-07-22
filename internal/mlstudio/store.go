@@ -11,6 +11,7 @@ type Store interface {
 	UpsertMLRunMetricPoints(ctx context.Context, orgID, runMLflowID string, in []MetricPoint) error
 	UpsertMLArtifacts(ctx context.Context, orgID, actorID string, in []ArtifactInput) error
 	UpsertMLDatasets(ctx context.Context, orgID, actorID string, in []DatasetInput) error
+	UpsertMLEvaluationDatasets(ctx context.Context, orgID, actorID string, in []EvaluationDatasetInput) error
 	UpsertMLEvaluations(ctx context.Context, orgID, actorID string, in []EvaluationInput) error
 
 	ListMLModels(ctx context.Context, orgID string) ([]Model, error)
@@ -25,6 +26,8 @@ type Store interface {
 	ListMLArtifacts(ctx context.Context, orgID, runID string) ([]Artifact, error)
 	ListMLDatasets(ctx context.Context, orgID string) ([]Dataset, error)
 	GetMLDataset(ctx context.Context, orgID, id string) (*Dataset, error)
+	ListMLEvaluationDatasets(ctx context.Context, orgID, experimentID string) ([]EvaluationDataset, error)
+	GetMLEvaluationDataset(ctx context.Context, orgID, id string) (*EvaluationDataset, error)
 	ListMLVersionEvaluations(ctx context.Context, orgID, versionID string) ([]Evaluation, error)
 
 	CreateMLDeployment(ctx context.Context, d Deployment) error

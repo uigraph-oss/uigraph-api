@@ -299,6 +299,67 @@ func (d *DB) GetMLDataset(ctx context.Context, orgID, id string) (*mlstudio.Data
 	return &ds, nil
 }
 
+func scanMLEvaluationDataset(row interface{ Scan(...any) error }) (mlstudio.EvaluationDataset, error) {
+	var ds mlstudio.EvaluationDataset
+	var schema, tags []byte
+	err := row.Scan(
+		&ds.ID, &ds.OrgID, &ds.MLflowID, &ds.Name, &ds.Digest, &ds.Source, &ds.SourceType, &ds.RowCount, &schema, &tags,
+	)
+	if err != nil {
+		return ds, err
+	}
+	if err := json.Unmarshal(schema, &ds.Schema); err != nil {
+		return ds, err
+	}
+	if err := json.Unmarshal(tags, &ds.Tags); err != nil {
+		return ds, err
+	}
+	return ds, nil
+}
+
+const mlEvaluationDatasetCols = `id, org_id, mlflow_id, name, digest, source, source_type, row_count, schema, tags`
+const mlEvaluationDatasetColsD = `d.id, d.org_id, d.mlflow_id, d.name, d.digest, d.source, d.source_type, d.row_count, d.schema, d.tags`
+
+func (d *DB) ListMLEvaluationDatasets(ctx context.Context, orgID, experimentID string) ([]mlstudio.EvaluationDataset, error) {
+	var q string
+	args := []any{orgID}
+	if experimentID != "" {
+		q = `SELECT ` + mlEvaluationDatasetColsD + `
+			FROM ml_evaluation_datasets d
+			JOIN ml_experiment_evaluation_datasets j ON j.dataset_id = d.id
+			WHERE d.org_id=$1 AND j.experiment_id=$2 AND d.deleted_at IS NULL
+			ORDER BY d.name ASC`
+		args = append(args, experimentID)
+	} else {
+		q = `SELECT ` + mlEvaluationDatasetCols + ` FROM ml_evaluation_datasets WHERE org_id=$1 AND deleted_at IS NULL ORDER BY name ASC`
+	}
+	rows, err := d.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: ListMLEvaluationDatasets: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []mlstudio.EvaluationDataset
+	for rows.Next() {
+		ds, err := scanMLEvaluationDataset(rows)
+		if err != nil {
+			return nil, fmt.Errorf("postgres: ListMLEvaluationDatasets scan: %w", err)
+		}
+		out = append(out, ds)
+	}
+	return out, rows.Err()
+}
+
+func (d *DB) GetMLEvaluationDataset(ctx context.Context, orgID, id string) (*mlstudio.EvaluationDataset, error) {
+	ds, err := scanMLEvaluationDataset(d.db.QueryRowContext(ctx, `SELECT `+mlEvaluationDatasetCols+` FROM ml_evaluation_datasets WHERE org_id=$1 AND id=$2 AND deleted_at IS NULL`, orgID, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("postgres: GetMLEvaluationDataset: %w", err)
+	}
+	return &ds, nil
+}
+
 func (d *DB) ListMLVersionEvaluations(ctx context.Context, orgID, versionID string) ([]mlstudio.Evaluation, error) {
 	rows, err := d.db.QueryContext(ctx, `
 		SELECT id, org_id, mlflow_id, version_id, dataset_id, name, type, description, summary, evaluated_at, evaluator

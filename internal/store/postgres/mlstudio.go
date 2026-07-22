@@ -305,6 +305,67 @@ func (d *DB) UpsertMLDatasets(ctx context.Context, orgID, actorID string, in []m
 	return nil
 }
 
+func (d *DB) UpsertMLEvaluationDatasets(ctx context.Context, orgID, actorID string, in []mlstudio.EvaluationDatasetInput) error {
+	tx, err := d.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("postgres: UpsertMLEvaluationDatasets begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, ds := range in {
+		schema := ds.Schema
+		if schema == nil {
+			schema = []mlstudio.SchemaField{}
+		}
+		schemaJSON, err := jsonBytes(schema)
+		if err != nil {
+			return fmt.Errorf("postgres: UpsertMLEvaluationDatasets marshal schema: %w", err)
+		}
+		tags := ds.Tags
+		if tags == nil {
+			tags = map[string]string{}
+		}
+		tagsJSON, err := jsonBytes(tags)
+		if err != nil {
+			return fmt.Errorf("postgres: UpsertMLEvaluationDatasets marshal tags: %w", err)
+		}
+		var datasetID string
+		err = tx.QueryRowContext(ctx, `
+			INSERT INTO ml_evaluation_datasets (org_id, mlflow_id, name, digest, source, source_type, row_count, schema, tags, synced_at, created_by, updated_by)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW(),$10,$10)
+			ON CONFLICT (org_id, mlflow_id) DO UPDATE SET
+				name=EXCLUDED.name, digest=EXCLUDED.digest, source=EXCLUDED.source, source_type=EXCLUDED.source_type,
+				row_count=EXCLUDED.row_count, schema=EXCLUDED.schema, tags=EXCLUDED.tags,
+				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()
+			RETURNING id`,
+			orgID, ds.MLflowID, ds.Name, ds.Digest, ds.Source, ds.SourceType, ds.RowCount, schemaJSON, tagsJSON, actorID).Scan(&datasetID)
+		if err != nil {
+			return fmt.Errorf("postgres: UpsertMLEvaluationDatasets upsert: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM ml_experiment_evaluation_datasets WHERE dataset_id=$1`, datasetID); err != nil {
+			return fmt.Errorf("postgres: UpsertMLEvaluationDatasets clear links: %w", err)
+		}
+		for _, expMLflowID := range ds.ExperimentMLflowIDs {
+			experimentID, ok, err := resolveMLID(ctx, tx, "ml_experiments", orgID, expMLflowID)
+			if err != nil {
+				return fmt.Errorf("postgres: UpsertMLEvaluationDatasets resolve experiment: %w", err)
+			}
+			if !ok {
+				continue
+			}
+			if _, err := tx.ExecContext(ctx, `
+				INSERT INTO ml_experiment_evaluation_datasets (experiment_id, dataset_id)
+				VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+				experimentID, datasetID); err != nil {
+				return fmt.Errorf("postgres: UpsertMLEvaluationDatasets link: %w", err)
+			}
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("postgres: UpsertMLEvaluationDatasets commit: %w", err)
+	}
+	return nil
+}
+
 func (d *DB) UpsertMLEvaluations(ctx context.Context, orgID, actorID string, in []mlstudio.EvaluationInput) error {
 	tx, err := d.db.BeginTx(ctx, nil)
 	if err != nil {

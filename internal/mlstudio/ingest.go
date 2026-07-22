@@ -69,6 +69,18 @@ type DatasetInput struct {
 	Schema   []SchemaField `json:"schema"`
 }
 
+type EvaluationDatasetInput struct {
+	MLflowID            string            `json:"mlflowId"`
+	Name                string            `json:"name"`
+	Digest              string            `json:"digest"`
+	Source              string            `json:"source"`
+	SourceType          string            `json:"sourceType"`
+	RowCount            int64             `json:"rowCount"`
+	Schema              []SchemaField     `json:"schema"`
+	Tags                map[string]string `json:"tags"`
+	ExperimentMLflowIDs []string          `json:"experimentMlflowIds"`
+}
+
 type EvaluationInput struct {
 	MLflowID        string        `json:"mlflowId"`
 	VersionMLflowID string        `json:"versionMlflowId"`

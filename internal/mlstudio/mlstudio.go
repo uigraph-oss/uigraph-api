@@ -91,6 +91,19 @@ type Dataset struct {
 	Schema   []SchemaField `json:"schema"`
 }
 
+type EvaluationDataset struct {
+	ID         string            `json:"id"`
+	OrgID      string            `json:"orgId"`
+	MLflowID   string            `json:"mlflowId"`
+	Name       string            `json:"name"`
+	Digest     string            `json:"digest"`
+	Source     string            `json:"source"`
+	SourceType string            `json:"sourceType"`
+	RowCount   int64             `json:"rowCount"`
+	Schema     []SchemaField     `json:"schema"`
+	Tags       map[string]string `json:"tags"`
+}
+
 type Metric struct {
 	ID         string     `json:"id"`
 	Name       string     `json:"name"`
