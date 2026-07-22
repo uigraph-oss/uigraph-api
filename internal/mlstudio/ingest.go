@@ -13,8 +13,15 @@ type ModelInput struct {
 }
 
 type ModelUpdateInput struct {
-	Domain      string `json:"domain"`
-	ProblemType string `json:"problemType"`
+	Domain                string   `json:"domain"`
+	ProblemType           string   `json:"problemType"`
+	Owners                string   `json:"owners"`
+	License               string   `json:"license"`
+	References            []string `json:"references"`
+	IntendedUse           string   `json:"intendedUse"`
+	Limitations           string   `json:"limitations"`
+	EthicalConsiderations string   `json:"ethicalConsiderations"`
+	Caveats               string   `json:"caveats"`
 }
 
 type ModelVersionInput struct {

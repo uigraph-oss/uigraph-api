@@ -3,17 +3,24 @@ package mlstudio
 import "time"
 
 type Model struct {
-	ID                  string     `json:"id"`
-	OrgID               string     `json:"orgId"`
-	MLflowID            string     `json:"mlflowId"`
-	Name                string     `json:"name"`
-	Description         string     `json:"description"`
-	Domain              string     `json:"domain"`
-	ProblemType         string     `json:"problemType"`
-	Tags                []string   `json:"tags"`
-	ProductionVersionID *string    `json:"productionVersionId,omitempty"`
-	CreatedAt           *time.Time `json:"createdAt,omitempty"`
-	UpdatedAt           *time.Time `json:"updatedAt,omitempty"`
+	ID                    string     `json:"id"`
+	OrgID                 string     `json:"orgId"`
+	MLflowID              string     `json:"mlflowId"`
+	Name                  string     `json:"name"`
+	Description           string     `json:"description"`
+	Domain                string     `json:"domain"`
+	ProblemType           string     `json:"problemType"`
+	Tags                  []string   `json:"tags"`
+	Owners                string     `json:"owners"`
+	License               string     `json:"license"`
+	References            []string   `json:"references"`
+	IntendedUse           string     `json:"intendedUse"`
+	Limitations           string     `json:"limitations"`
+	EthicalConsiderations string     `json:"ethicalConsiderations"`
+	Caveats               string     `json:"caveats"`
+	ProductionVersionID   *string    `json:"productionVersionId,omitempty"`
+	CreatedAt             *time.Time `json:"createdAt,omitempty"`
+	UpdatedAt             *time.Time `json:"updatedAt,omitempty"`
 }
 
 type ModelVersion struct {

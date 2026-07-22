@@ -73,10 +73,18 @@ func (d *DB) UpsertMLModels(ctx context.Context, orgID, actorID string, in []mls
 }
 
 func (d *DB) UpdateMLModel(ctx context.Context, orgID, id, actorID string, in mlstudio.ModelUpdateInput) error {
+	refs := in.References
+	if refs == nil {
+		refs = []string{}
+	}
 	_, err := d.db.ExecContext(ctx, `
-		UPDATE ml_models SET domain=$1, problem_type=$2, updated_by=$3, updated_at=NOW()
-		WHERE org_id=$4 AND id=$5 AND deleted_at IS NULL`,
-		in.Domain, in.ProblemType, actorID, orgID, id)
+		UPDATE ml_models SET domain=$1, problem_type=$2, owners=$3, license=$4,
+			reference_links=$5, intended_use=$6, limitations=$7,
+			ethical_considerations=$8, caveats=$9, updated_by=$10, updated_at=NOW()
+		WHERE org_id=$11 AND id=$12 AND deleted_at IS NULL`,
+		in.Domain, in.ProblemType, in.Owners, in.License, pq.Array(refs),
+		in.IntendedUse, in.Limitations, in.EthicalConsiderations, in.Caveats,
+		actorID, orgID, id)
 	if err != nil {
 		return fmt.Errorf("postgres: UpdateMLModel: %w", err)
 	}
