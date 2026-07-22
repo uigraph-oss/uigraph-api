@@ -43,6 +43,7 @@ func Register(
 	requireScope("mlstudio:read", "GET", base+"/models/{modelId}", h.GetModel)
 	requireScope("mlstudio:read", "GET", base+"/models/{modelId}/versions", h.ListVersions)
 	requireScope("mlstudio:read", "GET", base+"/versions", h.ListAllVersions)
+	requireScope("mlstudio:read", "GET", base+"/deployment-updates", h.ListVersionDeploymentUpdates)
 	requireScope("mlstudio:read", "GET", base+"/runs", h.ListAllRuns)
 	requireScope("mlstudio:read", "GET", base+"/artifacts", h.ListAllArtifacts)
 	requireScope("mlstudio:read", "GET", base+"/versions/{versionId}", h.GetVersion)

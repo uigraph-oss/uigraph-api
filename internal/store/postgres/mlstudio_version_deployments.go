@@ -28,7 +28,14 @@ func (d *DB) CreateVersionDeploymentUpdate(ctx context.Context, u mlstudio.Versi
 }
 
 func (d *DB) ListVersionDeploymentUpdates(ctx context.Context, orgID, versionID string) ([]mlstudio.VersionDeploymentUpdate, error) {
-	rows, err := d.db.QueryContext(ctx, `SELECT `+mlVersionDeploymentCols+` FROM ml_version_deployments WHERE org_id=$1 AND version_id=$2 ORDER BY changed_at DESC, id DESC`, orgID, versionID)
+	q := `SELECT ` + mlVersionDeploymentCols + ` FROM ml_version_deployments WHERE org_id=$1`
+	args := []any{orgID}
+	if versionID != "" {
+		args = append(args, versionID)
+		q += fmt.Sprintf(" AND version_id=$%d", len(args))
+	}
+	q += " ORDER BY changed_at DESC, id DESC"
+	rows, err := d.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListVersionDeploymentUpdates: %w", err)
 	}
