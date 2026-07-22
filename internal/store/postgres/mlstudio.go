@@ -175,11 +175,12 @@ func (d *DB) UpsertMLRuns(ctx context.Context, orgID, actorID string, in []mlstu
 		}
 		var datasetID any
 		if run.DatasetMLflowID != nil && *run.DatasetMLflowID != "" {
-			id, found, err := resolveMLID(ctx, tx, "ml_datasets", orgID, *run.DatasetMLflowID)
-			if err != nil {
+			var id string
+			err := tx.QueryRowContext(ctx, `SELECT id FROM ml_datasets WHERE org_id=$1 AND experiment_id=$2 AND mlflow_id=$3 AND deleted_at IS NULL`, orgID, experimentID, *run.DatasetMLflowID).Scan(&id)
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
 				return fmt.Errorf("postgres: UpsertMLRuns resolve dataset: %w", err)
 			}
-			if found {
+			if err == nil {
 				datasetID = id
 			}
 		}
@@ -287,6 +288,13 @@ func (d *DB) UpsertMLDatasets(ctx context.Context, orgID, actorID string, in []m
 	}
 	defer func() { _ = tx.Rollback() }()
 	for _, ds := range in {
+		experimentID, ok, err := resolveMLID(ctx, tx, "ml_experiments", orgID, ds.ExperimentMLflowID)
+		if err != nil {
+			return fmt.Errorf("postgres: UpsertMLDatasets resolve experiment: %w", err)
+		}
+		if !ok {
+			return fmt.Errorf("%w: experiment %q", mlstudio.ErrParentNotFound, ds.ExperimentMLflowID)
+		}
 		schema := ds.Schema
 		if schema == nil {
 			schema = []mlstudio.SchemaField{}
@@ -295,81 +303,28 @@ func (d *DB) UpsertMLDatasets(ctx context.Context, orgID, actorID string, in []m
 		if err != nil {
 			return fmt.Errorf("postgres: UpsertMLDatasets marshal schema: %w", err)
 		}
-		_, err = tx.ExecContext(ctx, `
-			INSERT INTO ml_datasets (org_id, mlflow_id, name, source, type, row_count, schema, synced_at, created_by, updated_by)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,NOW(),$8,$8)
-			ON CONFLICT (org_id, mlflow_id) DO UPDATE SET
-				name=EXCLUDED.name, source=EXCLUDED.source, type=EXCLUDED.type,
-				row_count=EXCLUDED.row_count, schema=EXCLUDED.schema,
-				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()`,
-			orgID, ds.MLflowID, ds.Name, ds.Source, ds.Type, ds.RowCount, schemaJSON, actorID)
-		if err != nil {
-			return fmt.Errorf("postgres: UpsertMLDatasets upsert: %w", err)
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("postgres: UpsertMLDatasets commit: %w", err)
-	}
-	return nil
-}
-
-func (d *DB) UpsertMLEvaluationDatasets(ctx context.Context, orgID, actorID string, in []mlstudio.EvaluationDatasetInput) error {
-	tx, err := d.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("postgres: UpsertMLEvaluationDatasets begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	for _, ds := range in {
-		schema := ds.Schema
-		if schema == nil {
-			schema = []mlstudio.SchemaField{}
-		}
-		schemaJSON, err := jsonBytes(schema)
-		if err != nil {
-			return fmt.Errorf("postgres: UpsertMLEvaluationDatasets marshal schema: %w", err)
-		}
 		tags := ds.Tags
 		if tags == nil {
 			tags = map[string]string{}
 		}
 		tagsJSON, err := jsonBytes(tags)
 		if err != nil {
-			return fmt.Errorf("postgres: UpsertMLEvaluationDatasets marshal tags: %w", err)
+			return fmt.Errorf("postgres: UpsertMLDatasets marshal tags: %w", err)
 		}
-		var datasetID string
-		err = tx.QueryRowContext(ctx, `
-			INSERT INTO ml_evaluation_datasets (org_id, mlflow_id, name, digest, source, source_type, row_count, schema, tags, synced_at, created_by, updated_by)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW(),$10,$10)
-			ON CONFLICT (org_id, mlflow_id) DO UPDATE SET
+		_, err = tx.ExecContext(ctx, `
+			INSERT INTO ml_datasets (org_id, experiment_id, mlflow_id, name, digest, source, source_type, context, row_count, schema, tags, synced_at, created_by, updated_by)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW(),$12,$12)
+			ON CONFLICT (org_id, experiment_id, mlflow_id) DO UPDATE SET
 				name=EXCLUDED.name, digest=EXCLUDED.digest, source=EXCLUDED.source, source_type=EXCLUDED.source_type,
-				row_count=EXCLUDED.row_count, schema=EXCLUDED.schema, tags=EXCLUDED.tags,
-				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()
-			RETURNING id`,
-			orgID, ds.MLflowID, ds.Name, ds.Digest, ds.Source, ds.SourceType, ds.RowCount, schemaJSON, tagsJSON, actorID).Scan(&datasetID)
+				context=EXCLUDED.context, row_count=EXCLUDED.row_count, schema=EXCLUDED.schema, tags=EXCLUDED.tags,
+				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()`,
+			orgID, experimentID, ds.MLflowID, ds.Name, ds.Digest, ds.Source, ds.SourceType, ds.Context, ds.RowCount, schemaJSON, tagsJSON, actorID)
 		if err != nil {
-			return fmt.Errorf("postgres: UpsertMLEvaluationDatasets upsert: %w", err)
-		}
-		if _, err := tx.ExecContext(ctx, `DELETE FROM ml_experiment_evaluation_datasets WHERE dataset_id=$1`, datasetID); err != nil {
-			return fmt.Errorf("postgres: UpsertMLEvaluationDatasets clear links: %w", err)
-		}
-		for _, expMLflowID := range ds.ExperimentMLflowIDs {
-			experimentID, ok, err := resolveMLID(ctx, tx, "ml_experiments", orgID, expMLflowID)
-			if err != nil {
-				return fmt.Errorf("postgres: UpsertMLEvaluationDatasets resolve experiment: %w", err)
-			}
-			if !ok {
-				continue
-			}
-			if _, err := tx.ExecContext(ctx, `
-				INSERT INTO ml_experiment_evaluation_datasets (experiment_id, dataset_id)
-				VALUES ($1,$2) ON CONFLICT DO NOTHING`,
-				experimentID, datasetID); err != nil {
-				return fmt.Errorf("postgres: UpsertMLEvaluationDatasets link: %w", err)
-			}
+			return fmt.Errorf("postgres: UpsertMLDatasets upsert: %w", err)
 		}
 	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("postgres: UpsertMLEvaluationDatasets commit: %w", err)
+		return fmt.Errorf("postgres: UpsertMLDatasets commit: %w", err)
 	}
 	return nil
 }

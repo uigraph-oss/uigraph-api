@@ -68,24 +68,16 @@ type ArtifactInput struct {
 }
 
 type DatasetInput struct {
-	MLflowID string        `json:"mlflowId"`
-	Name     string        `json:"name"`
-	Source   string        `json:"source"`
-	Type     string        `json:"type"`
-	RowCount int64         `json:"rowCount"`
-	Schema   []SchemaField `json:"schema"`
-}
-
-type EvaluationDatasetInput struct {
-	MLflowID            string            `json:"mlflowId"`
-	Name                string            `json:"name"`
-	Digest              string            `json:"digest"`
-	Source              string            `json:"source"`
-	SourceType          string            `json:"sourceType"`
-	RowCount            int64             `json:"rowCount"`
-	Schema              []SchemaField     `json:"schema"`
-	Tags                map[string]string `json:"tags"`
-	ExperimentMLflowIDs []string          `json:"experimentMlflowIds"`
+	MLflowID           string            `json:"mlflowId"`
+	ExperimentMLflowID string            `json:"experimentMlflowId"`
+	Name               string            `json:"name"`
+	Digest             string            `json:"digest"`
+	Source             string            `json:"source"`
+	SourceType         string            `json:"sourceType"`
+	Context            string            `json:"context"`
+	RowCount           int64             `json:"rowCount"`
+	Schema             []SchemaField     `json:"schema"`
+	Tags               map[string]string `json:"tags"`
 }
 
 type EvaluationInput struct {

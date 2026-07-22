@@ -160,23 +160,6 @@ func (h *Handler) SyncDatasets(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"synced": len(in)})
 }
 
-func (h *Handler) SyncEvaluationDatasets(w http.ResponseWriter, r *http.Request) {
-	p, orgID, ok := h.authorizeOrg(w, r)
-	if !ok {
-		return
-	}
-	var in []mlstudio.EvaluationDatasetInput
-	if err := httputil.Decode(r, &in); err != nil {
-		httputil.BadRequest(w, "invalid request body")
-		return
-	}
-	if err := h.store.UpsertMLEvaluationDatasets(r.Context(), orgID, p.UserID, in); err != nil {
-		writeErr(w, r, err)
-		return
-	}
-	httputil.JSON(w, http.StatusOK, map[string]any{"synced": len(in)})
-}
-
 func (h *Handler) SyncEvaluations(w http.ResponseWriter, r *http.Request) {
 	p, orgID, ok := h.authorizeOrg(w, r)
 	if !ok {

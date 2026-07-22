@@ -88,27 +88,18 @@ type SchemaField struct {
 }
 
 type Dataset struct {
-	ID       string        `json:"id"`
-	OrgID    string        `json:"orgId"`
-	MLflowID string        `json:"mlflowId"`
-	Name     string        `json:"name"`
-	Source   string        `json:"source"`
-	Type     string        `json:"type"`
-	RowCount int64         `json:"rowCount"`
-	Schema   []SchemaField `json:"schema"`
-}
-
-type EvaluationDataset struct {
-	ID         string            `json:"id"`
-	OrgID      string            `json:"orgId"`
-	MLflowID   string            `json:"mlflowId"`
-	Name       string            `json:"name"`
-	Digest     string            `json:"digest"`
-	Source     string            `json:"source"`
-	SourceType string            `json:"sourceType"`
-	RowCount   int64             `json:"rowCount"`
-	Schema     []SchemaField     `json:"schema"`
-	Tags       map[string]string `json:"tags"`
+	ID           string            `json:"id"`
+	OrgID        string            `json:"orgId"`
+	ExperimentID string            `json:"experimentId"`
+	MLflowID     string            `json:"mlflowId"`
+	Name         string            `json:"name"`
+	Digest       string            `json:"digest"`
+	Source       string            `json:"source"`
+	SourceType   string            `json:"sourceType"`
+	Context      string            `json:"context"`
+	RowCount     int64             `json:"rowCount"`
+	Schema       []SchemaField     `json:"schema"`
+	Tags         map[string]string `json:"tags"`
 }
 
 type Metric struct {

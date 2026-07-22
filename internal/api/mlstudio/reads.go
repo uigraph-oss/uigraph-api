@@ -205,42 +205,12 @@ func (h *Handler) ListRunArtifacts(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"artifacts": artifacts})
 }
 
-func (h *Handler) ListEvaluationDatasets(w http.ResponseWriter, r *http.Request) {
-	_, orgID, ok := h.authorizeOrg(w, r)
-	if !ok {
-		return
-	}
-	datasets, err := h.store.ListMLEvaluationDatasets(r.Context(), orgID, r.URL.Query().Get("experimentId"))
-	if err != nil {
-		httputil.Error(w, r, err)
-		return
-	}
-	httputil.JSON(w, http.StatusOK, map[string]any{"evaluationDatasets": datasets})
-}
-
-func (h *Handler) GetEvaluationDataset(w http.ResponseWriter, r *http.Request) {
-	_, orgID, ok := h.authorizeOrg(w, r)
-	if !ok {
-		return
-	}
-	ds, err := h.store.GetMLEvaluationDataset(r.Context(), orgID, r.PathValue("datasetId"))
-	if err != nil {
-		httputil.Error(w, r, err)
-		return
-	}
-	if ds == nil {
-		httputil.Error(w, r, storepkg.ErrNotFound)
-		return
-	}
-	httputil.JSON(w, http.StatusOK, ds)
-}
-
 func (h *Handler) ListDatasets(w http.ResponseWriter, r *http.Request) {
 	_, orgID, ok := h.authorizeOrg(w, r)
 	if !ok {
 		return
 	}
-	datasets, err := h.store.ListMLDatasets(r.Context(), orgID)
+	datasets, err := h.store.ListMLDatasets(r.Context(), orgID, r.URL.Query().Get("experimentId"))
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
