@@ -30,8 +30,6 @@ type ModelVersionInput struct {
 	RunMLflowID   *string    `json:"runMlflowId"`
 	Version       string     `json:"version"`
 	Description   string     `json:"description"`
-	Status        string     `json:"status"`
-	Stage         string     `json:"stage"`
 	CreatedAt     *time.Time `json:"createdAt"`
 }
 

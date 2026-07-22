@@ -1,6 +1,7 @@
 package mlstudio
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -328,6 +329,80 @@ func (h *Handler) DeleteFinding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+var allowedVersionTransitions = map[string][]string{
+	"candidate":  {"staging"},
+	"staging":    {"production", "candidate"},
+	"production": {"staging", "retired"},
+	"retired":    {"staging"},
+}
+
+func (h *Handler) CreateVersionDeploymentUpdate(w http.ResponseWriter, r *http.Request) {
+	p, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	versionID := r.PathValue("versionId")
+	version, err := h.store.GetMLModelVersion(r.Context(), orgID, versionID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if version == nil {
+		httputil.BadRequest(w, "version not found in org")
+		return
+	}
+	var body struct {
+		ToStatus string `json:"toStatus"`
+	}
+	if err := httputil.Decode(r, &body); err != nil {
+		httputil.BadRequest(w, "invalid request body")
+		return
+	}
+	from := version.DeploymentStatus
+	allowed := false
+	for _, to := range allowedVersionTransitions[from] {
+		if to == body.ToStatus {
+			allowed = true
+		}
+	}
+	if !allowed {
+		httputil.BadRequest(w, fmt.Sprintf("invalid transition from %q to %q", from, body.ToStatus))
+		return
+	}
+	fromStatus := from
+	u := mlstudio.VersionDeploymentUpdate{
+		ID:         uuid.NewString(),
+		OrgID:      orgID,
+		VersionID:  versionID,
+		FromStatus: &fromStatus,
+		ToStatus:   body.ToStatus,
+		ChangedBy:  p.UserID,
+	}
+	if err := h.store.CreateVersionDeploymentUpdate(r.Context(), u); err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	updates, err := h.store.ListVersionDeploymentUpdates(r.Context(), orgID, versionID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusCreated, updates[0])
+}
+
+func (h *Handler) ListVersionDeploymentUpdates(w http.ResponseWriter, r *http.Request) {
+	_, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	updates, err := h.store.ListVersionDeploymentUpdates(r.Context(), orgID, r.PathValue("versionId"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{"updates": updates})
 }
 
 func (h *Handler) ensureModelInOrg(w http.ResponseWriter, r *http.Request, orgID, modelID string) bool {

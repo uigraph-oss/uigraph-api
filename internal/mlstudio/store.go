@@ -27,6 +27,9 @@ type Store interface {
 	GetMLDataset(ctx context.Context, orgID, id string) (*Dataset, error)
 	ListMLVersionEvaluations(ctx context.Context, orgID, versionID string) ([]Evaluation, error)
 
+	CreateVersionDeploymentUpdate(ctx context.Context, u VersionDeploymentUpdate) error
+	ListVersionDeploymentUpdates(ctx context.Context, orgID, versionID string) ([]VersionDeploymentUpdate, error)
+
 	CreateMLDeployment(ctx context.Context, d Deployment) error
 	GetMLDeployment(ctx context.Context, orgID, id string) (*Deployment, error)
 	ListMLDeployments(ctx context.Context, orgID, modelID, versionID string) ([]Deployment, error)

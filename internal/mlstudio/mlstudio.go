@@ -24,16 +24,25 @@ type Model struct {
 }
 
 type ModelVersion struct {
-	ID          string     `json:"id"`
-	OrgID       string     `json:"orgId"`
-	MLflowID    string     `json:"mlflowId"`
-	ModelID     string     `json:"modelId"`
-	Version     string     `json:"version"`
-	Description string     `json:"description"`
-	Status      string     `json:"status"`
-	Stage       string     `json:"stage"`
-	RunID       *string    `json:"runId,omitempty"`
-	CreatedAt   *time.Time `json:"createdAt,omitempty"`
+	ID               string     `json:"id"`
+	OrgID            string     `json:"orgId"`
+	MLflowID         string     `json:"mlflowId"`
+	ModelID          string     `json:"modelId"`
+	Version          string     `json:"version"`
+	Description      string     `json:"description"`
+	DeploymentStatus string     `json:"deploymentStatus"`
+	RunID            *string    `json:"runId,omitempty"`
+	CreatedAt        *time.Time `json:"createdAt,omitempty"`
+}
+
+type VersionDeploymentUpdate struct {
+	ID         string     `json:"id"`
+	OrgID      string     `json:"orgId"`
+	VersionID  string     `json:"versionId"`
+	FromStatus *string    `json:"fromStatus,omitempty"`
+	ToStatus   string     `json:"toStatus"`
+	ChangedBy  string     `json:"changedBy"`
+	ChangedAt  *time.Time `json:"changedAt,omitempty"`
 }
 
 type Experiment struct {

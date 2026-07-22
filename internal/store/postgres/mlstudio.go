@@ -116,15 +116,14 @@ func (d *DB) UpsertMLModelVersions(ctx context.Context, orgID, actorID string, i
 			}
 		}
 		_, err = tx.ExecContext(ctx, `
-			INSERT INTO ml_model_versions (org_id, mlflow_id, model_id, version, description, status, stage, run_id, mlflow_created_at, synced_at, created_by, updated_by)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW(),$10,$10)
+			INSERT INTO ml_model_versions (org_id, mlflow_id, model_id, version, description, run_id, mlflow_created_at, synced_at, created_by, updated_by)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,NOW(),$8,$8)
 			ON CONFLICT (org_id, mlflow_id) DO UPDATE SET
 				model_id=EXCLUDED.model_id, version=EXCLUDED.version, description=EXCLUDED.description,
-				status=EXCLUDED.status, stage=EXCLUDED.stage,
 				run_id=COALESCE(EXCLUDED.run_id, ml_model_versions.run_id),
 				mlflow_created_at=EXCLUDED.mlflow_created_at,
 				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()`,
-			orgID, v.MLflowID, modelID, v.Version, v.Description, v.Status, v.Stage, runID, v.CreatedAt, actorID)
+			orgID, v.MLflowID, modelID, v.Version, v.Description, runID, v.CreatedAt, actorID)
 		if err != nil {
 			return fmt.Errorf("postgres: UpsertMLModelVersions upsert: %w", err)
 		}

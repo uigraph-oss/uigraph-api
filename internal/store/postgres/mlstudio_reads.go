@@ -58,12 +58,14 @@ func scanMLModelVersion(row interface{ Scan(...any) error }) (mlstudio.ModelVers
 	var v mlstudio.ModelVersion
 	err := row.Scan(
 		&v.ID, &v.OrgID, &v.MLflowID, &v.ModelID, &v.Version, &v.Description,
-		&v.Status, &v.Stage, &v.RunID, &v.CreatedAt,
+		&v.DeploymentStatus, &v.RunID, &v.CreatedAt,
 	)
 	return v, err
 }
 
-const mlVersionCols = `id, org_id, mlflow_id, model_id, version, description, status, stage, run_id, mlflow_created_at`
+const mlVersionCols = `id, org_id, mlflow_id, model_id, version, description, ` +
+	`COALESCE((SELECT to_status FROM ml_version_deployments u WHERE u.version_id = ml_model_versions.id ORDER BY changed_at DESC, id DESC LIMIT 1), 'candidate') AS deployment_status, ` +
+	`run_id, mlflow_created_at`
 
 func (d *DB) ListMLModelVersions(ctx context.Context, orgID, modelID string) ([]mlstudio.ModelVersion, error) {
 	q := `SELECT ` + mlVersionCols + ` FROM ml_model_versions WHERE org_id=$1 AND deleted_at IS NULL`
