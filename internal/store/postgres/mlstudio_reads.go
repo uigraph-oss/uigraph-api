@@ -134,17 +134,27 @@ func scanMLProject(row interface{ Scan(...any) error }) (mlstudio.Project, error
 const mlProjectCols = `id, org_id, name, type, description, source_type, source_url, team_id`
 
 func (d *DB) ListMLProjects(ctx context.Context, orgID string) ([]mlstudio.Project, error) {
-	rows, err := d.db.QueryContext(ctx, `SELECT `+mlProjectCols+` FROM ml_projects WHERE org_id=$1 AND deleted_at IS NULL ORDER BY name ASC`, orgID)
+	rows, err := d.db.QueryContext(ctx, `
+		SELECT `+mlProjectCols+`,
+			(SELECT COUNT(*) FROM ml_models m WHERE m.project_id = ml_projects.id AND m.deleted_at IS NULL) AS model_count,
+			(SELECT COUNT(*) FROM ml_experiments e WHERE e.project_id = ml_projects.id AND e.deleted_at IS NULL) AS experiment_count,
+			(SELECT COUNT(*) FROM ml_runs r JOIN ml_experiments e ON e.id = r.experiment_id WHERE e.project_id = ml_projects.id AND r.deleted_at IS NULL) AS run_count
+		FROM ml_projects WHERE org_id=$1 AND deleted_at IS NULL ORDER BY name ASC`, orgID)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListMLProjects: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 	var out []mlstudio.Project
 	for rows.Next() {
-		p, err := scanMLProject(rows)
-		if err != nil {
+		var p mlstudio.Project
+		var stats mlstudio.ProjectStats
+		if err := rows.Scan(
+			&p.ID, &p.OrgID, &p.Name, &p.Type, &p.Description, &p.SourceType, &p.SourceURL, &p.TeamID,
+			&stats.ModelCount, &stats.ExperimentCount, &stats.RunCount,
+		); err != nil {
 			return nil, fmt.Errorf("postgres: ListMLProjects scan: %w", err)
 		}
+		p.Stats = &stats
 		out = append(out, p)
 	}
 	return out, rows.Err()
