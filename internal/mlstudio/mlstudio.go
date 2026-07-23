@@ -83,6 +83,8 @@ type Run struct {
 	Parameters   map[string]any `json:"parameters"`
 	Metrics      map[string]any `json:"metrics"`
 	DatasetID    *string        `json:"datasetId,omitempty"`
+	UpdatedAt    *time.Time     `json:"updatedAt,omitempty"`
+	SyncedAt     *time.Time     `json:"syncedAt,omitempty"`
 }
 
 type MetricPoint struct {
@@ -93,15 +95,17 @@ type MetricPoint struct {
 }
 
 type Artifact struct {
-	ID       string `json:"id"`
-	OrgID    string `json:"orgId"`
-	MLflowID string `json:"mlflowId"`
-	RunID    string `json:"runId"`
-	Name     string `json:"name"`
-	Type     string `json:"type"`
-	URI      string `json:"uri"`
-	Size     string `json:"size"`
-	Format   string `json:"format"`
+	ID        string     `json:"id"`
+	OrgID     string     `json:"orgId"`
+	MLflowID  string     `json:"mlflowId"`
+	RunID     string     `json:"runId"`
+	Name      string     `json:"name"`
+	Type      string     `json:"type"`
+	URI       string     `json:"uri"`
+	Size      string     `json:"size"`
+	Format    string     `json:"format"`
+	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
+	SyncedAt  *time.Time `json:"syncedAt,omitempty"`
 }
 
 type SchemaField struct {

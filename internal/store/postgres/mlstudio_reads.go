@@ -202,7 +202,7 @@ func scanMLRun(row interface{ Scan(...any) error }) (mlstudio.Run, error) {
 	err := row.Scan(
 		&run.ID, &run.OrgID, &run.MLflowID, &run.ExperimentID, &run.Name, &run.Status,
 		&run.StartedAt, &run.EndedAt, &run.Duration, &run.Notes,
-		&params, &metrics, &run.DatasetID,
+		&params, &metrics, &run.DatasetID, &run.UpdatedAt, &run.SyncedAt,
 	)
 	if err != nil {
 		return run, err
@@ -216,7 +216,7 @@ func scanMLRun(row interface{ Scan(...any) error }) (mlstudio.Run, error) {
 	return run, nil
 }
 
-const mlRunCols = `id, org_id, mlflow_id, experiment_id, name, status, started_at, ended_at, duration, notes, parameters, metrics, dataset_id`
+const mlRunCols = `id, org_id, mlflow_id, experiment_id, name, status, started_at, ended_at, duration, notes, parameters, metrics, dataset_id, updated_at, synced_at`
 
 func (d *DB) ListMLRuns(ctx context.Context, orgID, experimentID, projectID string) ([]mlstudio.Run, error) {
 	q := `SELECT ` + mlRunCols + ` FROM ml_runs WHERE org_id=$1 AND deleted_at IS NULL`
@@ -283,13 +283,13 @@ func scanMLArtifact(row interface{ Scan(...any) error }) (mlstudio.Artifact, err
 	var a mlstudio.Artifact
 	err := row.Scan(
 		&a.ID, &a.OrgID, &a.MLflowID, &a.RunID, &a.Name, &a.Type,
-		&a.URI, &a.Size, &a.Format,
+		&a.URI, &a.Size, &a.Format, &a.UpdatedAt, &a.SyncedAt,
 	)
 	return a, err
 }
 
 func (d *DB) ListMLArtifacts(ctx context.Context, orgID, runID string) ([]mlstudio.Artifact, error) {
-	q := `SELECT id, org_id, mlflow_id, run_id, name, type, uri, size, format
+	q := `SELECT id, org_id, mlflow_id, run_id, name, type, uri, size, format, updated_at, synced_at
 		FROM ml_artifacts WHERE org_id=$1 AND deleted_at IS NULL`
 	args := []any{orgID}
 	if runID != "" {
