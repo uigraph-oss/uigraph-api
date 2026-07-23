@@ -21,7 +21,6 @@ type ModelInput struct {
 	ProblemType               string     `json:"problemType"`
 	Domain                    string     `json:"domain"`
 	License                   string     `json:"license"`
-	Owners                    string     `json:"owners"`
 	IntendedUse               string     `json:"intendedUse"`
 	Limitations               string     `json:"limitations"`
 	Recommendations           string     `json:"recommendations"`
@@ -34,7 +33,6 @@ type ModelInput struct {
 type ModelUpdateInput struct {
 	Domain                string   `json:"domain"`
 	ProblemType           string   `json:"problemType"`
-	Owners                string   `json:"owners"`
 	License               string   `json:"license"`
 	References            []string `json:"references"`
 	IntendedUse           string   `json:"intendedUse"`

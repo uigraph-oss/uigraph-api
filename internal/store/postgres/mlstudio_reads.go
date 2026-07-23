@@ -17,7 +17,7 @@ func scanMLModel(row interface{ Scan(...any) error }) (mlstudio.Model, error) {
 	err := row.Scan(
 		&m.ID, &m.OrgID, &m.MLflowID, &m.ProjectID, &m.Name, &m.Description,
 		&m.Domain, &m.ProblemType, pq.Array(&m.Tags),
-		&m.Owners, &m.License, pq.Array(&m.References), &m.IntendedUse,
+		&m.License, pq.Array(&m.References), &m.IntendedUse,
 		&m.Limitations, &m.EthicalConsiderations, &m.Caveats,
 		&m.Recommendations, &m.Considerations,
 		&m.ProductionVersionID, &m.CreatedAt, &m.UpdatedAt,
@@ -25,7 +25,7 @@ func scanMLModel(row interface{ Scan(...any) error }) (mlstudio.Model, error) {
 	return m, err
 }
 
-const mlModelCols = `id, org_id, mlflow_id, project_id, name, description, domain, problem_type, tags, owners, license, reference_links, intended_use, limitations, ethical_considerations, caveats, recommendations, considerations, production_version_id, mlflow_created_at, updated_at`
+const mlModelCols = `id, org_id, mlflow_id, project_id, name, description, domain, problem_type, tags, license, reference_links, intended_use, limitations, ethical_considerations, caveats, recommendations, considerations, production_version_id, mlflow_created_at, updated_at`
 
 func (d *DB) ListMLModels(ctx context.Context, orgID, projectID string) ([]mlstudio.Model, error) {
 	q := `SELECT ` + mlModelCols + ` FROM ml_models WHERE org_id=$1 AND deleted_at IS NULL`
@@ -229,32 +229,51 @@ func scanMLRun(row interface{ Scan(...any) error }) (mlstudio.Run, error) {
 
 const mlRunCols = `id, org_id, mlflow_id, experiment_id, name, status, started_at, ended_at, duration, notes, parameters, metrics, dataset_id, updated_at, synced_at`
 
-func (d *DB) ListMLRuns(ctx context.Context, orgID, experimentID, projectID string) ([]mlstudio.Run, error) {
-	q := `SELECT ` + mlRunCols + ` FROM ml_runs WHERE org_id=$1 AND deleted_at IS NULL`
+func (d *DB) ListMLRuns(ctx context.Context, orgID string, q mlstudio.RunQuery) ([]mlstudio.Run, int, error) {
+	where := ` FROM ml_runs WHERE org_id=$1 AND deleted_at IS NULL`
 	args := []any{orgID}
-	if experimentID != "" {
-		args = append(args, experimentID)
-		q += fmt.Sprintf(" AND experiment_id=$%d", len(args))
+	if q.ExperimentID != "" {
+		args = append(args, q.ExperimentID)
+		where += fmt.Sprintf(" AND experiment_id=$%d", len(args))
 	}
-	if projectID != "" {
-		args = append(args, projectID)
-		q += fmt.Sprintf(" AND experiment_id IN (SELECT id FROM ml_experiments WHERE project_id=$%d)", len(args))
+	if q.ProjectID != "" {
+		args = append(args, q.ProjectID)
+		where += fmt.Sprintf(" AND experiment_id IN (SELECT id FROM ml_experiments WHERE project_id=$%d)", len(args))
 	}
-	q += " ORDER BY started_at DESC NULLS LAST"
-	rows, err := d.db.QueryContext(ctx, q, args...)
+	if q.Search != "" {
+		args = append(args, "%"+q.Search+"%")
+		where += fmt.Sprintf(" AND name ILIKE $%d", len(args))
+	}
+
+	var total int
+	if err := d.db.QueryRowContext(ctx, `SELECT COUNT(*)`+where, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("postgres: ListMLRuns count: %w", err)
+	}
+
+	sel := `SELECT ` + mlRunCols + where + ` ORDER BY started_at DESC NULLS LAST`
+	if q.Limit > 0 {
+		args = append(args, q.Limit)
+		sel += fmt.Sprintf(" LIMIT $%d", len(args))
+	}
+	if q.Offset > 0 {
+		args = append(args, q.Offset)
+		sel += fmt.Sprintf(" OFFSET $%d", len(args))
+	}
+
+	rows, err := d.db.QueryContext(ctx, sel, args...)
 	if err != nil {
-		return nil, fmt.Errorf("postgres: ListMLRuns: %w", err)
+		return nil, 0, fmt.Errorf("postgres: ListMLRuns: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 	var out []mlstudio.Run
 	for rows.Next() {
 		run, err := scanMLRun(rows)
 		if err != nil {
-			return nil, fmt.Errorf("postgres: ListMLRuns scan: %w", err)
+			return nil, 0, fmt.Errorf("postgres: ListMLRuns scan: %w", err)
 		}
 		out = append(out, run)
 	}
-	return out, rows.Err()
+	return out, total, rows.Err()
 }
 
 func (d *DB) GetMLRun(ctx context.Context, orgID, id string) (*mlstudio.Run, error) {

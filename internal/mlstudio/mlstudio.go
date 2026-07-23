@@ -31,7 +31,6 @@ type Model struct {
 	Domain                string     `json:"domain"`
 	ProblemType           string     `json:"problemType"`
 	Tags                  []string   `json:"tags"`
-	Owners                string     `json:"owners"`
 	License               string     `json:"license"`
 	References            []string   `json:"references"`
 	IntendedUse           string     `json:"intendedUse"`
@@ -94,6 +93,14 @@ type Run struct {
 	DatasetID    *string        `json:"datasetId,omitempty"`
 	UpdatedAt    *time.Time     `json:"updatedAt,omitempty"`
 	SyncedAt     *time.Time     `json:"syncedAt,omitempty"`
+}
+
+type RunQuery struct {
+	ExperimentID string
+	ProjectID    string
+	Search       string
+	Limit        int
+	Offset       int
 }
 
 type MetricPoint struct {

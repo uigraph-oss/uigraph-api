@@ -133,18 +133,18 @@ func (d *DB) UpsertMLModels(ctx context.Context, orgID, actorID string, in []mls
 			problemType = "other"
 		}
 		_, err = tx.ExecContext(ctx, `
-			INSERT INTO ml_models (org_id, mlflow_id, project_id, name, description, tags, problem_type, domain, license, owners, intended_use, limitations, recommendations, considerations, production_version_id, mlflow_created_at, mlflow_updated_at, synced_at, created_by, updated_by)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,NOW(),$18,$18)
+			INSERT INTO ml_models (org_id, mlflow_id, project_id, name, description, tags, problem_type, domain, license, intended_use, limitations, recommendations, considerations, production_version_id, mlflow_created_at, mlflow_updated_at, synced_at, created_by, updated_by)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NOW(),$17,$17)
 			ON CONFLICT (org_id, mlflow_id) DO UPDATE SET
 				project_id=COALESCE(EXCLUDED.project_id, ml_models.project_id),
 				name=EXCLUDED.name, description=EXCLUDED.description, tags=EXCLUDED.tags,
 				problem_type=EXCLUDED.problem_type, domain=EXCLUDED.domain, license=EXCLUDED.license,
-				owners=EXCLUDED.owners, intended_use=EXCLUDED.intended_use, limitations=EXCLUDED.limitations,
+				intended_use=EXCLUDED.intended_use, limitations=EXCLUDED.limitations,
 				recommendations=EXCLUDED.recommendations, considerations=EXCLUDED.considerations,
 				production_version_id=COALESCE(EXCLUDED.production_version_id, ml_models.production_version_id),
 				mlflow_created_at=EXCLUDED.mlflow_created_at, mlflow_updated_at=EXCLUDED.mlflow_updated_at,
 				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()`,
-			orgID, m.MLflowID, projectID, m.Name, m.Description, pq.Array(tags), problemType, m.Domain, m.License, m.Owners, m.IntendedUse, m.Limitations, m.Recommendations, m.Considerations, pv, m.CreatedAt, m.UpdatedAt, actorID)
+			orgID, m.MLflowID, projectID, m.Name, m.Description, pq.Array(tags), problemType, m.Domain, m.License, m.IntendedUse, m.Limitations, m.Recommendations, m.Considerations, pv, m.CreatedAt, m.UpdatedAt, actorID)
 		if err != nil {
 			return fmt.Errorf("postgres: UpsertMLModels upsert: %w", err)
 		}
@@ -161,11 +161,11 @@ func (d *DB) UpdateMLModel(ctx context.Context, orgID, id, actorID string, in ml
 		refs = []string{}
 	}
 	_, err := d.db.ExecContext(ctx, `
-		UPDATE ml_models SET domain=$1, problem_type=$2, owners=$3, license=$4,
-			reference_links=$5, intended_use=$6, limitations=$7,
-			ethical_considerations=$8, caveats=$9, updated_by=$10, updated_at=NOW()
-		WHERE org_id=$11 AND id=$12 AND deleted_at IS NULL`,
-		in.Domain, in.ProblemType, in.Owners, in.License, pq.Array(refs),
+		UPDATE ml_models SET domain=$1, problem_type=$2, license=$3,
+			reference_links=$4, intended_use=$5, limitations=$6,
+			ethical_considerations=$7, caveats=$8, updated_by=$9, updated_at=NOW()
+		WHERE org_id=$10 AND id=$11 AND deleted_at IS NULL`,
+		in.Domain, in.ProblemType, in.License, pq.Array(refs),
 		in.IntendedUse, in.Limitations, in.EthicalConsiderations, in.Caveats,
 		actorID, orgID, id)
 	if err != nil {

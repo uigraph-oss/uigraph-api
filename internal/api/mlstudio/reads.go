@@ -2,10 +2,23 @@ package mlstudio
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/uigraph/app/internal/httputil"
+	"github.com/uigraph/app/internal/mlstudio"
 	storepkg "github.com/uigraph/app/internal/store"
 )
+
+func parseIntDefault(s string, def int) int {
+	if s == "" {
+		return def
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return def
+	}
+	return n
+}
 
 func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
 	_, orgID, ok := h.authorizeOrg(w, r)
@@ -98,12 +111,19 @@ func (h *Handler) ListAllRuns(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	runs, err := h.store.ListMLRuns(r.Context(), orgID, r.URL.Query().Get("experimentId"), r.URL.Query().Get("projectId"))
+	q := mlstudio.RunQuery{
+		ExperimentID: r.URL.Query().Get("experimentId"),
+		ProjectID:    r.URL.Query().Get("projectId"),
+		Search:       r.URL.Query().Get("search"),
+		Limit:        parseIntDefault(r.URL.Query().Get("limit"), 0),
+		Offset:       parseIntDefault(r.URL.Query().Get("offset"), 0),
+	}
+	runs, total, err := h.store.ListMLRuns(r.Context(), orgID, q)
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
 	}
-	httputil.JSON(w, http.StatusOK, map[string]any{"runs": runs})
+	httputil.JSON(w, http.StatusOK, map[string]any{"runs": runs, "total": total})
 }
 
 func (h *Handler) ListAllArtifacts(w http.ResponseWriter, r *http.Request) {
@@ -184,12 +204,19 @@ func (h *Handler) ListRuns(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	runs, err := h.store.ListMLRuns(r.Context(), orgID, r.PathValue("experimentId"), r.URL.Query().Get("projectId"))
+	q := mlstudio.RunQuery{
+		ExperimentID: r.PathValue("experimentId"),
+		ProjectID:    r.URL.Query().Get("projectId"),
+		Search:       r.URL.Query().Get("search"),
+		Limit:        parseIntDefault(r.URL.Query().Get("limit"), 0),
+		Offset:       parseIntDefault(r.URL.Query().Get("offset"), 0),
+	}
+	runs, total, err := h.store.ListMLRuns(r.Context(), orgID, q)
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
 	}
-	httputil.JSON(w, http.StatusOK, map[string]any{"runs": runs})
+	httputil.JSON(w, http.StatusOK, map[string]any{"runs": runs, "total": total})
 }
 
 func (h *Handler) GetRun(w http.ResponseWriter, r *http.Request) {
