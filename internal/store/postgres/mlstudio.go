@@ -351,13 +351,13 @@ func (d *DB) UpsertMLArtifacts(ctx context.Context, orgID, actorID string, in []
 			return fmt.Errorf("%w: run %q", mlstudio.ErrParentNotFound, a.RunMLflowID)
 		}
 		_, err = tx.ExecContext(ctx, `
-			INSERT INTO ml_artifacts (org_id, mlflow_id, run_id, name, type, uri, size, format, synced_at, created_by, updated_by)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW(),$9,$9)
+			INSERT INTO ml_artifacts (org_id, mlflow_id, run_id, name, type, uri, download_uri, size, format, synced_at, created_by, updated_by)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW(),$10,$10)
 			ON CONFLICT (org_id, mlflow_id) DO UPDATE SET
 				run_id=EXCLUDED.run_id, name=EXCLUDED.name, type=EXCLUDED.type,
-				uri=EXCLUDED.uri, size=EXCLUDED.size, format=EXCLUDED.format,
+				uri=EXCLUDED.uri, download_uri=EXCLUDED.download_uri, size=EXCLUDED.size, format=EXCLUDED.format,
 				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()`,
-			orgID, a.MLflowID, runID, a.Name, a.Type, a.URI, a.Size, a.Format, actorID)
+			orgID, a.MLflowID, runID, a.Name, a.Type, a.URI, a.DownloadURI, a.Size, a.Format, actorID)
 		if err != nil {
 			return fmt.Errorf("postgres: UpsertMLArtifacts upsert: %w", err)
 		}

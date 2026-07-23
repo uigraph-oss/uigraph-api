@@ -127,12 +127,12 @@ const mlExperimentCols = `id, org_id, mlflow_id, project_id, name, description, 
 func scanMLProject(row interface{ Scan(...any) error }) (mlstudio.Project, error) {
 	var p mlstudio.Project
 	err := row.Scan(
-		&p.ID, &p.OrgID, &p.Name, &p.Type, &p.Description, &p.SourceType, &p.SourceURL, &p.TeamID,
+		&p.ID, &p.OrgID, &p.Name, &p.Type, &p.Description, &p.SourceType, &p.SourceURL, &p.TeamID, &p.UpdatedAt,
 	)
 	return p, err
 }
 
-const mlProjectCols = `id, org_id, name, type, description, source_type, source_url, team_id`
+const mlProjectCols = `id, org_id, name, type, description, source_type, source_url, team_id, updated_at`
 
 func (d *DB) ListMLProjects(ctx context.Context, orgID string) ([]mlstudio.Project, error) {
 	rows, err := d.db.QueryContext(ctx, `
@@ -150,7 +150,7 @@ func (d *DB) ListMLProjects(ctx context.Context, orgID string) ([]mlstudio.Proje
 		var p mlstudio.Project
 		var stats mlstudio.ProjectStats
 		if err := rows.Scan(
-			&p.ID, &p.OrgID, &p.Name, &p.Type, &p.Description, &p.SourceType, &p.SourceURL, &p.TeamID,
+			&p.ID, &p.OrgID, &p.Name, &p.Type, &p.Description, &p.SourceType, &p.SourceURL, &p.TeamID, &p.UpdatedAt,
 			&stats.ModelCount, &stats.ExperimentCount, &stats.RunCount,
 		); err != nil {
 			return nil, fmt.Errorf("postgres: ListMLProjects scan: %w", err)
@@ -313,13 +313,13 @@ func scanMLArtifact(row interface{ Scan(...any) error }) (mlstudio.Artifact, err
 	var a mlstudio.Artifact
 	err := row.Scan(
 		&a.ID, &a.OrgID, &a.MLflowID, &a.RunID, &a.Name, &a.Type,
-		&a.URI, &a.Size, &a.Format, &a.UpdatedAt, &a.SyncedAt,
+		&a.URI, &a.DownloadURI, &a.Size, &a.Format, &a.UpdatedAt, &a.SyncedAt,
 	)
 	return a, err
 }
 
 func (d *DB) ListMLArtifacts(ctx context.Context, orgID, runID string) ([]mlstudio.Artifact, error) {
-	q := `SELECT id, org_id, mlflow_id, run_id, name, type, uri, size, format, updated_at, synced_at
+	q := `SELECT id, org_id, mlflow_id, run_id, name, type, uri, download_uri, size, format, updated_at, synced_at
 		FROM ml_artifacts WHERE org_id=$1 AND deleted_at IS NULL`
 	args := []any{orgID}
 	if runID != "" {

@@ -12,6 +12,7 @@ type Project struct {
 	SourceURL   string        `json:"sourceUrl"`
 	TeamID      *string       `json:"teamId,omitempty"`
 	TeamName    string        `json:"-"`
+	UpdatedAt   *time.Time    `json:"updatedAt,omitempty"`
 	Stats       *ProjectStats `json:"stats,omitempty"`
 }
 
@@ -111,17 +112,18 @@ type MetricPoint struct {
 }
 
 type Artifact struct {
-	ID        string     `json:"id"`
-	OrgID     string     `json:"orgId"`
-	MLflowID  string     `json:"mlflowId"`
-	RunID     string     `json:"runId"`
-	Name      string     `json:"name"`
-	Type      string     `json:"type"`
-	URI       string     `json:"uri"`
-	Size      string     `json:"size"`
-	Format    string     `json:"format"`
-	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
-	SyncedAt  *time.Time `json:"syncedAt,omitempty"`
+	ID          string     `json:"id"`
+	OrgID       string     `json:"orgId"`
+	MLflowID    string     `json:"mlflowId"`
+	RunID       string     `json:"runId"`
+	Name        string     `json:"name"`
+	Type        string     `json:"type"`
+	URI         string     `json:"uri"`
+	DownloadURI string     `json:"downloadUri"`
+	Size        string     `json:"size"`
+	Format      string     `json:"format"`
+	UpdatedAt   *time.Time `json:"updatedAt,omitempty"`
+	SyncedAt    *time.Time `json:"syncedAt,omitempty"`
 }
 
 type SchemaField struct {
