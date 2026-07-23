@@ -180,7 +180,7 @@ func (d *DB) listMLFindingRunIDs(ctx context.Context, findingID string) ([]strin
 	return out, rows.Err()
 }
 
-func (d *DB) ListMLFindings(ctx context.Context, orgID, modelID string) ([]mlstudio.Finding, error) {
+func (d *DB) ListMLFindings(ctx context.Context, orgID, modelID, projectID string) ([]mlstudio.Finding, error) {
 	q := `
 		SELECT id, org_id, model_id, version_id, title, summary, description, created_by, created_at, updated_at, deleted_at
 		FROM ml_findings WHERE org_id=$1 AND deleted_at IS NULL`
@@ -188,6 +188,10 @@ func (d *DB) ListMLFindings(ctx context.Context, orgID, modelID string) ([]mlstu
 	if modelID != "" {
 		args = append(args, modelID)
 		q += fmt.Sprintf(" AND model_id=$%d", len(args))
+	}
+	if projectID != "" {
+		args = append(args, projectID)
+		q += fmt.Sprintf(" AND model_id IN (SELECT id FROM ml_models WHERE project_id=$%d)", len(args))
 	}
 	q += " ORDER BY created_at DESC"
 	rows, err := d.db.QueryContext(ctx, q, args...)

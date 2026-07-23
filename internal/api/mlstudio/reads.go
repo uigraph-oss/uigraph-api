@@ -42,7 +42,7 @@ func (h *Handler) ListModels(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	models, err := h.store.ListMLModels(r.Context(), orgID)
+	models, err := h.store.ListMLModels(r.Context(), orgID, r.URL.Query().Get("projectId"))
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
@@ -72,7 +72,7 @@ func (h *Handler) ListVersions(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	versions, err := h.store.ListMLModelVersions(r.Context(), orgID, r.PathValue("modelId"))
+	versions, err := h.store.ListMLModelVersions(r.Context(), orgID, r.PathValue("modelId"), r.URL.Query().Get("projectId"))
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
@@ -85,7 +85,7 @@ func (h *Handler) ListAllVersions(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	versions, err := h.store.ListMLModelVersions(r.Context(), orgID, r.URL.Query().Get("modelId"))
+	versions, err := h.store.ListMLModelVersions(r.Context(), orgID, r.URL.Query().Get("modelId"), r.URL.Query().Get("projectId"))
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
@@ -98,7 +98,7 @@ func (h *Handler) ListAllRuns(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	runs, err := h.store.ListMLRuns(r.Context(), orgID, r.URL.Query().Get("experimentId"))
+	runs, err := h.store.ListMLRuns(r.Context(), orgID, r.URL.Query().Get("experimentId"), r.URL.Query().Get("projectId"))
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
@@ -154,7 +154,7 @@ func (h *Handler) ListExperiments(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	experiments, err := h.store.ListMLExperiments(r.Context(), orgID)
+	experiments, err := h.store.ListMLExperiments(r.Context(), orgID, r.URL.Query().Get("projectId"))
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
@@ -184,7 +184,7 @@ func (h *Handler) ListRuns(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	runs, err := h.store.ListMLRuns(r.Context(), orgID, r.PathValue("experimentId"))
+	runs, err := h.store.ListMLRuns(r.Context(), orgID, r.PathValue("experimentId"), r.URL.Query().Get("projectId"))
 	if err != nil {
 		httputil.Error(w, r, err)
 		return

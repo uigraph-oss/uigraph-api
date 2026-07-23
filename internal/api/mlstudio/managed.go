@@ -236,7 +236,7 @@ func (h *Handler) ListFindings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	modelID := r.URL.Query().Get("modelId")
-	findings, err := h.store.ListMLFindings(r.Context(), orgID, modelID)
+	findings, err := h.store.ListMLFindings(r.Context(), orgID, modelID, r.URL.Query().Get("projectId"))
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
@@ -384,7 +384,7 @@ func (h *Handler) CreateVersionDeploymentUpdate(w http.ResponseWriter, r *http.R
 		writeErr(w, r, err)
 		return
 	}
-	updates, err := h.store.ListVersionDeploymentUpdates(r.Context(), orgID, versionID)
+	updates, err := h.store.ListVersionDeploymentUpdates(r.Context(), orgID, versionID, "")
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
@@ -397,7 +397,7 @@ func (h *Handler) ListVersionDeploymentUpdates(w http.ResponseWriter, r *http.Re
 	if !ok {
 		return
 	}
-	updates, err := h.store.ListVersionDeploymentUpdates(r.Context(), orgID, r.PathValue("versionId"))
+	updates, err := h.store.ListVersionDeploymentUpdates(r.Context(), orgID, r.PathValue("versionId"), r.URL.Query().Get("projectId"))
 	if err != nil {
 		httputil.Error(w, r, err)
 		return

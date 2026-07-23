@@ -27,12 +27,16 @@ func (d *DB) CreateVersionDeploymentUpdate(ctx context.Context, u mlstudio.Versi
 	return nil
 }
 
-func (d *DB) ListVersionDeploymentUpdates(ctx context.Context, orgID, versionID string) ([]mlstudio.VersionDeploymentUpdate, error) {
+func (d *DB) ListVersionDeploymentUpdates(ctx context.Context, orgID, versionID, projectID string) ([]mlstudio.VersionDeploymentUpdate, error) {
 	q := `SELECT ` + mlVersionDeploymentCols + ` FROM ml_version_deployments WHERE org_id=$1`
 	args := []any{orgID}
 	if versionID != "" {
 		args = append(args, versionID)
 		q += fmt.Sprintf(" AND version_id=$%d", len(args))
+	}
+	if projectID != "" {
+		args = append(args, projectID)
+		q += fmt.Sprintf(" AND version_id IN (SELECT v.id FROM ml_model_versions v JOIN ml_models m ON m.id=v.model_id WHERE m.project_id=$%d)", len(args))
 	}
 	q += " ORDER BY changed_at DESC, id DESC"
 	rows, err := d.db.QueryContext(ctx, q, args...)
