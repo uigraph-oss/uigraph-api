@@ -3,6 +3,11 @@ package mlstudio
 import "context"
 
 type Store interface {
+	UpsertMLProjects(ctx context.Context, orgID, actorID string, in []ProjectInput) error
+	CreateMLProject(ctx context.Context, orgID, actorID string, in ProjectInput) (*Project, error)
+	ListMLProjects(ctx context.Context, orgID string) ([]Project, error)
+	GetMLProject(ctx context.Context, orgID, id string) (*Project, error)
+
 	UpsertMLModels(ctx context.Context, orgID, actorID string, in []ModelInput) error
 	UpdateMLModel(ctx context.Context, orgID, id, actorID string, in ModelUpdateInput) error
 	UpsertMLModelVersions(ctx context.Context, orgID, actorID string, in []ModelVersionInput) error

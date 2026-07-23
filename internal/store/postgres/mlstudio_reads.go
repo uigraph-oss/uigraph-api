@@ -15,7 +15,7 @@ import (
 func scanMLModel(row interface{ Scan(...any) error }) (mlstudio.Model, error) {
 	var m mlstudio.Model
 	err := row.Scan(
-		&m.ID, &m.OrgID, &m.MLflowID, &m.Name, &m.Description,
+		&m.ID, &m.OrgID, &m.MLflowID, &m.ProjectID, &m.Name, &m.Description,
 		&m.Domain, &m.ProblemType, pq.Array(&m.Tags),
 		&m.Owners, &m.License, pq.Array(&m.References), &m.IntendedUse,
 		&m.Limitations, &m.EthicalConsiderations, &m.Caveats,
@@ -24,7 +24,7 @@ func scanMLModel(row interface{ Scan(...any) error }) (mlstudio.Model, error) {
 	return m, err
 }
 
-const mlModelCols = `id, org_id, mlflow_id, name, description, domain, problem_type, tags, owners, license, reference_links, intended_use, limitations, ethical_considerations, caveats, production_version_id, mlflow_created_at, updated_at`
+const mlModelCols = `id, org_id, mlflow_id, project_id, name, description, domain, problem_type, tags, owners, license, reference_links, intended_use, limitations, ethical_considerations, caveats, production_version_id, mlflow_created_at, updated_at`
 
 func (d *DB) ListMLModels(ctx context.Context, orgID string) ([]mlstudio.Model, error) {
 	rows, err := d.db.QueryContext(ctx, `SELECT `+mlModelCols+` FROM ml_models WHERE org_id=$1 AND deleted_at IS NULL ORDER BY name ASC`, orgID)
@@ -105,12 +105,50 @@ func (d *DB) GetMLModelVersion(ctx context.Context, orgID, id string) (*mlstudio
 func scanMLExperiment(row interface{ Scan(...any) error }) (mlstudio.Experiment, error) {
 	var e mlstudio.Experiment
 	err := row.Scan(
-		&e.ID, &e.OrgID, &e.MLflowID, &e.Name, &e.Description, &e.Status, &e.StartedAt,
+		&e.ID, &e.OrgID, &e.MLflowID, &e.ProjectID, &e.Name, &e.Description, &e.Status, &e.StartedAt,
 	)
 	return e, err
 }
 
-const mlExperimentCols = `id, org_id, mlflow_id, name, description, status, started_at`
+const mlExperimentCols = `id, org_id, mlflow_id, project_id, name, description, status, started_at`
+
+func scanMLProject(row interface{ Scan(...any) error }) (mlstudio.Project, error) {
+	var p mlstudio.Project
+	err := row.Scan(
+		&p.ID, &p.OrgID, &p.Name, &p.Type, &p.Description, &p.SourceType, &p.SourceURL, &p.Team, &p.Email,
+	)
+	return p, err
+}
+
+const mlProjectCols = `id, org_id, name, type, description, source_type, source_url, team, email`
+
+func (d *DB) ListMLProjects(ctx context.Context, orgID string) ([]mlstudio.Project, error) {
+	rows, err := d.db.QueryContext(ctx, `SELECT `+mlProjectCols+` FROM ml_projects WHERE org_id=$1 AND deleted_at IS NULL ORDER BY name ASC`, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: ListMLProjects: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []mlstudio.Project
+	for rows.Next() {
+		p, err := scanMLProject(rows)
+		if err != nil {
+			return nil, fmt.Errorf("postgres: ListMLProjects scan: %w", err)
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+func (d *DB) GetMLProject(ctx context.Context, orgID, id string) (*mlstudio.Project, error) {
+	p, err := scanMLProject(d.db.QueryRowContext(ctx, `SELECT `+mlProjectCols+` FROM ml_projects WHERE org_id=$1 AND id=$2 AND deleted_at IS NULL`, orgID, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("postgres: GetMLProject: %w", err)
+	}
+	return &p, nil
+}
 
 func (d *DB) ListMLExperiments(ctx context.Context, orgID string) ([]mlstudio.Experiment, error) {
 	q := `SELECT ` + mlExperimentCols + ` FROM ml_experiments WHERE org_id=$1 AND deleted_at IS NULL`

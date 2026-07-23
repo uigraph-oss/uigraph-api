@@ -7,6 +7,36 @@ import (
 	storepkg "github.com/uigraph/app/internal/store"
 )
 
+func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
+	_, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	projects, err := h.store.ListMLProjects(r.Context(), orgID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{"projects": projects})
+}
+
+func (h *Handler) GetProject(w http.ResponseWriter, r *http.Request) {
+	_, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	p, err := h.store.GetMLProject(r.Context(), orgID, r.PathValue("projectId"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if p == nil {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, p)
+}
+
 func (h *Handler) ListModels(w http.ResponseWriter, r *http.Request) {
 	_, orgID, ok := h.authorizeOrg(w, r)
 	if !ok {

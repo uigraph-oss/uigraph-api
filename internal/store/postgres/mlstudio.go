@@ -32,6 +32,63 @@ func jsonBytes(v any) ([]byte, error) {
 	return b, nil
 }
 
+func resolveProjectID(ctx context.Context, tx *sql.Tx, orgID, projectName string) (any, error) {
+	if projectName == "" {
+		return nil, nil
+	}
+	var id string
+	err := tx.QueryRowContext(ctx, `SELECT id FROM ml_projects WHERE org_id=$1 AND name=$2 AND deleted_at IS NULL`, orgID, projectName).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("%w: project %q", mlstudio.ErrParentNotFound, projectName)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return id, nil
+}
+
+func (d *DB) UpsertMLProjects(ctx context.Context, orgID, actorID string, in []mlstudio.ProjectInput) error {
+	tx, err := d.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("postgres: UpsertMLProjects begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, p := range in {
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO ml_projects (org_id, name, type, description, source_type, source_url, team, email, synced_at, created_by, updated_by)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW(),$9,$9)
+			ON CONFLICT (org_id, name) DO UPDATE SET
+				type=EXCLUDED.type, description=EXCLUDED.description, source_type=EXCLUDED.source_type,
+				source_url=EXCLUDED.source_url, team=EXCLUDED.team, email=EXCLUDED.email,
+				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()`,
+			orgID, p.Name, p.Type, p.Description, p.SourceType, p.SourceURL, p.Team, p.Email, actorID)
+		if err != nil {
+			return fmt.Errorf("postgres: UpsertMLProjects upsert: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("postgres: UpsertMLProjects commit: %w", err)
+	}
+	return nil
+}
+
+func (d *DB) CreateMLProject(ctx context.Context, orgID, actorID string, p mlstudio.ProjectInput) (*mlstudio.Project, error) {
+	var id string
+	err := d.db.QueryRowContext(ctx, `
+		INSERT INTO ml_projects (org_id, name, type, description, source_type, source_url, team, email, synced_at, created_by, updated_by)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW(),$9,$9)
+		ON CONFLICT (org_id, name) DO UPDATE SET
+			type=EXCLUDED.type, description=EXCLUDED.description, source_type=EXCLUDED.source_type,
+			source_url=EXCLUDED.source_url, team=EXCLUDED.team, email=EXCLUDED.email,
+			synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()
+		RETURNING id`,
+		orgID, p.Name, p.Type, p.Description, p.SourceType, p.SourceURL, p.Team, p.Email, actorID).Scan(&id)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: CreateMLProject: %w", err)
+	}
+	return d.GetMLProject(ctx, orgID, id)
+}
+
 func (d *DB) UpsertMLModels(ctx context.Context, orgID, actorID string, in []mlstudio.ModelInput) error {
 	tx, err := d.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -53,15 +110,20 @@ func (d *DB) UpsertMLModels(ctx context.Context, orgID, actorID string, in []mls
 		if tags == nil {
 			tags = []string{}
 		}
-		_, err := tx.ExecContext(ctx, `
-			INSERT INTO ml_models (org_id, mlflow_id, name, description, tags, production_version_id, mlflow_created_at, mlflow_updated_at, synced_at, created_by, updated_by)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW(),$9,$9)
+		projectID, err := resolveProjectID(ctx, tx, orgID, m.ProjectName)
+		if err != nil {
+			return fmt.Errorf("postgres: UpsertMLModels resolve project: %w", err)
+		}
+		_, err = tx.ExecContext(ctx, `
+			INSERT INTO ml_models (org_id, mlflow_id, project_id, name, description, tags, production_version_id, mlflow_created_at, mlflow_updated_at, synced_at, created_by, updated_by)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW(),$10,$10)
 			ON CONFLICT (org_id, mlflow_id) DO UPDATE SET
+				project_id=COALESCE(EXCLUDED.project_id, ml_models.project_id),
 				name=EXCLUDED.name, description=EXCLUDED.description, tags=EXCLUDED.tags,
 				production_version_id=COALESCE(EXCLUDED.production_version_id, ml_models.production_version_id),
 				mlflow_created_at=EXCLUDED.mlflow_created_at, mlflow_updated_at=EXCLUDED.mlflow_updated_at,
 				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()`,
-			orgID, m.MLflowID, m.Name, m.Description, pq.Array(tags), pv, m.CreatedAt, m.UpdatedAt, actorID)
+			orgID, m.MLflowID, projectID, m.Name, m.Description, pq.Array(tags), pv, m.CreatedAt, m.UpdatedAt, actorID)
 		if err != nil {
 			return fmt.Errorf("postgres: UpsertMLModels upsert: %w", err)
 		}
@@ -141,13 +203,18 @@ func (d *DB) UpsertMLExperiments(ctx context.Context, orgID, actorID string, in 
 	}
 	defer func() { _ = tx.Rollback() }()
 	for _, e := range in {
+		projectID, err := resolveProjectID(ctx, tx, orgID, e.ProjectName)
+		if err != nil {
+			return fmt.Errorf("postgres: UpsertMLExperiments resolve project: %w", err)
+		}
 		_, err = tx.ExecContext(ctx, `
-			INSERT INTO ml_experiments (org_id, mlflow_id, name, description, status, started_at, synced_at, created_by, updated_by)
-			VALUES ($1,$2,$3,$4,$5,$6,NOW(),$7,$7)
+			INSERT INTO ml_experiments (org_id, mlflow_id, project_id, name, description, status, started_at, synced_at, created_by, updated_by)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,NOW(),$8,$8)
 			ON CONFLICT (org_id, mlflow_id) DO UPDATE SET
+				project_id=COALESCE(EXCLUDED.project_id, ml_experiments.project_id),
 				name=EXCLUDED.name, description=EXCLUDED.description, status=EXCLUDED.status, started_at=EXCLUDED.started_at,
 				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()`,
-			orgID, e.MLflowID, e.Name, e.Description, e.Status, e.StartedAt, actorID)
+			orgID, e.MLflowID, projectID, e.Name, e.Description, e.Status, e.StartedAt, actorID)
 		if err != nil {
 			return fmt.Errorf("postgres: UpsertMLExperiments upsert: %w", err)
 		}

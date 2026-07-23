@@ -2,10 +2,23 @@ package mlstudio
 
 import "time"
 
+type Project struct {
+	ID          string `json:"id"`
+	OrgID       string `json:"orgId"`
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	Description string `json:"description"`
+	SourceType  string `json:"sourceType"`
+	SourceURL   string `json:"sourceUrl"`
+	Team        string `json:"team"`
+	Email       string `json:"email"`
+}
+
 type Model struct {
 	ID                    string     `json:"id"`
 	OrgID                 string     `json:"orgId"`
 	MLflowID              string     `json:"mlflowId"`
+	ProjectID             *string    `json:"projectId,omitempty"`
 	Name                  string     `json:"name"`
 	Description           string     `json:"description"`
 	Domain                string     `json:"domain"`
@@ -49,6 +62,7 @@ type Experiment struct {
 	ID          string     `json:"id"`
 	OrgID       string     `json:"orgId"`
 	MLflowID    string     `json:"mlflowId"`
+	ProjectID   *string    `json:"projectId,omitempty"`
 	Name        string     `json:"name"`
 	Description string     `json:"description"`
 	Status      string     `json:"status"`

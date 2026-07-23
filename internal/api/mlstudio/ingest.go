@@ -8,6 +8,55 @@ import (
 	storepkg "github.com/uigraph/app/internal/store"
 )
 
+func (h *Handler) SyncProjects(w http.ResponseWriter, r *http.Request) {
+	p, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	var in []mlstudio.ProjectInput
+	if err := httputil.Decode(r, &in); err != nil {
+		httputil.BadRequest(w, "invalid request body")
+		return
+	}
+	if err := h.store.UpsertMLProjects(r.Context(), orgID, p.UserID, in); err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{"synced": len(in)})
+}
+
+func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
+	p, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		Name        string `json:"name"`
+		Type        string `json:"type"`
+		Description string `json:"description"`
+		Team        string `json:"team"`
+	}
+	if err := httputil.Decode(r, &body); err != nil {
+		httputil.BadRequest(w, "invalid request body")
+		return
+	}
+	if body.Name == "" || body.Type == "" {
+		httputil.BadRequest(w, "name and type are required")
+		return
+	}
+	created, err := h.store.CreateMLProject(r.Context(), orgID, p.UserID, mlstudio.ProjectInput{
+		Name:        body.Name,
+		Type:        body.Type,
+		Description: body.Description,
+		Team:        body.Team,
+	})
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusCreated, created)
+}
+
 func (h *Handler) SyncModels(w http.ResponseWriter, r *http.Request) {
 	p, orgID, ok := h.authorizeOrg(w, r)
 	if !ok {
