@@ -126,12 +126,12 @@ const mlExperimentCols = `id, org_id, mlflow_id, project_id, name, description, 
 func scanMLProject(row interface{ Scan(...any) error }) (mlstudio.Project, error) {
 	var p mlstudio.Project
 	err := row.Scan(
-		&p.ID, &p.OrgID, &p.Name, &p.Type, &p.Description, &p.SourceType, &p.SourceURL, &p.Team, &p.Email,
+		&p.ID, &p.OrgID, &p.Name, &p.Type, &p.Description, &p.SourceType, &p.SourceURL, &p.TeamID,
 	)
 	return p, err
 }
 
-const mlProjectCols = `id, org_id, name, type, description, source_type, source_url, team, email`
+const mlProjectCols = `id, org_id, name, type, description, source_type, source_url, team_id`
 
 func (d *DB) ListMLProjects(ctx context.Context, orgID string) ([]mlstudio.Project, error) {
 	rows, err := d.db.QueryContext(ctx, `SELECT `+mlProjectCols+` FROM ml_projects WHERE org_id=$1 AND deleted_at IS NULL ORDER BY name ASC`, orgID)

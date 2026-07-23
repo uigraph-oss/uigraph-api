@@ -3,13 +3,13 @@ package mlstudio
 import "time"
 
 type ProjectInput struct {
-	Name        string `json:"name"`
-	Type        string `json:"type"`
-	Description string `json:"description"`
-	SourceType  string `json:"sourceType"`
-	SourceURL   string `json:"sourceUrl"`
-	Team        string `json:"team"`
-	Email       string `json:"email"`
+	Name        string  `json:"name"`
+	Type        string  `json:"type"`
+	Description string  `json:"description"`
+	SourceType  string  `json:"sourceType"`
+	SourceURL   string  `json:"sourceUrl"`
+	TeamID      *string `json:"teamId,omitempty"`
+	TeamName    string  `json:"team"`
 }
 
 type ModelInput struct {

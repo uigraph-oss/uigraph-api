@@ -3,15 +3,15 @@ package mlstudio
 import "time"
 
 type Project struct {
-	ID          string `json:"id"`
-	OrgID       string `json:"orgId"`
-	Name        string `json:"name"`
-	Type        string `json:"type"`
-	Description string `json:"description"`
-	SourceType  string `json:"sourceType"`
-	SourceURL   string `json:"sourceUrl"`
-	Team        string `json:"team"`
-	Email       string `json:"email"`
+	ID          string  `json:"id"`
+	OrgID       string  `json:"orgId"`
+	Name        string  `json:"name"`
+	Type        string  `json:"type"`
+	Description string  `json:"description"`
+	SourceType  string  `json:"sourceType"`
+	SourceURL   string  `json:"sourceUrl"`
+	TeamID      *string `json:"teamId,omitempty"`
+	TeamName    string  `json:"-"`
 }
 
 type Model struct {

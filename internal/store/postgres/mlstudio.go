@@ -54,14 +54,21 @@ func (d *DB) UpsertMLProjects(ctx context.Context, orgID, actorID string, in []m
 	}
 	defer func() { _ = tx.Rollback() }()
 	for _, p := range in {
+		if (p.TeamID == nil || *p.TeamID == "") && p.TeamName != "" {
+			id, err := d.resolveTeamID(ctx, orgID, p.TeamName)
+			if err != nil {
+				return err
+			}
+			p.TeamID = &id
+		}
 		_, err := tx.ExecContext(ctx, `
-			INSERT INTO ml_projects (org_id, name, type, description, source_type, source_url, team, email, synced_at, created_by, updated_by)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW(),$9,$9)
+			INSERT INTO ml_projects (org_id, name, type, description, source_type, source_url, team_id, synced_at, created_by, updated_by)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,NOW(),$8,$8)
 			ON CONFLICT (org_id, name) DO UPDATE SET
 				type=EXCLUDED.type, description=EXCLUDED.description, source_type=EXCLUDED.source_type,
-				source_url=EXCLUDED.source_url, team=EXCLUDED.team, email=EXCLUDED.email,
+				source_url=EXCLUDED.source_url, team_id=EXCLUDED.team_id,
 				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()`,
-			orgID, p.Name, p.Type, p.Description, p.SourceType, p.SourceURL, p.Team, p.Email, actorID)
+			orgID, p.Name, p.Type, p.Description, p.SourceType, p.SourceURL, p.TeamID, actorID)
 		if err != nil {
 			return fmt.Errorf("postgres: UpsertMLProjects upsert: %w", err)
 		}
@@ -73,16 +80,23 @@ func (d *DB) UpsertMLProjects(ctx context.Context, orgID, actorID string, in []m
 }
 
 func (d *DB) CreateMLProject(ctx context.Context, orgID, actorID string, p mlstudio.ProjectInput) (*mlstudio.Project, error) {
+	if (p.TeamID == nil || *p.TeamID == "") && p.TeamName != "" {
+		id, err := d.resolveTeamID(ctx, orgID, p.TeamName)
+		if err != nil {
+			return nil, err
+		}
+		p.TeamID = &id
+	}
 	var id string
 	err := d.db.QueryRowContext(ctx, `
-		INSERT INTO ml_projects (org_id, name, type, description, source_type, source_url, team, email, synced_at, created_by, updated_by)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW(),$9,$9)
+		INSERT INTO ml_projects (org_id, name, type, description, source_type, source_url, team_id, synced_at, created_by, updated_by)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,NOW(),$8,$8)
 		ON CONFLICT (org_id, name) DO UPDATE SET
 			type=EXCLUDED.type, description=EXCLUDED.description, source_type=EXCLUDED.source_type,
-			source_url=EXCLUDED.source_url, team=EXCLUDED.team, email=EXCLUDED.email,
+			source_url=EXCLUDED.source_url, team_id=EXCLUDED.team_id,
 			synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()
 		RETURNING id`,
-		orgID, p.Name, p.Type, p.Description, p.SourceType, p.SourceURL, p.Team, p.Email, actorID).Scan(&id)
+		orgID, p.Name, p.Type, p.Description, p.SourceType, p.SourceURL, p.TeamID, actorID).Scan(&id)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: CreateMLProject: %w", err)
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/uigraph/app/internal/identity"
 	authmw "github.com/uigraph/app/internal/middleware"
 	"github.com/uigraph/app/internal/mlstudio"
+	storepkg "github.com/uigraph/app/internal/store"
 )
 
 type Handler struct {
@@ -93,6 +94,10 @@ func (h *Handler) authorizeOrg(w http.ResponseWriter, r *http.Request) (identity
 
 func writeErr(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, mlstudio.ErrParentNotFound) {
+		httputil.BadRequest(w, err.Error())
+		return
+	}
+	if errors.Is(err, storepkg.ErrTeamNotFound) {
 		httputil.BadRequest(w, err.Error())
 		return
 	}

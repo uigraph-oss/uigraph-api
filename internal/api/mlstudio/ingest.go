@@ -31,10 +31,11 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Name        string `json:"name"`
-		Type        string `json:"type"`
-		Description string `json:"description"`
-		Team        string `json:"team"`
+		Name        string  `json:"name"`
+		Type        string  `json:"type"`
+		Description string  `json:"description"`
+		TeamID      *string `json:"teamId"`
+		TeamName    string  `json:"teamName"`
 	}
 	if err := httputil.Decode(r, &body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -44,11 +45,22 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		httputil.BadRequest(w, "name and type are required")
 		return
 	}
+	hasTeamID := body.TeamID != nil && *body.TeamID != ""
+	hasTeamName := body.TeamName != ""
+	if hasTeamID && hasTeamName {
+		httputil.BadRequest(w, "provide either teamId or teamName, not both")
+		return
+	}
+	if !hasTeamID && !hasTeamName {
+		httputil.BadRequest(w, "team is required")
+		return
+	}
 	created, err := h.store.CreateMLProject(r.Context(), orgID, p.UserID, mlstudio.ProjectInput{
 		Name:        body.Name,
 		Type:        body.Type,
 		Description: body.Description,
-		Team:        body.Team,
+		TeamID:      body.TeamID,
+		TeamName:    body.TeamName,
 	})
 	if err != nil {
 		writeErr(w, r, err)
