@@ -18,6 +18,14 @@ type ModelInput struct {
 	Name                      string     `json:"name"`
 	Description               string     `json:"description"`
 	Tags                      []string   `json:"tags"`
+	ProblemType               string     `json:"problemType"`
+	Domain                    string     `json:"domain"`
+	License                   string     `json:"license"`
+	Owners                    string     `json:"owners"`
+	IntendedUse               string     `json:"intendedUse"`
+	Limitations               string     `json:"limitations"`
+	Recommendations           string     `json:"recommendations"`
+	Considerations            string     `json:"considerations"`
 	ProductionVersionMLflowID *string    `json:"productionVersionMlflowId"`
 	CreatedAt                 *time.Time `json:"createdAt"`
 	UpdatedAt                 *time.Time `json:"updatedAt"`

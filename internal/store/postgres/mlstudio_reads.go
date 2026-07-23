@@ -19,12 +19,13 @@ func scanMLModel(row interface{ Scan(...any) error }) (mlstudio.Model, error) {
 		&m.Domain, &m.ProblemType, pq.Array(&m.Tags),
 		&m.Owners, &m.License, pq.Array(&m.References), &m.IntendedUse,
 		&m.Limitations, &m.EthicalConsiderations, &m.Caveats,
+		&m.Recommendations, &m.Considerations,
 		&m.ProductionVersionID, &m.CreatedAt, &m.UpdatedAt,
 	)
 	return m, err
 }
 
-const mlModelCols = `id, org_id, mlflow_id, project_id, name, description, domain, problem_type, tags, owners, license, reference_links, intended_use, limitations, ethical_considerations, caveats, production_version_id, mlflow_created_at, updated_at`
+const mlModelCols = `id, org_id, mlflow_id, project_id, name, description, domain, problem_type, tags, owners, license, reference_links, intended_use, limitations, ethical_considerations, caveats, recommendations, considerations, production_version_id, mlflow_created_at, updated_at`
 
 func (d *DB) ListMLModels(ctx context.Context, orgID, projectID string) ([]mlstudio.Model, error) {
 	q := `SELECT ` + mlModelCols + ` FROM ml_models WHERE org_id=$1 AND deleted_at IS NULL`

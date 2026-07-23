@@ -128,16 +128,23 @@ func (d *DB) UpsertMLModels(ctx context.Context, orgID, actorID string, in []mls
 		if err != nil {
 			return fmt.Errorf("postgres: UpsertMLModels resolve project: %w", err)
 		}
+		problemType := m.ProblemType
+		if problemType == "" {
+			problemType = "other"
+		}
 		_, err = tx.ExecContext(ctx, `
-			INSERT INTO ml_models (org_id, mlflow_id, project_id, name, description, tags, production_version_id, mlflow_created_at, mlflow_updated_at, synced_at, created_by, updated_by)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW(),$10,$10)
+			INSERT INTO ml_models (org_id, mlflow_id, project_id, name, description, tags, problem_type, domain, license, owners, intended_use, limitations, recommendations, considerations, production_version_id, mlflow_created_at, mlflow_updated_at, synced_at, created_by, updated_by)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,NOW(),$18,$18)
 			ON CONFLICT (org_id, mlflow_id) DO UPDATE SET
 				project_id=COALESCE(EXCLUDED.project_id, ml_models.project_id),
 				name=EXCLUDED.name, description=EXCLUDED.description, tags=EXCLUDED.tags,
+				problem_type=EXCLUDED.problem_type, domain=EXCLUDED.domain, license=EXCLUDED.license,
+				owners=EXCLUDED.owners, intended_use=EXCLUDED.intended_use, limitations=EXCLUDED.limitations,
+				recommendations=EXCLUDED.recommendations, considerations=EXCLUDED.considerations,
 				production_version_id=COALESCE(EXCLUDED.production_version_id, ml_models.production_version_id),
 				mlflow_created_at=EXCLUDED.mlflow_created_at, mlflow_updated_at=EXCLUDED.mlflow_updated_at,
 				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()`,
-			orgID, m.MLflowID, projectID, m.Name, m.Description, pq.Array(tags), pv, m.CreatedAt, m.UpdatedAt, actorID)
+			orgID, m.MLflowID, projectID, m.Name, m.Description, pq.Array(tags), problemType, m.Domain, m.License, m.Owners, m.IntendedUse, m.Limitations, m.Recommendations, m.Considerations, pv, m.CreatedAt, m.UpdatedAt, actorID)
 		if err != nil {
 			return fmt.Errorf("postgres: UpsertMLModels upsert: %w", err)
 		}

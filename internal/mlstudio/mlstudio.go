@@ -38,6 +38,8 @@ type Model struct {
 	Limitations           string     `json:"limitations"`
 	EthicalConsiderations string     `json:"ethicalConsiderations"`
 	Caveats               string     `json:"caveats"`
+	Recommendations       string     `json:"recommendations"`
+	Considerations        string     `json:"considerations"`
 	ProductionVersionID   *string    `json:"productionVersionId,omitempty"`
 	CreatedAt             *time.Time `json:"createdAt,omitempty"`
 	UpdatedAt             *time.Time `json:"updatedAt,omitempty"`
