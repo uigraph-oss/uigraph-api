@@ -31,14 +31,14 @@ type ModelInput struct {
 }
 
 type ModelUpdateInput struct {
-	Domain                string   `json:"domain"`
-	ProblemType           string   `json:"problemType"`
-	License               string   `json:"license"`
-	References            []string `json:"references"`
-	IntendedUse           string   `json:"intendedUse"`
-	Limitations           string   `json:"limitations"`
-	EthicalConsiderations string   `json:"ethicalConsiderations"`
-	Caveats               string   `json:"caveats"`
+	Domain          string   `json:"domain"`
+	ProblemType     string   `json:"problemType"`
+	License         string   `json:"license"`
+	References      []string `json:"references"`
+	IntendedUse     string   `json:"intendedUse"`
+	Limitations     string   `json:"limitations"`
+	Considerations  string   `json:"considerations"`
+	Recommendations string   `json:"recommendations"`
 }
 
 type ModelVersionInput struct {

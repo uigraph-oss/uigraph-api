@@ -1,5 +1,4 @@
--- Tags on experiments, mirroring ml_models.tags. Seeded from MLflow experiment
--- tags on first sync and editable from ML Studio afterwards; later syncs leave
--- the column alone so manual edits are not clobbered.
+-- Tags on experiments, mirroring ml_models.tags. Synced from MLflow experiment
+-- tags: every sync replaces the column with what MLflow currently reports.
 
 ALTER TABLE ml_experiments ADD COLUMN tags TEXT[] NOT NULL DEFAULT '{}';

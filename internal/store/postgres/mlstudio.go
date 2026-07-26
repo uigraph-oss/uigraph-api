@@ -191,10 +191,10 @@ func (d *DB) UpdateMLModel(ctx context.Context, orgID, id, actorID string, in ml
 	_, err := d.db.ExecContext(ctx, `
 		UPDATE ml_models SET domain=$1, problem_type=$2, license=$3,
 			reference_links=$4, intended_use=$5, limitations=$6,
-			ethical_considerations=$7, caveats=$8, updated_by=$9, updated_at=NOW()
+			considerations=$7, recommendations=$8, updated_by=$9, updated_at=NOW()
 		WHERE org_id=$10 AND id=$11 AND deleted_at IS NULL`,
 		in.Domain, in.ProblemType, in.License, pq.Array(refs),
-		in.IntendedUse, in.Limitations, in.EthicalConsiderations, in.Caveats,
+		in.IntendedUse, in.Limitations, in.Considerations, in.Recommendations,
 		actorID, orgID, id)
 	if err != nil {
 		return fmt.Errorf("postgres: UpdateMLModel: %w", err)
