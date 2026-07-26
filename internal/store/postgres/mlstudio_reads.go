@@ -382,7 +382,7 @@ func (d *DB) GetMLDataset(ctx context.Context, orgID, id string) (*mlstudio.Data
 const mlEvaluationSelect = `
 	SELECT e.id, e.org_id, e.mlflow_id, e.version_id, e.experiment_id, m.name, v.version,
 	       e.dataset_id, e.name, e.type, e.description, e.summary, e.evaluated_at, e.evaluator,
-	       e.parameters, e.metrics
+	       e.created_by, e.parameters, e.metrics
 	FROM ml_evaluations e
 	JOIN ml_model_versions v ON v.id = e.version_id
 	JOIN ml_models m ON m.id = v.model_id`
@@ -393,7 +393,7 @@ func scanMLEvaluation(row interface{ Scan(...any) error }) (mlstudio.Evaluation,
 	err := row.Scan(
 		&e.ID, &e.OrgID, &e.MLflowID, &e.VersionID, &e.ExperimentID, &e.ModelName, &e.Version,
 		&e.DatasetID, &e.Name, &e.Type, &e.Description, &e.Summary, &e.EvaluatedAt, &e.Evaluator,
-		&params, &metrics,
+		&e.CreatedBy, &params, &metrics,
 	)
 	if err != nil {
 		return e, err

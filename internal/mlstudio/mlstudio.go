@@ -169,6 +169,7 @@ type Evaluation struct {
 	Summary      string         `json:"summary"`
 	EvaluatedAt  *time.Time     `json:"evaluatedAt,omitempty"`
 	Evaluator    string         `json:"evaluator"`
+	CreatedBy    *string        `json:"createdBy,omitempty"`
 	Parameters   map[string]any `json:"parameters"`
 	Metrics      map[string]any `json:"metrics"`
 }
