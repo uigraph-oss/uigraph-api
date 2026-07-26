@@ -270,3 +270,216 @@ func (d *DB) DeleteMLFinding(ctx context.Context, orgID, id, deletedBy string) e
 	}
 	return nil
 }
+
+func (d *DB) CreateMLModel(ctx context.Context, m mlstudio.Model) error {
+	tags := m.Tags
+	if tags == nil {
+		tags = []string{}
+	}
+	now := time.Now().UTC()
+	const q = `
+		INSERT INTO ml_models (id, org_id, project_id, name, description, domain, problem_type, tags, origin, mlflow_created_at, created_by, updated_by, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11,$10,$10)`
+	_, err := d.db.ExecContext(ctx, q,
+		m.ID, m.OrgID, m.ProjectID, m.Name, m.Description, m.Domain, m.ProblemType, pq.Array(tags), m.Origin, now, m.CreatedBy)
+	if err != nil {
+		return fmt.Errorf("postgres: CreateMLModel: %w", err)
+	}
+	return nil
+}
+
+func (d *DB) CreateMLExperiment(ctx context.Context, e mlstudio.Experiment) error {
+	const q = `
+		INSERT INTO ml_experiments (id, org_id, project_id, name, description, status, started_at, source, created_by, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10)`
+	now := time.Now().UTC()
+	_, err := d.db.ExecContext(ctx, q,
+		e.ID, e.OrgID, e.ProjectID, e.Name, e.Description, e.Status, e.StartedAt, e.Source, e.CreatedBy, now)
+	if err != nil {
+		return fmt.Errorf("postgres: CreateMLExperiment: %w", err)
+	}
+	return nil
+}
+
+func (d *DB) UpdateMLExperiment(ctx context.Context, e mlstudio.Experiment) error {
+	const q = `
+		UPDATE ml_experiments SET project_id=$1, name=$2, description=$3, status=$4, started_at=$5, updated_at=$6
+		WHERE org_id=$7 AND id=$8 AND deleted_at IS NULL`
+	_, err := d.db.ExecContext(ctx, q,
+		e.ProjectID, e.Name, e.Description, e.Status, e.StartedAt, time.Now().UTC(), e.OrgID, e.ID)
+	if err != nil {
+		return fmt.Errorf("postgres: UpdateMLExperiment: %w", err)
+	}
+	return nil
+}
+
+func (d *DB) DeleteMLExperiment(ctx context.Context, orgID, id, deletedBy string) error {
+	const q = `UPDATE ml_experiments SET deleted_at=$1, deleted_by=$2 WHERE org_id=$3 AND id=$4 AND deleted_at IS NULL`
+	_, err := d.db.ExecContext(ctx, q, time.Now().UTC(), deletedBy, orgID, id)
+	if err != nil {
+		return fmt.Errorf("postgres: DeleteMLExperiment: %w", err)
+	}
+	return nil
+}
+
+func (d *DB) CreateMLRun(ctx context.Context, run mlstudio.Run) error {
+	params := run.Parameters
+	if params == nil {
+		params = map[string]any{}
+	}
+	metrics := run.Metrics
+	if metrics == nil {
+		metrics = map[string]any{}
+	}
+	paramsJSON, err := jsonBytes(params)
+	if err != nil {
+		return fmt.Errorf("postgres: CreateMLRun marshal parameters: %w", err)
+	}
+	metricsJSON, err := jsonBytes(metrics)
+	if err != nil {
+		return fmt.Errorf("postgres: CreateMLRun marshal metrics: %w", err)
+	}
+	const q = `
+		INSERT INTO ml_runs (id, org_id, experiment_id, name, status, started_at, ended_at, duration, notes, parameters, metrics, dataset_id, source, created_by, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$15)`
+	now := time.Now().UTC()
+	_, err = d.db.ExecContext(ctx, q,
+		run.ID, run.OrgID, run.ExperimentID, run.Name, run.Status, run.StartedAt, run.EndedAt,
+		run.Duration, run.Notes, paramsJSON, metricsJSON, run.DatasetID, run.Source, run.CreatedBy, now)
+	if err != nil {
+		return fmt.Errorf("postgres: CreateMLRun: %w", err)
+	}
+	return nil
+}
+
+func (d *DB) UpdateMLRun(ctx context.Context, run mlstudio.Run) error {
+	params := run.Parameters
+	if params == nil {
+		params = map[string]any{}
+	}
+	metrics := run.Metrics
+	if metrics == nil {
+		metrics = map[string]any{}
+	}
+	paramsJSON, err := jsonBytes(params)
+	if err != nil {
+		return fmt.Errorf("postgres: UpdateMLRun marshal parameters: %w", err)
+	}
+	metricsJSON, err := jsonBytes(metrics)
+	if err != nil {
+		return fmt.Errorf("postgres: UpdateMLRun marshal metrics: %w", err)
+	}
+	const q = `
+		UPDATE ml_runs SET
+			name=$1, status=$2, started_at=$3, ended_at=$4, duration=$5, notes=$6,
+			parameters=$7, metrics=$8, dataset_id=$9, updated_at=$10
+		WHERE org_id=$11 AND id=$12 AND deleted_at IS NULL`
+	_, err = d.db.ExecContext(ctx, q,
+		run.Name, run.Status, run.StartedAt, run.EndedAt, run.Duration, run.Notes,
+		paramsJSON, metricsJSON, run.DatasetID, time.Now().UTC(), run.OrgID, run.ID)
+	if err != nil {
+		return fmt.Errorf("postgres: UpdateMLRun: %w", err)
+	}
+	return nil
+}
+
+func (d *DB) DeleteMLRun(ctx context.Context, orgID, id, deletedBy string) error {
+	const q = `UPDATE ml_runs SET deleted_at=$1, deleted_by=$2 WHERE org_id=$3 AND id=$4 AND deleted_at IS NULL`
+	_, err := d.db.ExecContext(ctx, q, time.Now().UTC(), deletedBy, orgID, id)
+	if err != nil {
+		return fmt.Errorf("postgres: DeleteMLRun: %w", err)
+	}
+	return nil
+}
+
+func (d *DB) CreateMLDataset(ctx context.Context, ds mlstudio.Dataset) error {
+	schema := ds.Schema
+	if schema == nil {
+		schema = []mlstudio.SchemaField{}
+	}
+	tags := ds.Tags
+	if tags == nil {
+		tags = map[string]string{}
+	}
+	schemaJSON, err := jsonBytes(schema)
+	if err != nil {
+		return fmt.Errorf("postgres: CreateMLDataset marshal schema: %w", err)
+	}
+	tagsJSON, err := jsonBytes(tags)
+	if err != nil {
+		return fmt.Errorf("postgres: CreateMLDataset marshal tags: %w", err)
+	}
+	const q = `
+		INSERT INTO ml_datasets (id, org_id, experiment_id, name, digest, source, source_type, context, row_count, schema, tags, origin, created_by, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$14)`
+	now := time.Now().UTC()
+	_, err = d.db.ExecContext(ctx, q,
+		ds.ID, ds.OrgID, ds.ExperimentID, ds.Name, ds.Digest, ds.Source, ds.SourceType, ds.Context,
+		ds.RowCount, schemaJSON, tagsJSON, ds.Origin, ds.CreatedBy, now)
+	if err != nil {
+		return fmt.Errorf("postgres: CreateMLDataset: %w", err)
+	}
+	return nil
+}
+
+func (d *DB) UpdateMLDataset(ctx context.Context, ds mlstudio.Dataset) error {
+	schema := ds.Schema
+	if schema == nil {
+		schema = []mlstudio.SchemaField{}
+	}
+	tags := ds.Tags
+	if tags == nil {
+		tags = map[string]string{}
+	}
+	schemaJSON, err := jsonBytes(schema)
+	if err != nil {
+		return fmt.Errorf("postgres: UpdateMLDataset marshal schema: %w", err)
+	}
+	tagsJSON, err := jsonBytes(tags)
+	if err != nil {
+		return fmt.Errorf("postgres: UpdateMLDataset marshal tags: %w", err)
+	}
+	const q = `
+		UPDATE ml_datasets SET
+			name=$1, digest=$2, source=$3, source_type=$4, context=$5, row_count=$6, schema=$7, tags=$8, updated_at=$9
+		WHERE org_id=$10 AND id=$11 AND deleted_at IS NULL`
+	_, err = d.db.ExecContext(ctx, q,
+		ds.Name, ds.Digest, ds.Source, ds.SourceType, ds.Context, ds.RowCount, schemaJSON, tagsJSON,
+		time.Now().UTC(), ds.OrgID, ds.ID)
+	if err != nil {
+		return fmt.Errorf("postgres: UpdateMLDataset: %w", err)
+	}
+	return nil
+}
+
+func (d *DB) DeleteMLDataset(ctx context.Context, orgID, id, deletedBy string) error {
+	const q = `UPDATE ml_datasets SET deleted_at=$1, deleted_by=$2 WHERE org_id=$3 AND id=$4 AND deleted_at IS NULL`
+	_, err := d.db.ExecContext(ctx, q, time.Now().UTC(), deletedBy, orgID, id)
+	if err != nil {
+		return fmt.Errorf("postgres: DeleteMLDataset: %w", err)
+	}
+	return nil
+}
+
+func (d *DB) ReplaceMLRunMetricPoints(ctx context.Context, orgID, runID string, points []mlstudio.MetricPoint) error {
+	tx, err := d.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("postgres: ReplaceMLRunMetricPoints begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `
+		DELETE FROM ml_run_metric_points WHERE run_id IN (SELECT id FROM ml_runs WHERE org_id=$1 AND id=$2)`, orgID, runID); err != nil {
+		return fmt.Errorf("postgres: ReplaceMLRunMetricPoints clear: %w", err)
+	}
+	for _, p := range points {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO ml_run_metric_points (run_id, key, step, value, ts) VALUES ($1,$2,$3,$4,$5)`,
+			runID, p.Key, p.Step, p.Value, p.TS); err != nil {
+			return fmt.Errorf("postgres: ReplaceMLRunMetricPoints insert: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("postgres: ReplaceMLRunMetricPoints commit: %w", err)
+	}
+	return nil
+}

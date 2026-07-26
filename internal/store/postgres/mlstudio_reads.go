@@ -20,12 +20,12 @@ func scanMLModel(row interface{ Scan(...any) error }) (mlstudio.Model, error) {
 		&m.License, pq.Array(&m.References), &m.IntendedUse,
 		&m.Limitations, &m.EthicalConsiderations, &m.Caveats,
 		&m.Recommendations, &m.Considerations,
-		&m.ProductionVersionID, &m.CreatedAt, &m.UpdatedAt,
+		&m.ProductionVersionID, &m.Origin, &m.CreatedAt, &m.UpdatedAt,
 	)
 	return m, err
 }
 
-const mlModelCols = `id, org_id, mlflow_id, project_id, name, description, domain, problem_type, tags, license, reference_links, intended_use, limitations, ethical_considerations, caveats, recommendations, considerations, production_version_id, mlflow_created_at, updated_at`
+const mlModelCols = `id, org_id, mlflow_id, project_id, name, description, domain, problem_type, tags, license, reference_links, intended_use, limitations, ethical_considerations, caveats, recommendations, considerations, production_version_id, origin, mlflow_created_at, updated_at`
 
 func (d *DB) ListMLModels(ctx context.Context, orgID, projectID string) ([]mlstudio.Model, error) {
 	q := `SELECT ` + mlModelCols + ` FROM ml_models WHERE org_id=$1 AND deleted_at IS NULL`
@@ -118,11 +118,12 @@ func scanMLExperiment(row interface{ Scan(...any) error }) (mlstudio.Experiment,
 	var e mlstudio.Experiment
 	err := row.Scan(
 		&e.ID, &e.OrgID, &e.MLflowID, &e.ProjectID, &e.Name, &e.Description, &e.Status, &e.StartedAt,
+		&e.Source, &e.CreatedBy, &e.CreatedAt, &e.UpdatedAt,
 	)
 	return e, err
 }
 
-const mlExperimentCols = `id, org_id, mlflow_id, project_id, name, description, status, started_at`
+const mlExperimentCols = `id, org_id, mlflow_id, project_id, name, description, status, started_at, source, created_by, created_at, updated_at`
 
 func scanMLProject(row interface{ Scan(...any) error }) (mlstudio.Project, error) {
 	var p mlstudio.Project
@@ -214,6 +215,7 @@ func scanMLRun(row interface{ Scan(...any) error }) (mlstudio.Run, error) {
 		&run.ID, &run.OrgID, &run.MLflowID, &run.ExperimentID, &run.Name, &run.Status,
 		&run.StartedAt, &run.EndedAt, &run.Duration, &run.Notes,
 		&params, &metrics, &run.DatasetID, &run.UpdatedAt, &run.SyncedAt,
+		&run.Source, &run.CreatedBy, &run.CreatedAt,
 	)
 	if err != nil {
 		return run, err
@@ -227,7 +229,7 @@ func scanMLRun(row interface{ Scan(...any) error }) (mlstudio.Run, error) {
 	return run, nil
 }
 
-const mlRunCols = `id, org_id, mlflow_id, experiment_id, name, status, started_at, ended_at, duration, notes, parameters, metrics, dataset_id, updated_at, synced_at`
+const mlRunCols = `id, org_id, mlflow_id, experiment_id, name, status, started_at, ended_at, duration, notes, parameters, metrics, dataset_id, updated_at, synced_at, source, created_by, created_at`
 
 func (d *DB) ListMLRuns(ctx context.Context, orgID string, q mlstudio.RunQuery) ([]mlstudio.Run, int, error) {
 	where := ` FROM ml_runs WHERE org_id=$1 AND deleted_at IS NULL`
@@ -349,6 +351,7 @@ func scanMLDataset(row interface{ Scan(...any) error }) (mlstudio.Dataset, error
 	err := row.Scan(
 		&ds.ID, &ds.OrgID, &ds.ExperimentID, &ds.MLflowID, &ds.Name, &ds.Digest,
 		&ds.Source, &ds.SourceType, &ds.Context, &ds.RowCount, &schema, &tags,
+		&ds.Origin, &ds.CreatedBy, &ds.CreatedAt, &ds.UpdatedAt,
 	)
 	if err != nil {
 		return ds, err
@@ -362,7 +365,7 @@ func scanMLDataset(row interface{ Scan(...any) error }) (mlstudio.Dataset, error
 	return ds, nil
 }
 
-const mlDatasetCols = `id, org_id, experiment_id, mlflow_id, name, digest, source, source_type, context, row_count, schema, tags`
+const mlDatasetCols = `id, org_id, experiment_id, mlflow_id, name, digest, source, source_type, context, row_count, schema, tags, origin, created_by, created_at, updated_at`
 
 func (d *DB) ListMLDatasets(ctx context.Context, orgID, experimentID string) ([]mlstudio.Dataset, error) {
 	q := `SELECT ` + mlDatasetCols + ` FROM ml_datasets WHERE org_id=$1 AND deleted_at IS NULL`

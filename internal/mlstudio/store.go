@@ -9,6 +9,7 @@ type Store interface {
 	GetMLProject(ctx context.Context, orgID, id string) (*Project, error)
 
 	UpsertMLModels(ctx context.Context, orgID, actorID string, in []ModelInput) error
+	CreateMLModel(ctx context.Context, m Model) error
 	UpdateMLModel(ctx context.Context, orgID, id, actorID string, in ModelUpdateInput) error
 	UpsertMLModelVersions(ctx context.Context, orgID, actorID string, in []ModelVersionInput) error
 	UpsertMLExperiments(ctx context.Context, orgID, actorID string, in []ExperimentInput) error
@@ -24,12 +25,22 @@ type Store interface {
 	GetMLModelVersion(ctx context.Context, orgID, id string) (*ModelVersion, error)
 	ListMLExperiments(ctx context.Context, orgID, projectID string) ([]Experiment, error)
 	GetMLExperiment(ctx context.Context, orgID, id string) (*Experiment, error)
+	CreateMLExperiment(ctx context.Context, e Experiment) error
+	UpdateMLExperiment(ctx context.Context, e Experiment) error
+	DeleteMLExperiment(ctx context.Context, orgID, id, deletedBy string) error
 	ListMLRuns(ctx context.Context, orgID string, q RunQuery) ([]Run, int, error)
 	GetMLRun(ctx context.Context, orgID, id string) (*Run, error)
+	CreateMLRun(ctx context.Context, run Run) error
+	UpdateMLRun(ctx context.Context, run Run) error
+	DeleteMLRun(ctx context.Context, orgID, id, deletedBy string) error
+	ReplaceMLRunMetricPoints(ctx context.Context, orgID, runID string, points []MetricPoint) error
 	ListMLRunMetricPoints(ctx context.Context, orgID, runID string) ([]MetricPoint, error)
 	ListMLArtifacts(ctx context.Context, orgID, runID string) ([]Artifact, error)
 	ListMLDatasets(ctx context.Context, orgID, experimentID string) ([]Dataset, error)
 	GetMLDataset(ctx context.Context, orgID, id string) (*Dataset, error)
+	CreateMLDataset(ctx context.Context, ds Dataset) error
+	UpdateMLDataset(ctx context.Context, ds Dataset) error
+	DeleteMLDataset(ctx context.Context, orgID, id, deletedBy string) error
 	ListMLVersionEvaluations(ctx context.Context, orgID, versionID string) ([]Evaluation, error)
 
 	CreateVersionDeploymentUpdate(ctx context.Context, u VersionDeploymentUpdate) error

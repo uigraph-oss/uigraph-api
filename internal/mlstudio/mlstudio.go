@@ -25,7 +25,7 @@ type ProjectStats struct {
 type Model struct {
 	ID                    string     `json:"id"`
 	OrgID                 string     `json:"orgId"`
-	MLflowID              string     `json:"mlflowId"`
+	MLflowID              *string    `json:"mlflowId,omitempty"`
 	ProjectID             *string    `json:"projectId,omitempty"`
 	Name                  string     `json:"name"`
 	Description           string     `json:"description"`
@@ -41,6 +41,8 @@ type Model struct {
 	Recommendations       string     `json:"recommendations"`
 	Considerations        string     `json:"considerations"`
 	ProductionVersionID   *string    `json:"productionVersionId,omitempty"`
+	Origin                string     `json:"origin"`
+	CreatedBy             string     `json:"-"`
 	CreatedAt             *time.Time `json:"createdAt,omitempty"`
 	UpdatedAt             *time.Time `json:"updatedAt,omitempty"`
 }
@@ -70,18 +72,23 @@ type VersionDeploymentUpdate struct {
 type Experiment struct {
 	ID          string     `json:"id"`
 	OrgID       string     `json:"orgId"`
-	MLflowID    string     `json:"mlflowId"`
+	MLflowID    *string    `json:"mlflowId,omitempty"`
 	ProjectID   *string    `json:"projectId,omitempty"`
 	Name        string     `json:"name"`
 	Description string     `json:"description"`
 	Status      string     `json:"status"`
 	StartedAt   *time.Time `json:"startedAt,omitempty"`
+	Source      string     `json:"source"`
+	CreatedBy   string     `json:"createdBy,omitempty"`
+	CreatedAt   *time.Time `json:"createdAt,omitempty"`
+	UpdatedAt   *time.Time `json:"updatedAt,omitempty"`
+	DeletedAt   *time.Time `json:"deletedAt,omitempty"`
 }
 
 type Run struct {
 	ID           string         `json:"id"`
 	OrgID        string         `json:"orgId"`
-	MLflowID     string         `json:"mlflowId"`
+	MLflowID     *string        `json:"mlflowId,omitempty"`
 	ExperimentID string         `json:"experimentId"`
 	Name         string         `json:"name"`
 	Status       string         `json:"status"`
@@ -92,8 +99,12 @@ type Run struct {
 	Parameters   map[string]any `json:"parameters"`
 	Metrics      map[string]any `json:"metrics"`
 	DatasetID    *string        `json:"datasetId,omitempty"`
+	Source       string         `json:"source"`
+	CreatedBy    string         `json:"createdBy,omitempty"`
+	CreatedAt    *time.Time     `json:"createdAt,omitempty"`
 	UpdatedAt    *time.Time     `json:"updatedAt,omitempty"`
 	SyncedAt     *time.Time     `json:"syncedAt,omitempty"`
+	DeletedAt    *time.Time     `json:"deletedAt,omitempty"`
 }
 
 type RunQuery struct {
@@ -136,7 +147,7 @@ type Dataset struct {
 	ID           string            `json:"id"`
 	OrgID        string            `json:"orgId"`
 	ExperimentID string            `json:"experimentId"`
-	MLflowID     string            `json:"mlflowId"`
+	MLflowID     *string           `json:"mlflowId,omitempty"`
 	Name         string            `json:"name"`
 	Digest       string            `json:"digest"`
 	Source       string            `json:"source"`
@@ -145,6 +156,11 @@ type Dataset struct {
 	RowCount     int64             `json:"rowCount"`
 	Schema       []SchemaField     `json:"schema"`
 	Tags         map[string]string `json:"tags"`
+	Origin       string            `json:"origin"`
+	CreatedBy    string            `json:"createdBy,omitempty"`
+	CreatedAt    *time.Time        `json:"createdAt,omitempty"`
+	UpdatedAt    *time.Time        `json:"updatedAt,omitempty"`
+	DeletedAt    *time.Time        `json:"deletedAt,omitempty"`
 }
 
 type Metric struct {

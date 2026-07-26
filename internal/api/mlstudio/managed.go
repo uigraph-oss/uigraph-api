@@ -1,6 +1,7 @@
 package mlstudio
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"time"
@@ -331,6 +332,526 @@ func (h *Handler) DeleteFinding(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (h *Handler) CreateModel(w http.ResponseWriter, r *http.Request) {
+	p, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		ProjectID   string   `json:"projectId"`
+		Name        string   `json:"name"`
+		Description string   `json:"description"`
+		Domain      string   `json:"domain"`
+		ProblemType string   `json:"problemType"`
+		Tags        []string `json:"tags"`
+	}
+	if err := httputil.Decode(r, &body); err != nil {
+		httputil.BadRequest(w, "invalid request body")
+		return
+	}
+	if body.ProjectID == "" || body.Name == "" {
+		httputil.BadRequest(w, "projectId and name are required")
+		return
+	}
+	if !h.ensureProjectInOrg(w, r, orgID, body.ProjectID) {
+		return
+	}
+	problemType := body.ProblemType
+	if problemType == "" {
+		problemType = "other"
+	}
+	projectID := body.ProjectID
+	m := mlstudio.Model{
+		ID:          uuid.NewString(),
+		OrgID:       orgID,
+		ProjectID:   &projectID,
+		Name:        body.Name,
+		Description: body.Description,
+		Domain:      body.Domain,
+		ProblemType: problemType,
+		Tags:        body.Tags,
+		Origin:      "manual",
+		CreatedBy:   p.UserID,
+	}
+	if err := h.store.CreateMLModel(r.Context(), m); err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	created, err := h.store.GetMLModel(r.Context(), orgID, m.ID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusCreated, created)
+}
+
+func (h *Handler) CreateExperiment(w http.ResponseWriter, r *http.Request) {
+	p, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		ProjectID   string     `json:"projectId"`
+		Name        string     `json:"name"`
+		Description string     `json:"description"`
+		Status      string     `json:"status"`
+		StartedAt   *time.Time `json:"startedAt"`
+	}
+	if err := httputil.Decode(r, &body); err != nil {
+		httputil.BadRequest(w, "invalid request body")
+		return
+	}
+	if body.ProjectID == "" || body.Name == "" {
+		httputil.BadRequest(w, "projectId and name are required")
+		return
+	}
+	if !h.ensureProjectInOrg(w, r, orgID, body.ProjectID) {
+		return
+	}
+	status := body.Status
+	if status == "" {
+		status = "active"
+	}
+	projectID := body.ProjectID
+	e := mlstudio.Experiment{
+		ID:          uuid.NewString(),
+		OrgID:       orgID,
+		ProjectID:   &projectID,
+		Name:        body.Name,
+		Description: body.Description,
+		Status:      status,
+		StartedAt:   body.StartedAt,
+		Source:      "manual",
+		CreatedBy:   p.UserID,
+	}
+	if err := h.store.CreateMLExperiment(r.Context(), e); err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	created, err := h.store.GetMLExperiment(r.Context(), orgID, e.ID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusCreated, created)
+}
+
+func (h *Handler) UpdateExperiment(w http.ResponseWriter, r *http.Request) {
+	_, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	existing, err := h.store.GetMLExperiment(r.Context(), orgID, r.PathValue("experimentId"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if existing == nil {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+	if existing.Source != "manual" {
+		httputil.BadRequest(w, "only manually created experiments can be edited")
+		return
+	}
+	var body struct {
+		ProjectID   *string    `json:"projectId"`
+		Name        *string    `json:"name"`
+		Description *string    `json:"description"`
+		Status      *string    `json:"status"`
+		StartedAt   *time.Time `json:"startedAt"`
+	}
+	if err := httputil.Decode(r, &body); err != nil {
+		httputil.BadRequest(w, "invalid request body")
+		return
+	}
+	if body.ProjectID != nil {
+		if *body.ProjectID != "" && !h.ensureProjectInOrg(w, r, orgID, *body.ProjectID) {
+			return
+		}
+		existing.ProjectID = body.ProjectID
+	}
+	if body.Name != nil {
+		existing.Name = *body.Name
+	}
+	if body.Description != nil {
+		existing.Description = *body.Description
+	}
+	if body.Status != nil {
+		existing.Status = *body.Status
+	}
+	if body.StartedAt != nil {
+		existing.StartedAt = body.StartedAt
+	}
+	if err := h.store.UpdateMLExperiment(r.Context(), *existing); err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	updated, err := h.store.GetMLExperiment(r.Context(), orgID, existing.ID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, updated)
+}
+
+func (h *Handler) DeleteExperiment(w http.ResponseWriter, r *http.Request) {
+	p, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	existing, err := h.store.GetMLExperiment(r.Context(), orgID, r.PathValue("experimentId"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if existing == nil {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+	if existing.Source != "manual" {
+		httputil.BadRequest(w, "only manually created experiments can be deleted")
+		return
+	}
+	if err := h.store.DeleteMLExperiment(r.Context(), orgID, existing.ID, p.UserID); err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type runSeriesPointBody struct {
+	Step  int64      `json:"step"`
+	Value float64    `json:"value"`
+	TS    *time.Time `json:"ts"`
+}
+
+func (h *Handler) replaceRunSeries(ctx context.Context, orgID, runID string, series map[string][]runSeriesPointBody) error {
+	var points []mlstudio.MetricPoint
+	for key, pts := range series {
+		for _, pt := range pts {
+			points = append(points, mlstudio.MetricPoint{Key: key, Step: pt.Step, Value: pt.Value, TS: pt.TS})
+		}
+	}
+	return h.store.ReplaceMLRunMetricPoints(ctx, orgID, runID, points)
+}
+
+func (h *Handler) CreateRun(w http.ResponseWriter, r *http.Request) {
+	p, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	experimentID := r.PathValue("experimentId")
+	if !h.ensureExperimentInOrg(w, r, orgID, experimentID) {
+		return
+	}
+	var body struct {
+		Name       string                          `json:"name"`
+		Status     string                          `json:"status"`
+		StartedAt  *time.Time                      `json:"startedAt"`
+		EndedAt    *time.Time                      `json:"endedAt"`
+		Duration   string                          `json:"duration"`
+		Notes      string                          `json:"notes"`
+		Parameters map[string]any                  `json:"parameters"`
+		Metrics    map[string]any                  `json:"metrics"`
+		DatasetID  *string                         `json:"datasetId"`
+		Series     map[string][]runSeriesPointBody `json:"series"`
+	}
+	if err := httputil.Decode(r, &body); err != nil {
+		httputil.BadRequest(w, "invalid request body")
+		return
+	}
+	if body.Name == "" {
+		httputil.BadRequest(w, "name is required")
+		return
+	}
+	status := body.Status
+	if status == "" {
+		status = "running"
+	}
+	run := mlstudio.Run{
+		ID:           uuid.NewString(),
+		OrgID:        orgID,
+		ExperimentID: experimentID,
+		Name:         body.Name,
+		Status:       status,
+		StartedAt:    body.StartedAt,
+		EndedAt:      body.EndedAt,
+		Duration:     body.Duration,
+		Notes:        body.Notes,
+		Parameters:   body.Parameters,
+		Metrics:      body.Metrics,
+		DatasetID:    body.DatasetID,
+		Source:       "manual",
+		CreatedBy:    p.UserID,
+	}
+	if err := h.store.CreateMLRun(r.Context(), run); err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	if body.Series != nil {
+		if err := h.replaceRunSeries(r.Context(), orgID, run.ID, body.Series); err != nil {
+			writeErr(w, r, err)
+			return
+		}
+	}
+	created, err := h.store.GetMLRun(r.Context(), orgID, run.ID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusCreated, created)
+}
+
+func (h *Handler) UpdateRun(w http.ResponseWriter, r *http.Request) {
+	_, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	existing, err := h.store.GetMLRun(r.Context(), orgID, r.PathValue("runId"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if existing == nil {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+	if existing.Source != "manual" {
+		httputil.BadRequest(w, "only manually created runs can be edited")
+		return
+	}
+	var body struct {
+		Name       *string                          `json:"name"`
+		Status     *string                          `json:"status"`
+		StartedAt  *time.Time                       `json:"startedAt"`
+		EndedAt    *time.Time                       `json:"endedAt"`
+		Duration   *string                          `json:"duration"`
+		Notes      *string                          `json:"notes"`
+		Parameters map[string]any                   `json:"parameters"`
+		Metrics    map[string]any                   `json:"metrics"`
+		DatasetID  *string                          `json:"datasetId"`
+		Series     *map[string][]runSeriesPointBody `json:"series"`
+	}
+	if err := httputil.Decode(r, &body); err != nil {
+		httputil.BadRequest(w, "invalid request body")
+		return
+	}
+	if body.Name != nil {
+		existing.Name = *body.Name
+	}
+	if body.Status != nil {
+		existing.Status = *body.Status
+	}
+	if body.StartedAt != nil {
+		existing.StartedAt = body.StartedAt
+	}
+	if body.EndedAt != nil {
+		existing.EndedAt = body.EndedAt
+	}
+	if body.Duration != nil {
+		existing.Duration = *body.Duration
+	}
+	if body.Notes != nil {
+		existing.Notes = *body.Notes
+	}
+	if body.Parameters != nil {
+		existing.Parameters = body.Parameters
+	}
+	if body.Metrics != nil {
+		existing.Metrics = body.Metrics
+	}
+	if body.DatasetID != nil {
+		existing.DatasetID = body.DatasetID
+	}
+	if err := h.store.UpdateMLRun(r.Context(), *existing); err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	if body.Series != nil {
+		if err := h.replaceRunSeries(r.Context(), orgID, existing.ID, *body.Series); err != nil {
+			writeErr(w, r, err)
+			return
+		}
+	}
+	updated, err := h.store.GetMLRun(r.Context(), orgID, existing.ID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, updated)
+}
+
+func (h *Handler) DeleteRun(w http.ResponseWriter, r *http.Request) {
+	p, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	existing, err := h.store.GetMLRun(r.Context(), orgID, r.PathValue("runId"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if existing == nil {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+	if existing.Source != "manual" {
+		httputil.BadRequest(w, "only manually created runs can be deleted")
+		return
+	}
+	if err := h.store.DeleteMLRun(r.Context(), orgID, existing.ID, p.UserID); err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) CreateDataset(w http.ResponseWriter, r *http.Request) {
+	p, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	experimentID := r.PathValue("experimentId")
+	if !h.ensureExperimentInOrg(w, r, orgID, experimentID) {
+		return
+	}
+	var body struct {
+		Name       string            `json:"name"`
+		Digest     string            `json:"digest"`
+		Source     string            `json:"source"`
+		SourceType string            `json:"sourceType"`
+		Context    string            `json:"context"`
+		RowCount   int64             `json:"rowCount"`
+		Tags       map[string]string `json:"tags"`
+	}
+	if err := httputil.Decode(r, &body); err != nil {
+		httputil.BadRequest(w, "invalid request body")
+		return
+	}
+	if body.Name == "" {
+		httputil.BadRequest(w, "name is required")
+		return
+	}
+	context := body.Context
+	if context == "" {
+		context = "training"
+	}
+	ds := mlstudio.Dataset{
+		ID:           uuid.NewString(),
+		OrgID:        orgID,
+		ExperimentID: experimentID,
+		Name:         body.Name,
+		Digest:       body.Digest,
+		Source:       body.Source,
+		SourceType:   body.SourceType,
+		Context:      context,
+		RowCount:     body.RowCount,
+		Tags:         body.Tags,
+		Origin:       "manual",
+		CreatedBy:    p.UserID,
+	}
+	if err := h.store.CreateMLDataset(r.Context(), ds); err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	created, err := h.store.GetMLDataset(r.Context(), orgID, ds.ID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusCreated, created)
+}
+
+func (h *Handler) UpdateDataset(w http.ResponseWriter, r *http.Request) {
+	_, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	existing, err := h.store.GetMLDataset(r.Context(), orgID, r.PathValue("datasetId"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if existing == nil {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+	if existing.Origin != "manual" {
+		httputil.BadRequest(w, "only manually logged datasets can be edited")
+		return
+	}
+	var body struct {
+		Name       *string           `json:"name"`
+		Digest     *string           `json:"digest"`
+		Source     *string           `json:"source"`
+		SourceType *string           `json:"sourceType"`
+		Context    *string           `json:"context"`
+		RowCount   *int64            `json:"rowCount"`
+		Tags       map[string]string `json:"tags"`
+	}
+	if err := httputil.Decode(r, &body); err != nil {
+		httputil.BadRequest(w, "invalid request body")
+		return
+	}
+	if body.Name != nil {
+		existing.Name = *body.Name
+	}
+	if body.Digest != nil {
+		existing.Digest = *body.Digest
+	}
+	if body.Source != nil {
+		existing.Source = *body.Source
+	}
+	if body.SourceType != nil {
+		existing.SourceType = *body.SourceType
+	}
+	if body.Context != nil {
+		existing.Context = *body.Context
+	}
+	if body.RowCount != nil {
+		existing.RowCount = *body.RowCount
+	}
+	if body.Tags != nil {
+		existing.Tags = body.Tags
+	}
+	if err := h.store.UpdateMLDataset(r.Context(), *existing); err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	updated, err := h.store.GetMLDataset(r.Context(), orgID, existing.ID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, updated)
+}
+
+func (h *Handler) DeleteDataset(w http.ResponseWriter, r *http.Request) {
+	p, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	existing, err := h.store.GetMLDataset(r.Context(), orgID, r.PathValue("datasetId"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if existing == nil {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+	if existing.Origin != "manual" {
+		httputil.BadRequest(w, "only manually logged datasets can be deleted")
+		return
+	}
+	if err := h.store.DeleteMLDataset(r.Context(), orgID, existing.ID, p.UserID); err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 var allowedVersionTransitions = map[string][]string{
 	"candidate":  {"staging"},
 	"staging":    {"production", "candidate"},
@@ -426,6 +947,32 @@ func (h *Handler) ensureVersionInOrg(w http.ResponseWriter, r *http.Request, org
 	}
 	if v == nil {
 		httputil.BadRequest(w, "version not found in org")
+		return false
+	}
+	return true
+}
+
+func (h *Handler) ensureProjectInOrg(w http.ResponseWriter, r *http.Request, orgID, projectID string) bool {
+	proj, err := h.store.GetMLProject(r.Context(), orgID, projectID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return false
+	}
+	if proj == nil {
+		httputil.BadRequest(w, "project not found in org")
+		return false
+	}
+	return true
+}
+
+func (h *Handler) ensureExperimentInOrg(w http.ResponseWriter, r *http.Request, orgID, experimentID string) bool {
+	e, err := h.store.GetMLExperiment(r.Context(), orgID, experimentID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return false
+	}
+	if e == nil {
+		httputil.BadRequest(w, "experiment not found in org")
 		return false
 	}
 	return true
