@@ -83,10 +83,6 @@ func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, r, storepkg.ErrNotFound)
 		return
 	}
-	if existing.SourceType != "" {
-		httputil.BadRequest(w, "only manually created projects can be edited")
-		return
-	}
 	var body struct {
 		Name        *string `json:"name"`
 		Type        *string `json:"type"`
@@ -153,10 +149,6 @@ func (h *Handler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 	}
 	if existing == nil {
 		httputil.Error(w, r, storepkg.ErrNotFound)
-		return
-	}
-	if existing.SourceType != "" {
-		httputil.BadRequest(w, "only manually created projects can be deleted")
 		return
 	}
 	if err := h.store.DeleteMLProject(r.Context(), orgID, existing.ID, p.UserID); err != nil {
