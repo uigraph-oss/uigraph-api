@@ -376,6 +376,18 @@ func (h *Handler) CreateModel(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, err)
 		return
 	}
+	v := mlstudio.ModelVersion{
+		ID:        uuid.NewString(),
+		OrgID:     orgID,
+		ModelID:   m.ID,
+		Version:   "1",
+		Source:    "manual",
+		CreatedBy: p.UserID,
+	}
+	if err := h.store.CreateMLModelVersion(r.Context(), v); err != nil {
+		writeErr(w, r, err)
+		return
+	}
 	created, err := h.store.GetMLModel(r.Context(), orgID, m.ID)
 	if err != nil {
 		httputil.Error(w, r, err)
@@ -978,6 +990,84 @@ func (h *Handler) ListVersionDeploymentUpdates(w http.ResponseWriter, r *http.Re
 		return
 	}
 	httputil.JSON(w, http.StatusOK, map[string]any{"updates": updates})
+}
+
+func (h *Handler) SetVersionRun(w http.ResponseWriter, r *http.Request) {
+	p, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	versionID := r.PathValue("versionId")
+	if !h.ensureVersionInOrg(w, r, orgID, versionID) {
+		return
+	}
+	var body struct {
+		RunID *string `json:"runId"`
+	}
+	if err := httputil.Decode(r, &body); err != nil {
+		httputil.BadRequest(w, "invalid request body")
+		return
+	}
+	runID := body.RunID
+	if runID != nil && *runID == "" {
+		runID = nil
+	}
+	if runID != nil && !h.ensureRunsInOrg(w, r, orgID, []string{*runID}) {
+		return
+	}
+	if err := h.store.SetMLModelVersionRun(r.Context(), orgID, versionID, runID, p.UserID); err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	updated, err := h.store.GetMLModelVersion(r.Context(), orgID, versionID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, updated)
+}
+
+func (h *Handler) LinkVersionEvaluations(w http.ResponseWriter, r *http.Request) {
+	p, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	versionID := r.PathValue("versionId")
+	if !h.ensureVersionInOrg(w, r, orgID, versionID) {
+		return
+	}
+	var body struct {
+		EvaluationIDs []string `json:"evaluationIds"`
+	}
+	if err := httputil.Decode(r, &body); err != nil {
+		httputil.BadRequest(w, "invalid request body")
+		return
+	}
+	if len(body.EvaluationIDs) == 0 {
+		httputil.BadRequest(w, "evaluationIds is required")
+		return
+	}
+	for _, id := range body.EvaluationIDs {
+		e, err := h.store.GetMLEvaluation(r.Context(), orgID, id)
+		if err != nil {
+			httputil.Error(w, r, err)
+			return
+		}
+		if e == nil {
+			httputil.BadRequest(w, "evaluation not found in org: "+id)
+			return
+		}
+	}
+	if err := h.store.SetMLEvaluationsVersion(r.Context(), orgID, versionID, body.EvaluationIDs, p.UserID); err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	evals, err := h.store.ListMLVersionEvaluations(r.Context(), orgID, versionID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{"evaluations": evals})
 }
 
 func (h *Handler) ensureModelInOrg(w http.ResponseWriter, r *http.Request, orgID, modelID string) bool {

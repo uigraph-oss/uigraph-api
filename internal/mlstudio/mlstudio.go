@@ -48,12 +48,14 @@ type Model struct {
 type ModelVersion struct {
 	ID               string     `json:"id"`
 	OrgID            string     `json:"orgId"`
-	MLflowID         string     `json:"mlflowId"`
+	MLflowID         *string    `json:"mlflowId,omitempty"`
 	ModelID          string     `json:"modelId"`
 	Version          string     `json:"version"`
 	Description      string     `json:"description"`
 	DeploymentStatus string     `json:"deploymentStatus"`
 	RunID            *string    `json:"runId,omitempty"`
+	Source           string     `json:"source"`
+	CreatedBy        string     `json:"-"`
 	CreatedAt        *time.Time `json:"createdAt,omitempty"`
 }
 

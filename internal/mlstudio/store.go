@@ -16,6 +16,8 @@ type Store interface {
 	UpdateMLModelInfo(ctx context.Context, m Model) error
 	DeleteMLModel(ctx context.Context, orgID, id, deletedBy string) error
 	UpsertMLModelVersions(ctx context.Context, orgID, actorID string, in []ModelVersionInput) error
+	CreateMLModelVersion(ctx context.Context, v ModelVersion) error
+	SetMLModelVersionRun(ctx context.Context, orgID, versionID string, runID *string, actorID string) error
 	UpsertMLExperiments(ctx context.Context, orgID, actorID string, in []ExperimentInput) error
 	UpsertMLRuns(ctx context.Context, orgID, actorID string, in []RunInput) error
 	UpsertMLArtifacts(ctx context.Context, orgID, actorID string, in []ArtifactInput) error
@@ -45,6 +47,7 @@ type Store interface {
 	ListMLVersionEvaluations(ctx context.Context, orgID, versionID string) ([]Evaluation, error)
 	ListMLExperimentEvaluations(ctx context.Context, orgID, experimentID string) ([]Evaluation, error)
 	GetMLEvaluation(ctx context.Context, orgID, id string) (*Evaluation, error)
+	SetMLEvaluationsVersion(ctx context.Context, orgID, versionID string, evaluationIDs []string, actorID string) error
 
 	CreateVersionDeploymentUpdate(ctx context.Context, u VersionDeploymentUpdate) error
 	ListVersionDeploymentUpdates(ctx context.Context, orgID, versionID, projectID string) ([]VersionDeploymentUpdate, error)

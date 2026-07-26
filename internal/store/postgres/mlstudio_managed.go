@@ -304,6 +304,41 @@ func (d *DB) UpdateMLModelInfo(ctx context.Context, m mlstudio.Model) error {
 	return nil
 }
 
+func (d *DB) CreateMLModelVersion(ctx context.Context, v mlstudio.ModelVersion) error {
+	now := time.Now().UTC()
+	const q = `
+		INSERT INTO ml_model_versions (id, org_id, model_id, version, description, run_id, source, created_by, updated_by, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8,$9,$9)`
+	_, err := d.db.ExecContext(ctx, q,
+		v.ID, v.OrgID, v.ModelID, v.Version, v.Description, v.RunID, v.Source, v.CreatedBy, now)
+	if err != nil {
+		return fmt.Errorf("postgres: CreateMLModelVersion: %w", err)
+	}
+	return nil
+}
+
+func (d *DB) SetMLModelVersionRun(ctx context.Context, orgID, versionID string, runID *string, actorID string) error {
+	const q = `
+		UPDATE ml_model_versions SET run_id=$1, updated_by=$2, updated_at=$3
+		WHERE org_id=$4 AND id=$5 AND deleted_at IS NULL`
+	_, err := d.db.ExecContext(ctx, q, runID, actorID, time.Now().UTC(), orgID, versionID)
+	if err != nil {
+		return fmt.Errorf("postgres: SetMLModelVersionRun: %w", err)
+	}
+	return nil
+}
+
+func (d *DB) SetMLEvaluationsVersion(ctx context.Context, orgID, versionID string, evaluationIDs []string, actorID string) error {
+	const q = `
+		UPDATE ml_evaluations SET version_id=$1, updated_by=$2, updated_at=$3
+		WHERE org_id=$4 AND id=ANY($5) AND deleted_at IS NULL`
+	_, err := d.db.ExecContext(ctx, q, versionID, actorID, time.Now().UTC(), orgID, pq.Array(evaluationIDs))
+	if err != nil {
+		return fmt.Errorf("postgres: SetMLEvaluationsVersion: %w", err)
+	}
+	return nil
+}
+
 func (d *DB) DeleteMLModel(ctx context.Context, orgID, id, deletedBy string) error {
 	const q = `UPDATE ml_models SET deleted_at=$1, deleted_by=$2 WHERE org_id=$3 AND id=$4 AND deleted_at IS NULL`
 	_, err := d.db.ExecContext(ctx, q, time.Now().UTC(), deletedBy, orgID, id)
