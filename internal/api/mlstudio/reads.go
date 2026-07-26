@@ -236,19 +236,6 @@ func (h *Handler) GetRun(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, run)
 }
 
-func (h *Handler) ListRunSeries(w http.ResponseWriter, r *http.Request) {
-	_, orgID, ok := h.authorizeOrg(w, r)
-	if !ok {
-		return
-	}
-	points, err := h.store.ListMLRunMetricPoints(r.Context(), orgID, r.PathValue("runId"))
-	if err != nil {
-		httputil.Error(w, r, err)
-		return
-	}
-	httputil.JSON(w, http.StatusOK, map[string]any{"points": points})
-}
-
 func (h *Handler) ListRunArtifacts(w http.ResponseWriter, r *http.Request) {
 	_, orgID, ok := h.authorizeOrg(w, r)
 	if !ok {

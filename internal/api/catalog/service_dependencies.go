@@ -24,10 +24,10 @@ func (h *Handler) SyncDependencies(w http.ResponseWriter, r *http.Request) {
 	}
 	var body struct {
 		Dependencies []struct {
-			Name        string   `json:"name"`
-			Service     string   `json:"service"`
-			Type        string   `json:"type"`
-			Criticality string   `json:"criticality"`
+			Name             string   `json:"name"`
+			Service          string   `json:"service"`
+			Type             string   `json:"type"`
+			Criticality      string   `json:"criticality"`
 			Description      string   `json:"description"`
 			APIGroupName     *string  `json:"apiGroupName"`
 			APIEndpointNames []string `json:"apiEndpointNames"`

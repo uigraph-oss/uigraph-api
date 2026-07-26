@@ -18,7 +18,6 @@ type Store interface {
 	UpsertMLModelVersions(ctx context.Context, orgID, actorID string, in []ModelVersionInput) error
 	UpsertMLExperiments(ctx context.Context, orgID, actorID string, in []ExperimentInput) error
 	UpsertMLRuns(ctx context.Context, orgID, actorID string, in []RunInput) error
-	UpsertMLRunMetricPoints(ctx context.Context, orgID, runMLflowID string, in []MetricPoint) error
 	UpsertMLArtifacts(ctx context.Context, orgID, actorID string, in []ArtifactInput) error
 	UpsertMLDatasets(ctx context.Context, orgID, actorID string, in []DatasetInput) error
 	UpsertMLEvaluations(ctx context.Context, orgID, actorID string, in []EvaluationInput) error
@@ -37,8 +36,6 @@ type Store interface {
 	CreateMLRun(ctx context.Context, run Run) error
 	UpdateMLRun(ctx context.Context, run Run) error
 	DeleteMLRun(ctx context.Context, orgID, id, deletedBy string) error
-	ReplaceMLRunMetricPoints(ctx context.Context, orgID, runID string, points []MetricPoint) error
-	ListMLRunMetricPoints(ctx context.Context, orgID, runID string) ([]MetricPoint, error)
 	ListMLArtifacts(ctx context.Context, orgID, runID string) ([]Artifact, error)
 	ListMLDatasets(ctx context.Context, orgID, experimentID string) ([]Dataset, error)
 	GetMLDataset(ctx context.Context, orgID, id string) (*Dataset, error)

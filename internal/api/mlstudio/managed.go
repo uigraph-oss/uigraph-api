@@ -1,7 +1,6 @@
 package mlstudio
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"time"
@@ -611,22 +610,6 @@ func (h *Handler) DeleteExperiment(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-type runSeriesPointBody struct {
-	Step  int64      `json:"step"`
-	Value float64    `json:"value"`
-	TS    *time.Time `json:"ts"`
-}
-
-func (h *Handler) replaceRunSeries(ctx context.Context, orgID, runID string, series map[string][]runSeriesPointBody) error {
-	var points []mlstudio.MetricPoint
-	for key, pts := range series {
-		for _, pt := range pts {
-			points = append(points, mlstudio.MetricPoint{Key: key, Step: pt.Step, Value: pt.Value, TS: pt.TS})
-		}
-	}
-	return h.store.ReplaceMLRunMetricPoints(ctx, orgID, runID, points)
-}
-
 func (h *Handler) CreateRun(w http.ResponseWriter, r *http.Request) {
 	p, orgID, ok := h.authorizeOrg(w, r)
 	if !ok {
@@ -637,15 +620,14 @@ func (h *Handler) CreateRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Name       string                          `json:"name"`
-		Status     string                          `json:"status"`
-		StartedAt  *time.Time                      `json:"startedAt"`
-		EndedAt    *time.Time                      `json:"endedAt"`
-		Notes      string                          `json:"notes"`
-		Parameters map[string]any                  `json:"parameters"`
-		Metrics    map[string]any                  `json:"metrics"`
-		DatasetID  *string                         `json:"datasetId"`
-		Series     map[string][]runSeriesPointBody `json:"series"`
+		Name       string         `json:"name"`
+		Status     string         `json:"status"`
+		StartedAt  *time.Time     `json:"startedAt"`
+		EndedAt    *time.Time     `json:"endedAt"`
+		Notes      string         `json:"notes"`
+		Parameters map[string]any `json:"parameters"`
+		Metrics    map[string]any `json:"metrics"`
+		DatasetID  *string        `json:"datasetId"`
 	}
 	if err := httputil.Decode(r, &body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -678,12 +660,6 @@ func (h *Handler) CreateRun(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, err)
 		return
 	}
-	if body.Series != nil {
-		if err := h.replaceRunSeries(r.Context(), orgID, run.ID, body.Series); err != nil {
-			writeErr(w, r, err)
-			return
-		}
-	}
 	created, err := h.store.GetMLRun(r.Context(), orgID, run.ID)
 	if err != nil {
 		httputil.Error(w, r, err)
@@ -711,15 +687,14 @@ func (h *Handler) UpdateRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Name       *string                          `json:"name"`
-		Status     *string                          `json:"status"`
-		StartedAt  *time.Time                       `json:"startedAt"`
-		EndedAt    *time.Time                       `json:"endedAt"`
-		Notes      *string                          `json:"notes"`
-		Parameters map[string]any                   `json:"parameters"`
-		Metrics    map[string]any                   `json:"metrics"`
-		DatasetID  *string                          `json:"datasetId"`
-		Series     *map[string][]runSeriesPointBody `json:"series"`
+		Name       *string        `json:"name"`
+		Status     *string        `json:"status"`
+		StartedAt  *time.Time     `json:"startedAt"`
+		EndedAt    *time.Time     `json:"endedAt"`
+		Notes      *string        `json:"notes"`
+		Parameters map[string]any `json:"parameters"`
+		Metrics    map[string]any `json:"metrics"`
+		DatasetID  *string        `json:"datasetId"`
 	}
 	if err := httputil.Decode(r, &body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -752,12 +727,6 @@ func (h *Handler) UpdateRun(w http.ResponseWriter, r *http.Request) {
 	if err := h.store.UpdateMLRun(r.Context(), *existing); err != nil {
 		writeErr(w, r, err)
 		return
-	}
-	if body.Series != nil {
-		if err := h.replaceRunSeries(r.Context(), orgID, existing.ID, *body.Series); err != nil {
-			writeErr(w, r, err)
-			return
-		}
 	}
 	updated, err := h.store.GetMLRun(r.Context(), orgID, existing.ID)
 	if err != nil {

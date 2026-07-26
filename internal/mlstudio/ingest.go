@@ -108,14 +108,5 @@ type EvaluationInput struct {
 	EvaluatedAt     *time.Time     `json:"evaluatedAt"`
 	Evaluator       string         `json:"evaluator"`
 	Parameters      map[string]any `json:"parameters"`
-	Metrics         []MetricInput  `json:"metrics"`
-}
-
-type MetricInput struct {
-	Name       string     `json:"name"`
-	Value      float64    `json:"value"`
-	Unit       string     `json:"unit"`
-	Direction  string     `json:"direction"`
-	Category   string     `json:"category"`
-	MeasuredAt *time.Time `json:"measuredAt"`
+	Metrics         map[string]any `json:"metrics"`
 }

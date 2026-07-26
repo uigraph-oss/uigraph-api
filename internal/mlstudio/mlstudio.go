@@ -113,13 +113,6 @@ type RunQuery struct {
 	Offset       int
 }
 
-type MetricPoint struct {
-	Key   string     `json:"key"`
-	Step  int64      `json:"step"`
-	Value float64    `json:"value"`
-	TS    *time.Time `json:"ts,omitempty"`
-}
-
 type Artifact struct {
 	ID          string     `json:"id"`
 	OrgID       string     `json:"orgId"`
@@ -161,16 +154,6 @@ type Dataset struct {
 	DeletedAt    *time.Time        `json:"deletedAt,omitempty"`
 }
 
-type Metric struct {
-	ID         string     `json:"id"`
-	Name       string     `json:"name"`
-	Value      float64    `json:"value"`
-	Unit       string     `json:"unit"`
-	Direction  string     `json:"direction"`
-	Category   string     `json:"category"`
-	MeasuredAt *time.Time `json:"measuredAt,omitempty"`
-}
-
 type Evaluation struct {
 	ID          string         `json:"id"`
 	OrgID       string         `json:"orgId"`
@@ -184,5 +167,5 @@ type Evaluation struct {
 	EvaluatedAt *time.Time     `json:"evaluatedAt,omitempty"`
 	Evaluator   string         `json:"evaluator"`
 	Parameters  map[string]any `json:"parameters"`
-	Metrics     []Metric       `json:"metrics"`
+	Metrics     map[string]any `json:"metrics"`
 }

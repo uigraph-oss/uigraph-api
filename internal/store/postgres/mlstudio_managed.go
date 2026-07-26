@@ -493,26 +493,3 @@ func (d *DB) DeleteMLDataset(ctx context.Context, orgID, id, deletedBy string) e
 	}
 	return nil
 }
-
-func (d *DB) ReplaceMLRunMetricPoints(ctx context.Context, orgID, runID string, points []mlstudio.MetricPoint) error {
-	tx, err := d.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("postgres: ReplaceMLRunMetricPoints begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, `
-		DELETE FROM ml_run_metric_points WHERE run_id IN (SELECT id FROM ml_runs WHERE org_id=$1 AND id=$2)`, orgID, runID); err != nil {
-		return fmt.Errorf("postgres: ReplaceMLRunMetricPoints clear: %w", err)
-	}
-	for _, p := range points {
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO ml_run_metric_points (run_id, key, step, value, ts) VALUES ($1,$2,$3,$4,$5)`,
-			runID, p.Key, p.Step, p.Value, p.TS); err != nil {
-			return fmt.Errorf("postgres: ReplaceMLRunMetricPoints insert: %w", err)
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("postgres: ReplaceMLRunMetricPoints commit: %w", err)
-	}
-	return nil
-}

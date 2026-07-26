@@ -288,28 +288,6 @@ func (d *DB) GetMLRun(ctx context.Context, orgID, id string) (*mlstudio.Run, err
 	return &run, nil
 }
 
-func (d *DB) ListMLRunMetricPoints(ctx context.Context, orgID, runID string) ([]mlstudio.MetricPoint, error) {
-	rows, err := d.db.QueryContext(ctx, `
-		SELECT p.key, p.step, p.value, p.ts
-		FROM ml_run_metric_points p
-		JOIN ml_runs r ON r.id = p.run_id
-		WHERE r.org_id=$1 AND p.run_id=$2 AND r.deleted_at IS NULL
-		ORDER BY p.key ASC, p.step ASC`, orgID, runID)
-	if err != nil {
-		return nil, fmt.Errorf("postgres: ListMLRunMetricPoints: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-	var out []mlstudio.MetricPoint
-	for rows.Next() {
-		var p mlstudio.MetricPoint
-		if err := rows.Scan(&p.Key, &p.Step, &p.Value, &p.TS); err != nil {
-			return nil, fmt.Errorf("postgres: ListMLRunMetricPoints scan: %w", err)
-		}
-		out = append(out, p)
-	}
-	return out, rows.Err()
-}
-
 func scanMLArtifact(row interface{ Scan(...any) error }) (mlstudio.Artifact, error) {
 	var a mlstudio.Artifact
 	err := row.Scan(
@@ -403,7 +381,7 @@ func (d *DB) GetMLDataset(ctx context.Context, orgID, id string) (*mlstudio.Data
 
 func (d *DB) ListMLVersionEvaluations(ctx context.Context, orgID, versionID string) ([]mlstudio.Evaluation, error) {
 	rows, err := d.db.QueryContext(ctx, `
-		SELECT id, org_id, mlflow_id, version_id, dataset_id, name, type, description, summary, evaluated_at, evaluator, parameters
+		SELECT id, org_id, mlflow_id, version_id, dataset_id, name, type, description, summary, evaluated_at, evaluator, parameters, metrics
 		FROM ml_evaluations WHERE org_id=$1 AND version_id=$2 AND deleted_at IS NULL ORDER BY evaluated_at DESC NULLS LAST`, orgID, versionID)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListMLVersionEvaluations: %w", err)
@@ -412,10 +390,10 @@ func (d *DB) ListMLVersionEvaluations(ctx context.Context, orgID, versionID stri
 	var out []mlstudio.Evaluation
 	for rows.Next() {
 		var e mlstudio.Evaluation
-		var params []byte
+		var params, metrics []byte
 		err := rows.Scan(
 			&e.ID, &e.OrgID, &e.MLflowID, &e.VersionID, &e.DatasetID, &e.Name, &e.Type,
-			&e.Description, &e.Summary, &e.EvaluatedAt, &e.Evaluator, &params,
+			&e.Description, &e.Summary, &e.EvaluatedAt, &e.Evaluator, &params, &metrics,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("postgres: ListMLVersionEvaluations scan: %w", err)
@@ -423,36 +401,10 @@ func (d *DB) ListMLVersionEvaluations(ctx context.Context, orgID, versionID stri
 		if err := json.Unmarshal(params, &e.Parameters); err != nil {
 			return nil, fmt.Errorf("postgres: ListMLVersionEvaluations parameters: %w", err)
 		}
+		if err := json.Unmarshal(metrics, &e.Metrics); err != nil {
+			return nil, fmt.Errorf("postgres: ListMLVersionEvaluations metrics: %w", err)
+		}
 		out = append(out, e)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	for i := range out {
-		metrics, err := d.listMLEvaluationMetrics(ctx, out[i].ID)
-		if err != nil {
-			return nil, err
-		}
-		out[i].Metrics = metrics
-	}
-	return out, nil
-}
-
-func (d *DB) listMLEvaluationMetrics(ctx context.Context, evaluationID string) ([]mlstudio.Metric, error) {
-	rows, err := d.db.QueryContext(ctx, `
-		SELECT id, name, value, unit, direction, category, measured_at
-		FROM ml_evaluation_metrics WHERE evaluation_id=$1 ORDER BY name ASC`, evaluationID)
-	if err != nil {
-		return nil, fmt.Errorf("postgres: listMLEvaluationMetrics: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-	var out []mlstudio.Metric
-	for rows.Next() {
-		var m mlstudio.Metric
-		if err := rows.Scan(&m.ID, &m.Name, &m.Value, &m.Unit, &m.Direction, &m.Category, &m.MeasuredAt); err != nil {
-			return nil, fmt.Errorf("postgres: listMLEvaluationMetrics scan: %w", err)
-		}
-		out = append(out, m)
 	}
 	return out, rows.Err()
 }

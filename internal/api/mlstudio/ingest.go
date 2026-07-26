@@ -258,24 +258,6 @@ func (h *Handler) SyncRuns(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"synced": len(in)})
 }
 
-func (h *Handler) SyncRunSeries(w http.ResponseWriter, r *http.Request) {
-	_, orgID, ok := h.authorizeOrg(w, r)
-	if !ok {
-		return
-	}
-	runMLflowID := r.PathValue("runId")
-	var in []mlstudio.MetricPoint
-	if err := httputil.Decode(r, &in); err != nil {
-		httputil.BadRequest(w, "invalid request body")
-		return
-	}
-	if err := h.store.UpsertMLRunMetricPoints(r.Context(), orgID, runMLflowID, in); err != nil {
-		writeErr(w, r, err)
-		return
-	}
-	httputil.JSON(w, http.StatusOK, map[string]any{"synced": len(in)})
-}
-
 func (h *Handler) SyncArtifacts(w http.ResponseWriter, r *http.Request) {
 	p, orgID, ok := h.authorizeOrg(w, r)
 	if !ok {

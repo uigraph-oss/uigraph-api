@@ -339,35 +339,6 @@ func (d *DB) UpsertMLRuns(ctx context.Context, orgID, actorID string, in []mlstu
 	return nil
 }
 
-func (d *DB) UpsertMLRunMetricPoints(ctx context.Context, orgID, runMLflowID string, in []mlstudio.MetricPoint) error {
-	tx, err := d.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("postgres: UpsertMLRunMetricPoints begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	runID, ok, err := resolveMLID(ctx, tx, "ml_runs", orgID, runMLflowID)
-	if err != nil {
-		return fmt.Errorf("postgres: UpsertMLRunMetricPoints resolve run: %w", err)
-	}
-	if !ok {
-		return fmt.Errorf("%w: run %q", mlstudio.ErrParentNotFound, runMLflowID)
-	}
-	for _, p := range in {
-		_, err := tx.ExecContext(ctx, `
-			INSERT INTO ml_run_metric_points (run_id, key, step, value, ts)
-			VALUES ($1,$2,$3,$4,$5)
-			ON CONFLICT (run_id, key, step) DO UPDATE SET value=EXCLUDED.value, ts=EXCLUDED.ts`,
-			runID, p.Key, p.Step, p.Value, p.TS)
-		if err != nil {
-			return fmt.Errorf("postgres: UpsertMLRunMetricPoints upsert: %w", err)
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("postgres: UpsertMLRunMetricPoints commit: %w", err)
-	}
-	return nil
-}
-
 func (d *DB) UpsertMLArtifacts(ctx context.Context, orgID, actorID string, in []mlstudio.ArtifactInput) error {
 	tx, err := d.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -470,35 +441,30 @@ func (d *DB) UpsertMLEvaluations(ctx context.Context, orgID, actorID string, in 
 		if params == nil {
 			params = map[string]any{}
 		}
+		metrics := e.Metrics
+		if metrics == nil {
+			metrics = map[string]any{}
+		}
 		paramsJSON, err := jsonBytes(params)
 		if err != nil {
 			return fmt.Errorf("postgres: UpsertMLEvaluations marshal parameters: %w", err)
 		}
-		var evalID string
-		err = tx.QueryRowContext(ctx, `
-			INSERT INTO ml_evaluations (org_id, mlflow_id, version_id, dataset_id, name, type, description, summary, evaluated_at, evaluator, parameters, synced_at, created_by, updated_by)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW(),$12,$12)
+		metricsJSON, err := jsonBytes(metrics)
+		if err != nil {
+			return fmt.Errorf("postgres: UpsertMLEvaluations marshal metrics: %w", err)
+		}
+		_, err = tx.ExecContext(ctx, `
+			INSERT INTO ml_evaluations (org_id, mlflow_id, version_id, dataset_id, name, type, description, summary, evaluated_at, evaluator, parameters, metrics, synced_at, created_by, updated_by)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW(),$13,$13)
 			ON CONFLICT (org_id, mlflow_id) DO UPDATE SET
 				version_id=EXCLUDED.version_id, dataset_id=COALESCE(EXCLUDED.dataset_id, ml_evaluations.dataset_id),
 				name=EXCLUDED.name, type=EXCLUDED.type, description=EXCLUDED.description, summary=EXCLUDED.summary,
-				evaluated_at=EXCLUDED.evaluated_at, evaluator=EXCLUDED.evaluator, parameters=EXCLUDED.parameters,
-				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()
-			RETURNING id`,
-			orgID, e.MLflowID, versionID, datasetID, e.Name, e.Type, e.Description, e.Summary, e.EvaluatedAt, e.Evaluator, paramsJSON, actorID).Scan(&evalID)
+				evaluated_at=EXCLUDED.evaluated_at, evaluator=EXCLUDED.evaluator,
+				parameters=EXCLUDED.parameters, metrics=EXCLUDED.metrics,
+				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()`,
+			orgID, e.MLflowID, versionID, datasetID, e.Name, e.Type, e.Description, e.Summary, e.EvaluatedAt, e.Evaluator, paramsJSON, metricsJSON, actorID)
 		if err != nil {
 			return fmt.Errorf("postgres: UpsertMLEvaluations upsert: %w", err)
-		}
-		if _, err := tx.ExecContext(ctx, `DELETE FROM ml_evaluation_metrics WHERE evaluation_id=$1`, evalID); err != nil {
-			return fmt.Errorf("postgres: UpsertMLEvaluations clear metrics: %w", err)
-		}
-		for _, m := range e.Metrics {
-			_, err := tx.ExecContext(ctx, `
-				INSERT INTO ml_evaluation_metrics (evaluation_id, name, value, unit, direction, category, measured_at)
-				VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-				evalID, m.Name, m.Value, m.Unit, m.Direction, m.Category, m.MeasuredAt)
-			if err != nil {
-				return fmt.Errorf("postgres: UpsertMLEvaluations metric: %w", err)
-			}
 		}
 	}
 	if err := tx.Commit(); err != nil {
