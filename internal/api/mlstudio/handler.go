@@ -58,6 +58,7 @@ func Register(
 	requireScope("mlstudio:read", "GET", base+"/artifacts", h.ListAllArtifacts)
 	requireScope("mlstudio:read", "GET", base+"/versions/{versionId}", h.GetVersion)
 	requireScope("mlstudio:read", "GET", base+"/versions/{versionId}/evaluations", h.ListVersionEvaluations)
+	requireScope("mlstudio:read", "GET", base+"/evaluations/{evaluationId}", h.GetEvaluation)
 	requireScope("mlstudio:write", "POST", base+"/versions/{versionId}/deployment-updates", h.CreateVersionDeploymentUpdate)
 	requireScope("mlstudio:read", "GET", base+"/versions/{versionId}/deployment-updates", h.ListVersionDeploymentUpdates)
 	requireScope("mlstudio:write", "POST", base+"/experiments", h.CreateExperiment)

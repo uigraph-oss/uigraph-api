@@ -169,6 +169,23 @@ func (h *Handler) ListVersionEvaluations(w http.ResponseWriter, r *http.Request)
 	httputil.JSON(w, http.StatusOK, map[string]any{"evaluations": evals})
 }
 
+func (h *Handler) GetEvaluation(w http.ResponseWriter, r *http.Request) {
+	_, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	e, err := h.store.GetMLEvaluation(r.Context(), orgID, r.PathValue("evaluationId"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if e == nil {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, e)
+}
+
 func (h *Handler) ListExperiments(w http.ResponseWriter, r *http.Request) {
 	_, orgID, ok := h.authorizeOrg(w, r)
 	if !ok {
