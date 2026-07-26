@@ -2,8 +2,8 @@
 -- shape already used by ml_runs. Drops the per-metric child table and the
 -- per-step run metric points, which are no longer surfaced anywhere.
 
-ALTER TABLE ml_evaluations ADD COLUMN parameters JSONB NOT NULL DEFAULT '{}';
-ALTER TABLE ml_evaluations ADD COLUMN metrics    JSONB NOT NULL DEFAULT '{}';
+ALTER TABLE ml_evaluations ADD COLUMN IF NOT EXISTS parameters JSONB NOT NULL DEFAULT '{}';
+ALTER TABLE ml_evaluations ADD COLUMN IF NOT EXISTS metrics    JSONB NOT NULL DEFAULT '{}';
 
 UPDATE ml_evaluations e SET metrics = m.metrics
 FROM (
