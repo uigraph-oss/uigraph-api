@@ -117,13 +117,13 @@ func (d *DB) GetMLModelVersion(ctx context.Context, orgID, id string) (*mlstudio
 func scanMLExperiment(row interface{ Scan(...any) error }) (mlstudio.Experiment, error) {
 	var e mlstudio.Experiment
 	err := row.Scan(
-		&e.ID, &e.OrgID, &e.MLflowID, &e.ProjectID, &e.Name, &e.Description, &e.Status, &e.StartedAt,
+		&e.ID, &e.OrgID, &e.MLflowID, &e.ProjectID, &e.Name, &e.Description, &e.Status, pq.Array(&e.Tags), &e.StartedAt,
 		&e.Source, &e.CreatedBy, &e.CreatedAt, &e.UpdatedAt,
 	)
 	return e, err
 }
 
-const mlExperimentCols = `id, org_id, mlflow_id, project_id, name, description, status, started_at, source, created_by, created_at, updated_at`
+const mlExperimentCols = `id, org_id, mlflow_id, project_id, name, description, status, tags, started_at, source, created_by, created_at, updated_at`
 
 func scanMLProject(row interface{ Scan(...any) error }) (mlstudio.Project, error) {
 	var p mlstudio.Project

@@ -395,6 +395,7 @@ func (h *Handler) CreateExperiment(w http.ResponseWriter, r *http.Request) {
 		Name        string     `json:"name"`
 		Description string     `json:"description"`
 		Status      string     `json:"status"`
+		Tags        []string   `json:"tags"`
 		StartedAt   *time.Time `json:"startedAt"`
 	}
 	if err := httputil.Decode(r, &body); err != nil {
@@ -420,6 +421,7 @@ func (h *Handler) CreateExperiment(w http.ResponseWriter, r *http.Request) {
 		Name:        body.Name,
 		Description: body.Description,
 		Status:      status,
+		Tags:        body.Tags,
 		StartedAt:   body.StartedAt,
 		Source:      "manual",
 		CreatedBy:   p.UserID,
@@ -450,19 +452,24 @@ func (h *Handler) UpdateExperiment(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, r, storepkg.ErrNotFound)
 		return
 	}
-	if existing.Source != "manual" {
-		httputil.BadRequest(w, "only manually created experiments can be edited")
-		return
-	}
 	var body struct {
 		ProjectID   *string    `json:"projectId"`
 		Name        *string    `json:"name"`
 		Description *string    `json:"description"`
 		Status      *string    `json:"status"`
+		Tags        *[]string  `json:"tags"`
 		StartedAt   *time.Time `json:"startedAt"`
 	}
 	if err := httputil.Decode(r, &body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
+		return
+	}
+	// Tags are ML Studio metadata rather than MLflow state, so they stay
+	// editable on synced experiments; every other field stays manual-only.
+	syncedFields := body.ProjectID != nil || body.Name != nil || body.Description != nil ||
+		body.Status != nil || body.StartedAt != nil
+	if existing.Source != "manual" && syncedFields {
+		httputil.BadRequest(w, "only tags can be edited on synced experiments")
 		return
 	}
 	if body.ProjectID != nil {
@@ -479,6 +486,9 @@ func (h *Handler) UpdateExperiment(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Status != nil {
 		existing.Status = *body.Status
+	}
+	if body.Tags != nil {
+		existing.Tags = *body.Tags
 	}
 	if body.StartedAt != nil {
 		existing.StartedAt = body.StartedAt

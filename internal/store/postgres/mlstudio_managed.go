@@ -288,13 +288,42 @@ func (d *DB) CreateMLModel(ctx context.Context, m mlstudio.Model) error {
 	return nil
 }
 
-func (d *DB) CreateMLExperiment(ctx context.Context, e mlstudio.Experiment) error {
+func (d *DB) UpdateMLModelInfo(ctx context.Context, m mlstudio.Model) error {
+	tags := m.Tags
+	if tags == nil {
+		tags = []string{}
+	}
 	const q = `
-		INSERT INTO ml_experiments (id, org_id, project_id, name, description, status, started_at, source, created_by, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10)`
+		UPDATE ml_models SET name=$1, description=$2, domain=$3, problem_type=$4, tags=$5, updated_at=$6
+		WHERE org_id=$7 AND id=$8 AND deleted_at IS NULL`
+	_, err := d.db.ExecContext(ctx, q,
+		m.Name, m.Description, m.Domain, m.ProblemType, pq.Array(tags), time.Now().UTC(), m.OrgID, m.ID)
+	if err != nil {
+		return fmt.Errorf("postgres: UpdateMLModelInfo: %w", err)
+	}
+	return nil
+}
+
+func (d *DB) DeleteMLModel(ctx context.Context, orgID, id, deletedBy string) error {
+	const q = `UPDATE ml_models SET deleted_at=$1, deleted_by=$2 WHERE org_id=$3 AND id=$4 AND deleted_at IS NULL`
+	_, err := d.db.ExecContext(ctx, q, time.Now().UTC(), deletedBy, orgID, id)
+	if err != nil {
+		return fmt.Errorf("postgres: DeleteMLModel: %w", err)
+	}
+	return nil
+}
+
+func (d *DB) CreateMLExperiment(ctx context.Context, e mlstudio.Experiment) error {
+	tags := e.Tags
+	if tags == nil {
+		tags = []string{}
+	}
+	const q = `
+		INSERT INTO ml_experiments (id, org_id, project_id, name, description, status, tags, started_at, source, created_by, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11)`
 	now := time.Now().UTC()
 	_, err := d.db.ExecContext(ctx, q,
-		e.ID, e.OrgID, e.ProjectID, e.Name, e.Description, e.Status, e.StartedAt, e.Source, e.CreatedBy, now)
+		e.ID, e.OrgID, e.ProjectID, e.Name, e.Description, e.Status, pq.Array(tags), e.StartedAt, e.Source, e.CreatedBy, now)
 	if err != nil {
 		return fmt.Errorf("postgres: CreateMLExperiment: %w", err)
 	}
@@ -302,11 +331,15 @@ func (d *DB) CreateMLExperiment(ctx context.Context, e mlstudio.Experiment) erro
 }
 
 func (d *DB) UpdateMLExperiment(ctx context.Context, e mlstudio.Experiment) error {
+	tags := e.Tags
+	if tags == nil {
+		tags = []string{}
+	}
 	const q = `
-		UPDATE ml_experiments SET project_id=$1, name=$2, description=$3, status=$4, started_at=$5, updated_at=$6
-		WHERE org_id=$7 AND id=$8 AND deleted_at IS NULL`
+		UPDATE ml_experiments SET project_id=$1, name=$2, description=$3, status=$4, tags=$5, started_at=$6, updated_at=$7
+		WHERE org_id=$8 AND id=$9 AND deleted_at IS NULL`
 	_, err := d.db.ExecContext(ctx, q,
-		e.ProjectID, e.Name, e.Description, e.Status, e.StartedAt, time.Now().UTC(), e.OrgID, e.ID)
+		e.ProjectID, e.Name, e.Description, e.Status, pq.Array(tags), e.StartedAt, time.Now().UTC(), e.OrgID, e.ID)
 	if err != nil {
 		return fmt.Errorf("postgres: UpdateMLExperiment: %w", err)
 	}

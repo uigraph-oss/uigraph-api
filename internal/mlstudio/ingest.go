@@ -56,6 +56,7 @@ type ExperimentInput struct {
 	Name        string     `json:"name"`
 	Description string     `json:"description"`
 	Status      string     `json:"status"`
+	Tags        []string   `json:"tags"`
 	StartedAt   *time.Time `json:"startedAt"`
 }
 

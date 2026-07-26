@@ -13,6 +13,8 @@ type Store interface {
 	UpsertMLModels(ctx context.Context, orgID, actorID string, in []ModelInput) error
 	CreateMLModel(ctx context.Context, m Model) error
 	UpdateMLModel(ctx context.Context, orgID, id, actorID string, in ModelUpdateInput) error
+	UpdateMLModelInfo(ctx context.Context, m Model) error
+	DeleteMLModel(ctx context.Context, orgID, id, deletedBy string) error
 	UpsertMLModelVersions(ctx context.Context, orgID, actorID string, in []ModelVersionInput) error
 	UpsertMLExperiments(ctx context.Context, orgID, actorID string, in []ExperimentInput) error
 	UpsertMLRuns(ctx context.Context, orgID, actorID string, in []RunInput) error
