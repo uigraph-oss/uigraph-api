@@ -1062,7 +1062,7 @@ func (h *Handler) LinkVersionEvaluations(w http.ResponseWriter, r *http.Request)
 		writeErr(w, r, err)
 		return
 	}
-	evals, err := h.store.ListMLVersionEvaluations(r.Context(), orgID, versionID)
+	evals, _, err := h.store.ListMLVersionEvaluations(r.Context(), orgID, versionID, mlstudio.EvaluationQuery{})
 	if err != nil {
 		httputil.Error(w, r, err)
 		return

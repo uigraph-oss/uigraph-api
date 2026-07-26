@@ -408,13 +408,17 @@ func (d *DB) GetMLDataset(ctx context.Context, orgID, id string) (*mlstudio.Data
 	return &ds, nil
 }
 
-const mlEvaluationSelect = `
-	SELECT e.id, e.org_id, e.mlflow_id, e.version_id, e.experiment_id, m.name, v.version,
-	       e.dataset_id, e.name, e.type, e.description, e.summary, e.evaluated_at, e.evaluator,
-	       e.created_by
+const mlEvaluationCols = `
+	e.id, e.org_id, e.mlflow_id, e.version_id, e.experiment_id, m.name, v.version,
+	e.dataset_id, e.name, e.type, e.description, e.summary, e.evaluated_at, e.evaluator,
+	e.created_by`
+
+const mlEvaluationFrom = `
 	FROM ml_evaluations e
 	JOIN ml_model_versions v ON v.id = e.version_id
 	JOIN ml_models m ON m.id = v.model_id`
+
+const mlEvaluationSelect = `SELECT ` + mlEvaluationCols + mlEvaluationFrom
 
 func scanMLEvaluation(row interface{ Scan(...any) error }) (mlstudio.Evaluation, error) {
 	var e mlstudio.Evaluation
@@ -455,52 +459,57 @@ func (d *DB) attachMLEvaluationValues(ctx context.Context, evaluations []mlstudi
 	return nil
 }
 
-func (d *DB) ListMLVersionEvaluations(ctx context.Context, orgID, versionID string) ([]mlstudio.Evaluation, error) {
-	rows, err := d.db.QueryContext(ctx, mlEvaluationSelect+`
-		WHERE e.org_id=$1 AND e.version_id=$2 AND e.deleted_at IS NULL ORDER BY e.evaluated_at DESC NULLS LAST`, orgID, versionID)
-	if err != nil {
-		return nil, fmt.Errorf("postgres: ListMLVersionEvaluations: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-	var out []mlstudio.Evaluation
-	for rows.Next() {
-		e, err := scanMLEvaluation(rows)
-		if err != nil {
-			return nil, fmt.Errorf("postgres: ListMLVersionEvaluations scan: %w", err)
-		}
-		out = append(out, e)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	if err := d.attachMLEvaluationValues(ctx, out); err != nil {
-		return nil, fmt.Errorf("postgres: ListMLVersionEvaluations values: %w", err)
-	}
-	return out, nil
+func (d *DB) ListMLVersionEvaluations(ctx context.Context, orgID, versionID string, q mlstudio.EvaluationQuery) ([]mlstudio.Evaluation, int, error) {
+	return d.listMLEvaluations(ctx, "ListMLVersionEvaluations", "e.version_id", orgID, versionID, q)
 }
 
-func (d *DB) ListMLExperimentEvaluations(ctx context.Context, orgID, experimentID string) ([]mlstudio.Evaluation, error) {
-	rows, err := d.db.QueryContext(ctx, mlEvaluationSelect+`
-		WHERE e.org_id=$1 AND e.experiment_id=$2 AND e.deleted_at IS NULL ORDER BY e.evaluated_at DESC NULLS LAST`, orgID, experimentID)
+func (d *DB) ListMLExperimentEvaluations(ctx context.Context, orgID, experimentID string, q mlstudio.EvaluationQuery) ([]mlstudio.Evaluation, int, error) {
+	return d.listMLEvaluations(ctx, "ListMLExperimentEvaluations", "e.experiment_id", orgID, experimentID, q)
+}
+
+func (d *DB) listMLEvaluations(ctx context.Context, label, scopeCol, orgID, scopeID string, q mlstudio.EvaluationQuery) ([]mlstudio.Evaluation, int, error) {
+	where := mlEvaluationFrom + ` WHERE e.org_id=$1 AND ` + scopeCol + `=$2 AND e.deleted_at IS NULL`
+	args := []any{orgID, scopeID}
+	if q.Search != "" {
+		args = append(args, "%"+q.Search+"%")
+		where += fmt.Sprintf(" AND e.name ILIKE $%d", len(args))
+	}
+
+	var total int
+	if err := d.db.QueryRowContext(ctx, `SELECT COUNT(*)`+where, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("postgres: %s count: %w", label, err)
+	}
+
+	sel := `SELECT ` + mlEvaluationCols + where + ` ORDER BY e.evaluated_at DESC NULLS LAST`
+	if q.Limit > 0 {
+		args = append(args, q.Limit)
+		sel += fmt.Sprintf(" LIMIT $%d", len(args))
+	}
+	if q.Offset > 0 {
+		args = append(args, q.Offset)
+		sel += fmt.Sprintf(" OFFSET $%d", len(args))
+	}
+
+	rows, err := d.db.QueryContext(ctx, sel, args...)
 	if err != nil {
-		return nil, fmt.Errorf("postgres: ListMLExperimentEvaluations: %w", err)
+		return nil, 0, fmt.Errorf("postgres: %s: %w", label, err)
 	}
 	defer func() { _ = rows.Close() }()
 	var out []mlstudio.Evaluation
 	for rows.Next() {
 		e, err := scanMLEvaluation(rows)
 		if err != nil {
-			return nil, fmt.Errorf("postgres: ListMLExperimentEvaluations scan: %w", err)
+			return nil, 0, fmt.Errorf("postgres: %s scan: %w", label, err)
 		}
 		out = append(out, e)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	if err := d.attachMLEvaluationValues(ctx, out); err != nil {
-		return nil, fmt.Errorf("postgres: ListMLExperimentEvaluations values: %w", err)
+		return nil, 0, fmt.Errorf("postgres: %s values: %w", label, err)
 	}
-	return out, nil
+	return out, total, nil
 }
 
 func (d *DB) GetMLEvaluation(ctx context.Context, orgID, id string) (*mlstudio.Evaluation, error) {

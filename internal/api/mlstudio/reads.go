@@ -161,12 +161,17 @@ func (h *Handler) ListVersionEvaluations(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	evals, err := h.store.ListMLVersionEvaluations(r.Context(), orgID, r.PathValue("versionId"))
+	q := mlstudio.EvaluationQuery{
+		Search: r.URL.Query().Get("search"),
+		Limit:  parseIntDefault(r.URL.Query().Get("limit"), 0),
+		Offset: parseIntDefault(r.URL.Query().Get("offset"), 0),
+	}
+	evals, total, err := h.store.ListMLVersionEvaluations(r.Context(), orgID, r.PathValue("versionId"), q)
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
 	}
-	httputil.JSON(w, http.StatusOK, map[string]any{"evaluations": evals})
+	httputil.JSON(w, http.StatusOK, map[string]any{"evaluations": evals, "total": total})
 }
 
 func (h *Handler) ListExperimentEvaluations(w http.ResponseWriter, r *http.Request) {
@@ -174,12 +179,17 @@ func (h *Handler) ListExperimentEvaluations(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	evals, err := h.store.ListMLExperimentEvaluations(r.Context(), orgID, r.PathValue("experimentId"))
+	q := mlstudio.EvaluationQuery{
+		Search: r.URL.Query().Get("search"),
+		Limit:  parseIntDefault(r.URL.Query().Get("limit"), 0),
+		Offset: parseIntDefault(r.URL.Query().Get("offset"), 0),
+	}
+	evals, total, err := h.store.ListMLExperimentEvaluations(r.Context(), orgID, r.PathValue("experimentId"), q)
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
 	}
-	httputil.JSON(w, http.StatusOK, map[string]any{"evaluations": evals})
+	httputil.JSON(w, http.StatusOK, map[string]any{"evaluations": evals, "total": total})
 }
 
 func (h *Handler) GetEvaluation(w http.ResponseWriter, r *http.Request) {
