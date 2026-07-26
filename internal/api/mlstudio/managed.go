@@ -385,6 +385,87 @@ func (h *Handler) CreateModel(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusCreated, created)
 }
 
+func (h *Handler) UpdateModelInfo(w http.ResponseWriter, r *http.Request) {
+	_, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	existing, err := h.store.GetMLModel(r.Context(), orgID, r.PathValue("modelId"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if existing == nil {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+	if existing.Origin != "manual" {
+		httputil.BadRequest(w, "only manually registered models can be edited")
+		return
+	}
+	var body struct {
+		Name        *string   `json:"name"`
+		Description *string   `json:"description"`
+		Domain      *string   `json:"domain"`
+		ProblemType *string   `json:"problemType"`
+		Tags        *[]string `json:"tags"`
+	}
+	if err := httputil.Decode(r, &body); err != nil {
+		httputil.BadRequest(w, "invalid request body")
+		return
+	}
+	if body.Name != nil {
+		existing.Name = *body.Name
+	}
+	if body.Description != nil {
+		existing.Description = *body.Description
+	}
+	if body.Domain != nil {
+		existing.Domain = *body.Domain
+	}
+	if body.ProblemType != nil {
+		existing.ProblemType = *body.ProblemType
+	}
+	if body.Tags != nil {
+		existing.Tags = *body.Tags
+	}
+	if err := h.store.UpdateMLModelInfo(r.Context(), *existing); err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	updated, err := h.store.GetMLModel(r.Context(), orgID, existing.ID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, updated)
+}
+
+func (h *Handler) DeleteModel(w http.ResponseWriter, r *http.Request) {
+	p, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	existing, err := h.store.GetMLModel(r.Context(), orgID, r.PathValue("modelId"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if existing == nil {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+	if existing.Origin != "manual" {
+		httputil.BadRequest(w, "only manually registered models can be deleted")
+		return
+	}
+	if err := h.store.DeleteMLModel(r.Context(), orgID, existing.ID, p.UserID); err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *Handler) CreateExperiment(w http.ResponseWriter, r *http.Request) {
 	p, orgID, ok := h.authorizeOrg(w, r)
 	if !ok {
