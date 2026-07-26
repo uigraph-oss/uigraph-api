@@ -32,6 +32,108 @@ func jsonBytes(v any) ([]byte, error) {
 	return b, nil
 }
 
+type mlQuerier interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}
+
+func replaceMLParams(ctx context.Context, tx *sql.Tx, table, parentCol, parentID string, params map[string]any) error {
+	keys := make([]string, 0, len(params))
+	for key, value := range params {
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			return fmt.Errorf("param %q: %w", key, err)
+		}
+		_, err = tx.ExecContext(ctx, `
+			INSERT INTO `+table+` (`+parentCol+`, key, value) VALUES ($1,$2,$3)
+			ON CONFLICT (`+parentCol+`, key) DO UPDATE SET value=EXCLUDED.value`, parentID, key, string(encoded))
+		if err != nil {
+			return err
+		}
+		keys = append(keys, key)
+	}
+	_, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE `+parentCol+`=$1 AND key <> ALL($2)`, parentID, pq.Array(keys))
+	return err
+}
+
+func replaceMLMetrics(ctx context.Context, tx *sql.Tx, table, parentCol, parentID string, metrics map[string]any) error {
+	keys := make([]string, 0, len(metrics))
+	for key, value := range metrics {
+		var number float64
+		switch v := value.(type) {
+		case float64:
+			number = v
+		case json.Number:
+			parsed, err := v.Float64()
+			if err != nil {
+				return fmt.Errorf("metric %q: %w", key, err)
+			}
+			number = parsed
+		default:
+			return fmt.Errorf("%w: metric %q must be a number", mlstudio.ErrInvalidValue, key)
+		}
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO `+table+` (`+parentCol+`, key, value) VALUES ($1,$2,$3)
+			ON CONFLICT (`+parentCol+`, key) DO UPDATE SET value=EXCLUDED.value`, parentID, key, number)
+		if err != nil {
+			return err
+		}
+		keys = append(keys, key)
+	}
+	_, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE `+parentCol+`=$1 AND key <> ALL($2)`, parentID, pq.Array(keys))
+	return err
+}
+
+func loadMLParams(ctx context.Context, q mlQuerier, table, parentCol string, parentIDs []string) (map[string]map[string]any, error) {
+	out := map[string]map[string]any{}
+	if len(parentIDs) == 0 {
+		return out, nil
+	}
+	rows, err := q.QueryContext(ctx, `SELECT `+parentCol+`, key, value FROM `+table+` WHERE `+parentCol+` = ANY($1) ORDER BY key ASC`, pq.Array(parentIDs))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var parentID, key, value string
+		if err := rows.Scan(&parentID, &key, &value); err != nil {
+			return nil, err
+		}
+		var decoded any
+		if err := json.Unmarshal([]byte(value), &decoded); err != nil {
+			return nil, fmt.Errorf("param %q: %w", key, err)
+		}
+		if out[parentID] == nil {
+			out[parentID] = map[string]any{}
+		}
+		out[parentID][key] = decoded
+	}
+	return out, rows.Err()
+}
+
+func loadMLMetrics(ctx context.Context, q mlQuerier, table, parentCol string, parentIDs []string) (map[string]map[string]any, error) {
+	out := map[string]map[string]any{}
+	if len(parentIDs) == 0 {
+		return out, nil
+	}
+	rows, err := q.QueryContext(ctx, `SELECT `+parentCol+`, key, value FROM `+table+` WHERE `+parentCol+` = ANY($1) ORDER BY key ASC`, pq.Array(parentIDs))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var parentID, key string
+		var value float64
+		if err := rows.Scan(&parentID, &key, &value); err != nil {
+			return nil, err
+		}
+		if out[parentID] == nil {
+			out[parentID] = map[string]any{}
+		}
+		out[parentID][key] = value
+	}
+	return out, rows.Err()
+}
+
 func resolveProjectID(ctx context.Context, tx *sql.Tx, orgID, projectName string) (any, error) {
 	if projectName == "" {
 		return nil, nil
@@ -303,34 +405,26 @@ func (d *DB) UpsertMLRuns(ctx context.Context, orgID, actorID string, in []mlstu
 				datasetID = id
 			}
 		}
-		params := run.Parameters
-		if params == nil {
-			params = map[string]any{}
-		}
-		metrics := run.Metrics
-		if metrics == nil {
-			metrics = map[string]any{}
-		}
-		paramsJSON, err := jsonBytes(params)
-		if err != nil {
-			return fmt.Errorf("postgres: UpsertMLRuns marshal parameters: %w", err)
-		}
-		metricsJSON, err := jsonBytes(metrics)
-		if err != nil {
-			return fmt.Errorf("postgres: UpsertMLRuns marshal metrics: %w", err)
-		}
-		_, err = tx.ExecContext(ctx, `
-			INSERT INTO ml_runs (org_id, mlflow_id, experiment_id, name, status, started_at, ended_at, notes, parameters, metrics, dataset_id, synced_at, created_by, updated_by)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW(),$12,$12)
+		var runID string
+		err = tx.QueryRowContext(ctx, `
+			INSERT INTO ml_runs (org_id, mlflow_id, experiment_id, name, status, started_at, ended_at, notes, dataset_id, synced_at, created_by, updated_by)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW(),$10,$10)
 			ON CONFLICT (org_id, mlflow_id) DO UPDATE SET
 				experiment_id=EXCLUDED.experiment_id, name=EXCLUDED.name, status=EXCLUDED.status,
 				started_at=EXCLUDED.started_at, ended_at=EXCLUDED.ended_at,
-				notes=EXCLUDED.notes, parameters=EXCLUDED.parameters, metrics=EXCLUDED.metrics,
+				notes=EXCLUDED.notes,
 				dataset_id=COALESCE(EXCLUDED.dataset_id, ml_runs.dataset_id),
-				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()`,
-			orgID, run.MLflowID, experimentID, run.Name, run.Status, run.StartedAt, run.EndedAt, run.Notes, paramsJSON, metricsJSON, datasetID, actorID)
+				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()
+			RETURNING id`,
+			orgID, run.MLflowID, experimentID, run.Name, run.Status, run.StartedAt, run.EndedAt, run.Notes, datasetID, actorID).Scan(&runID)
 		if err != nil {
 			return fmt.Errorf("postgres: UpsertMLRuns upsert: %w", err)
+		}
+		if err := replaceMLParams(ctx, tx, "ml_runs_params", "run_id", runID, run.Parameters); err != nil {
+			return fmt.Errorf("postgres: UpsertMLRuns parameters: %w", err)
+		}
+		if err := replaceMLMetrics(ctx, tx, "ml_runs_metrics", "run_id", runID, run.Metrics); err != nil {
+			return fmt.Errorf("postgres: UpsertMLRuns metrics: %w", err)
 		}
 	}
 	if err := tx.Commit(); err != nil {
@@ -444,35 +538,26 @@ func (d *DB) UpsertMLEvaluations(ctx context.Context, orgID, actorID string, in 
 		if err != nil {
 			return fmt.Errorf("postgres: UpsertMLEvaluations resolve dataset: %w", err)
 		}
-		params := e.Parameters
-		if params == nil {
-			params = map[string]any{}
-		}
-		metrics := e.Metrics
-		if metrics == nil {
-			metrics = map[string]any{}
-		}
-		paramsJSON, err := jsonBytes(params)
-		if err != nil {
-			return fmt.Errorf("postgres: UpsertMLEvaluations marshal parameters: %w", err)
-		}
-		metricsJSON, err := jsonBytes(metrics)
-		if err != nil {
-			return fmt.Errorf("postgres: UpsertMLEvaluations marshal metrics: %w", err)
-		}
-		_, err = tx.ExecContext(ctx, `
-			INSERT INTO ml_evaluations (org_id, mlflow_id, version_id, experiment_id, dataset_id, name, type, description, summary, evaluated_at, evaluator, parameters, metrics, synced_at, created_by, updated_by)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW(),$14,$14)
+		var evalID string
+		err = tx.QueryRowContext(ctx, `
+			INSERT INTO ml_evaluations (org_id, mlflow_id, version_id, experiment_id, dataset_id, name, type, description, summary, evaluated_at, evaluator, synced_at, created_by, updated_by)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW(),$12,$12)
 			ON CONFLICT (org_id, mlflow_id) DO UPDATE SET
 				version_id=EXCLUDED.version_id, experiment_id=EXCLUDED.experiment_id,
 				dataset_id=COALESCE(EXCLUDED.dataset_id, ml_evaluations.dataset_id),
 				name=EXCLUDED.name, type=EXCLUDED.type, description=EXCLUDED.description, summary=EXCLUDED.summary,
 				evaluated_at=EXCLUDED.evaluated_at, evaluator=EXCLUDED.evaluator,
-				parameters=EXCLUDED.parameters, metrics=EXCLUDED.metrics,
-				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()`,
-			orgID, e.MLflowID, versionID, experimentID, datasetID, e.Name, e.Type, e.Description, e.Summary, e.EvaluatedAt, e.Evaluator, paramsJSON, metricsJSON, actorID)
+				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()
+			RETURNING id`,
+			orgID, e.MLflowID, versionID, experimentID, datasetID, e.Name, e.Type, e.Description, e.Summary, e.EvaluatedAt, e.Evaluator, actorID).Scan(&evalID)
 		if err != nil {
 			return fmt.Errorf("postgres: UpsertMLEvaluations upsert: %w", err)
+		}
+		if err := replaceMLParams(ctx, tx, "ml_evaluations_params", "eval_id", evalID, e.Parameters); err != nil {
+			return fmt.Errorf("postgres: UpsertMLEvaluations parameters: %w", err)
+		}
+		if err := replaceMLMetrics(ctx, tx, "ml_evaluations_metrics", "eval_id", evalID, e.Metrics); err != nil {
+			return fmt.Errorf("postgres: UpsertMLEvaluations metrics: %w", err)
 		}
 	}
 	if err := tx.Commit(); err != nil {

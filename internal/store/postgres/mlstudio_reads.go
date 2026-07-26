@@ -209,26 +209,45 @@ func (d *DB) GetMLExperiment(ctx context.Context, orgID, id string) (*mlstudio.E
 
 func scanMLRun(row interface{ Scan(...any) error }) (mlstudio.Run, error) {
 	var run mlstudio.Run
-	var params, metrics []byte
 	err := row.Scan(
 		&run.ID, &run.OrgID, &run.MLflowID, &run.ExperimentID, &run.Name, &run.Status,
 		&run.StartedAt, &run.EndedAt, &run.Notes,
-		&params, &metrics, &run.DatasetID, &run.UpdatedAt, &run.SyncedAt,
+		&run.DatasetID, &run.UpdatedAt, &run.SyncedAt,
 		&run.Source, &run.CreatedBy, &run.CreatedAt,
 	)
 	if err != nil {
 		return run, err
 	}
-	if err := json.Unmarshal(params, &run.Parameters); err != nil {
-		return run, err
-	}
-	if err := json.Unmarshal(metrics, &run.Metrics); err != nil {
-		return run, err
-	}
 	return run, nil
 }
 
-const mlRunCols = `id, org_id, mlflow_id, experiment_id, name, status, started_at, ended_at, notes, parameters, metrics, dataset_id, updated_at, synced_at, source, created_by, created_at`
+const mlRunCols = `id, org_id, mlflow_id, experiment_id, name, status, started_at, ended_at, notes, dataset_id, updated_at, synced_at, source, created_by, created_at`
+
+func (d *DB) attachMLRunValues(ctx context.Context, runs []mlstudio.Run) error {
+	ids := make([]string, 0, len(runs))
+	for _, run := range runs {
+		ids = append(ids, run.ID)
+	}
+	params, err := loadMLParams(ctx, d.db, "ml_runs_params", "run_id", ids)
+	if err != nil {
+		return err
+	}
+	metrics, err := loadMLMetrics(ctx, d.db, "ml_runs_metrics", "run_id", ids)
+	if err != nil {
+		return err
+	}
+	for i := range runs {
+		runs[i].Parameters = map[string]any{}
+		if v, ok := params[runs[i].ID]; ok {
+			runs[i].Parameters = v
+		}
+		runs[i].Metrics = map[string]any{}
+		if v, ok := metrics[runs[i].ID]; ok {
+			runs[i].Metrics = v
+		}
+	}
+	return nil
+}
 
 func (d *DB) ListMLRuns(ctx context.Context, orgID string, q mlstudio.RunQuery) ([]mlstudio.Run, int, error) {
 	where := ` FROM ml_runs WHERE org_id=$1 AND deleted_at IS NULL`
@@ -274,7 +293,13 @@ func (d *DB) ListMLRuns(ctx context.Context, orgID string, q mlstudio.RunQuery) 
 		}
 		out = append(out, run)
 	}
-	return out, total, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	if err := d.attachMLRunValues(ctx, out); err != nil {
+		return nil, 0, fmt.Errorf("postgres: ListMLRuns values: %w", err)
+	}
+	return out, total, nil
 }
 
 func (d *DB) GetMLRun(ctx context.Context, orgID, id string) (*mlstudio.Run, error) {
@@ -285,7 +310,11 @@ func (d *DB) GetMLRun(ctx context.Context, orgID, id string) (*mlstudio.Run, err
 	if err != nil {
 		return nil, fmt.Errorf("postgres: GetMLRun: %w", err)
 	}
-	return &run, nil
+	runs := []mlstudio.Run{run}
+	if err := d.attachMLRunValues(ctx, runs); err != nil {
+		return nil, fmt.Errorf("postgres: GetMLRun values: %w", err)
+	}
+	return &runs[0], nil
 }
 
 func scanMLArtifact(row interface{ Scan(...any) error }) (mlstudio.Artifact, error) {
@@ -382,29 +411,48 @@ func (d *DB) GetMLDataset(ctx context.Context, orgID, id string) (*mlstudio.Data
 const mlEvaluationSelect = `
 	SELECT e.id, e.org_id, e.mlflow_id, e.version_id, e.experiment_id, m.name, v.version,
 	       e.dataset_id, e.name, e.type, e.description, e.summary, e.evaluated_at, e.evaluator,
-	       e.created_by, e.parameters, e.metrics
+	       e.created_by
 	FROM ml_evaluations e
 	JOIN ml_model_versions v ON v.id = e.version_id
 	JOIN ml_models m ON m.id = v.model_id`
 
 func scanMLEvaluation(row interface{ Scan(...any) error }) (mlstudio.Evaluation, error) {
 	var e mlstudio.Evaluation
-	var params, metrics []byte
 	err := row.Scan(
 		&e.ID, &e.OrgID, &e.MLflowID, &e.VersionID, &e.ExperimentID, &e.ModelName, &e.Version,
 		&e.DatasetID, &e.Name, &e.Type, &e.Description, &e.Summary, &e.EvaluatedAt, &e.Evaluator,
-		&e.CreatedBy, &params, &metrics,
+		&e.CreatedBy,
 	)
 	if err != nil {
 		return e, err
 	}
-	if err := json.Unmarshal(params, &e.Parameters); err != nil {
-		return e, err
-	}
-	if err := json.Unmarshal(metrics, &e.Metrics); err != nil {
-		return e, err
-	}
 	return e, nil
+}
+
+func (d *DB) attachMLEvaluationValues(ctx context.Context, evaluations []mlstudio.Evaluation) error {
+	ids := make([]string, 0, len(evaluations))
+	for _, e := range evaluations {
+		ids = append(ids, e.ID)
+	}
+	params, err := loadMLParams(ctx, d.db, "ml_evaluations_params", "eval_id", ids)
+	if err != nil {
+		return err
+	}
+	metrics, err := loadMLMetrics(ctx, d.db, "ml_evaluations_metrics", "eval_id", ids)
+	if err != nil {
+		return err
+	}
+	for i := range evaluations {
+		evaluations[i].Parameters = map[string]any{}
+		if v, ok := params[evaluations[i].ID]; ok {
+			evaluations[i].Parameters = v
+		}
+		evaluations[i].Metrics = map[string]any{}
+		if v, ok := metrics[evaluations[i].ID]; ok {
+			evaluations[i].Metrics = v
+		}
+	}
+	return nil
 }
 
 func (d *DB) ListMLVersionEvaluations(ctx context.Context, orgID, versionID string) ([]mlstudio.Evaluation, error) {
@@ -422,7 +470,13 @@ func (d *DB) ListMLVersionEvaluations(ctx context.Context, orgID, versionID stri
 		}
 		out = append(out, e)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := d.attachMLEvaluationValues(ctx, out); err != nil {
+		return nil, fmt.Errorf("postgres: ListMLVersionEvaluations values: %w", err)
+	}
+	return out, nil
 }
 
 func (d *DB) ListMLExperimentEvaluations(ctx context.Context, orgID, experimentID string) ([]mlstudio.Evaluation, error) {
@@ -440,7 +494,13 @@ func (d *DB) ListMLExperimentEvaluations(ctx context.Context, orgID, experimentI
 		}
 		out = append(out, e)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := d.attachMLEvaluationValues(ctx, out); err != nil {
+		return nil, fmt.Errorf("postgres: ListMLExperimentEvaluations values: %w", err)
+	}
+	return out, nil
 }
 
 func (d *DB) GetMLEvaluation(ctx context.Context, orgID, id string) (*mlstudio.Evaluation, error) {
@@ -452,5 +512,9 @@ func (d *DB) GetMLEvaluation(ctx context.Context, orgID, id string) (*mlstudio.E
 	if err != nil {
 		return nil, fmt.Errorf("postgres: GetMLEvaluation: %w", err)
 	}
-	return &e, nil
+	evaluations := []mlstudio.Evaluation{e}
+	if err := d.attachMLEvaluationValues(ctx, evaluations); err != nil {
+		return nil, fmt.Errorf("postgres: GetMLEvaluation values: %w", err)
+	}
+	return &evaluations[0], nil
 }

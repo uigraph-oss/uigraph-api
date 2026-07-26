@@ -391,62 +391,58 @@ func (d *DB) DeleteMLExperiment(ctx context.Context, orgID, id, deletedBy string
 }
 
 func (d *DB) CreateMLRun(ctx context.Context, run mlstudio.Run) error {
-	params := run.Parameters
-	if params == nil {
-		params = map[string]any{}
-	}
-	metrics := run.Metrics
-	if metrics == nil {
-		metrics = map[string]any{}
-	}
-	paramsJSON, err := jsonBytes(params)
+	tx, err := d.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("postgres: CreateMLRun marshal parameters: %w", err)
+		return fmt.Errorf("postgres: CreateMLRun begin: %w", err)
 	}
-	metricsJSON, err := jsonBytes(metrics)
-	if err != nil {
-		return fmt.Errorf("postgres: CreateMLRun marshal metrics: %w", err)
-	}
+	defer func() { _ = tx.Rollback() }()
 	const q = `
-		INSERT INTO ml_runs (id, org_id, experiment_id, name, status, started_at, ended_at, notes, parameters, metrics, dataset_id, source, created_by, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$14)`
+		INSERT INTO ml_runs (id, org_id, experiment_id, name, status, started_at, ended_at, notes, dataset_id, source, created_by, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12)`
 	now := time.Now().UTC()
-	_, err = d.db.ExecContext(ctx, q,
+	_, err = tx.ExecContext(ctx, q,
 		run.ID, run.OrgID, run.ExperimentID, run.Name, run.Status, run.StartedAt, run.EndedAt,
-		run.Notes, paramsJSON, metricsJSON, run.DatasetID, run.Source, run.CreatedBy, now)
+		run.Notes, run.DatasetID, run.Source, run.CreatedBy, now)
 	if err != nil {
 		return fmt.Errorf("postgres: CreateMLRun: %w", err)
+	}
+	if err := replaceMLParams(ctx, tx, "ml_runs_params", "run_id", run.ID, run.Parameters); err != nil {
+		return fmt.Errorf("postgres: CreateMLRun parameters: %w", err)
+	}
+	if err := replaceMLMetrics(ctx, tx, "ml_runs_metrics", "run_id", run.ID, run.Metrics); err != nil {
+		return fmt.Errorf("postgres: CreateMLRun metrics: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("postgres: CreateMLRun commit: %w", err)
 	}
 	return nil
 }
 
 func (d *DB) UpdateMLRun(ctx context.Context, run mlstudio.Run) error {
-	params := run.Parameters
-	if params == nil {
-		params = map[string]any{}
-	}
-	metrics := run.Metrics
-	if metrics == nil {
-		metrics = map[string]any{}
-	}
-	paramsJSON, err := jsonBytes(params)
+	tx, err := d.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("postgres: UpdateMLRun marshal parameters: %w", err)
+		return fmt.Errorf("postgres: UpdateMLRun begin: %w", err)
 	}
-	metricsJSON, err := jsonBytes(metrics)
-	if err != nil {
-		return fmt.Errorf("postgres: UpdateMLRun marshal metrics: %w", err)
-	}
+	defer func() { _ = tx.Rollback() }()
 	const q = `
 		UPDATE ml_runs SET
 			name=$1, status=$2, started_at=$3, ended_at=$4, notes=$5,
-			parameters=$6, metrics=$7, dataset_id=$8, updated_at=$9
-		WHERE org_id=$10 AND id=$11 AND deleted_at IS NULL`
-	_, err = d.db.ExecContext(ctx, q,
+			dataset_id=$6, updated_at=$7
+		WHERE org_id=$8 AND id=$9 AND deleted_at IS NULL`
+	_, err = tx.ExecContext(ctx, q,
 		run.Name, run.Status, run.StartedAt, run.EndedAt, run.Notes,
-		paramsJSON, metricsJSON, run.DatasetID, time.Now().UTC(), run.OrgID, run.ID)
+		run.DatasetID, time.Now().UTC(), run.OrgID, run.ID)
 	if err != nil {
 		return fmt.Errorf("postgres: UpdateMLRun: %w", err)
+	}
+	if err := replaceMLParams(ctx, tx, "ml_runs_params", "run_id", run.ID, run.Parameters); err != nil {
+		return fmt.Errorf("postgres: UpdateMLRun parameters: %w", err)
+	}
+	if err := replaceMLMetrics(ctx, tx, "ml_runs_metrics", "run_id", run.ID, run.Metrics); err != nil {
+		return fmt.Errorf("postgres: UpdateMLRun metrics: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("postgres: UpdateMLRun commit: %w", err)
 	}
 	return nil
 }

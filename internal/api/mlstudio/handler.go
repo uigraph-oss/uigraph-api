@@ -113,6 +113,10 @@ func writeErr(w http.ResponseWriter, r *http.Request, err error) {
 		httputil.BadRequest(w, err.Error())
 		return
 	}
+	if errors.Is(err, mlstudio.ErrInvalidValue) {
+		httputil.BadRequest(w, err.Error())
+		return
+	}
 	if errors.Is(err, storepkg.ErrTeamNotFound) {
 		httputil.BadRequest(w, err.Error())
 		return
