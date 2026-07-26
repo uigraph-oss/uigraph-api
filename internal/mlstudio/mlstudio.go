@@ -172,16 +172,17 @@ type Metric struct {
 }
 
 type Evaluation struct {
-	ID          string     `json:"id"`
-	OrgID       string     `json:"orgId"`
-	MLflowID    string     `json:"mlflowId"`
-	VersionID   string     `json:"versionId"`
-	DatasetID   *string    `json:"datasetId,omitempty"`
-	Name        string     `json:"name"`
-	Type        string     `json:"type"`
-	Description string     `json:"description"`
-	Summary     string     `json:"summary"`
-	EvaluatedAt *time.Time `json:"evaluatedAt,omitempty"`
-	Evaluator   string     `json:"evaluator"`
-	Metrics     []Metric   `json:"metrics"`
+	ID          string         `json:"id"`
+	OrgID       string         `json:"orgId"`
+	MLflowID    string         `json:"mlflowId"`
+	VersionID   string         `json:"versionId"`
+	DatasetID   *string        `json:"datasetId,omitempty"`
+	Name        string         `json:"name"`
+	Type        string         `json:"type"`
+	Description string         `json:"description"`
+	Summary     string         `json:"summary"`
+	EvaluatedAt *time.Time     `json:"evaluatedAt,omitempty"`
+	Evaluator   string         `json:"evaluator"`
+	Parameters  map[string]any `json:"parameters"`
+	Metrics     []Metric       `json:"metrics"`
 }

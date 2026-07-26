@@ -98,16 +98,17 @@ type DatasetInput struct {
 }
 
 type EvaluationInput struct {
-	MLflowID        string        `json:"mlflowId"`
-	VersionMLflowID string        `json:"versionMlflowId"`
-	DatasetMLflowID *string       `json:"datasetMlflowId"`
-	Name            string        `json:"name"`
-	Type            string        `json:"type"`
-	Description     string        `json:"description"`
-	Summary         string        `json:"summary"`
-	EvaluatedAt     *time.Time    `json:"evaluatedAt"`
-	Evaluator       string        `json:"evaluator"`
-	Metrics         []MetricInput `json:"metrics"`
+	MLflowID        string         `json:"mlflowId"`
+	VersionMLflowID string         `json:"versionMlflowId"`
+	DatasetMLflowID *string        `json:"datasetMlflowId"`
+	Name            string         `json:"name"`
+	Type            string         `json:"type"`
+	Description     string         `json:"description"`
+	Summary         string         `json:"summary"`
+	EvaluatedAt     *time.Time     `json:"evaluatedAt"`
+	Evaluator       string         `json:"evaluator"`
+	Parameters      map[string]any `json:"parameters"`
+	Metrics         []MetricInput  `json:"metrics"`
 }
 
 type MetricInput struct {

@@ -466,17 +466,25 @@ func (d *DB) UpsertMLEvaluations(ctx context.Context, orgID, actorID string, in 
 		if err != nil {
 			return fmt.Errorf("postgres: UpsertMLEvaluations resolve dataset: %w", err)
 		}
+		params := e.Parameters
+		if params == nil {
+			params = map[string]any{}
+		}
+		paramsJSON, err := jsonBytes(params)
+		if err != nil {
+			return fmt.Errorf("postgres: UpsertMLEvaluations marshal parameters: %w", err)
+		}
 		var evalID string
 		err = tx.QueryRowContext(ctx, `
-			INSERT INTO ml_evaluations (org_id, mlflow_id, version_id, dataset_id, name, type, description, summary, evaluated_at, evaluator, synced_at, created_by, updated_by)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW(),$11,$11)
+			INSERT INTO ml_evaluations (org_id, mlflow_id, version_id, dataset_id, name, type, description, summary, evaluated_at, evaluator, parameters, synced_at, created_by, updated_by)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW(),$12,$12)
 			ON CONFLICT (org_id, mlflow_id) DO UPDATE SET
 				version_id=EXCLUDED.version_id, dataset_id=COALESCE(EXCLUDED.dataset_id, ml_evaluations.dataset_id),
 				name=EXCLUDED.name, type=EXCLUDED.type, description=EXCLUDED.description, summary=EXCLUDED.summary,
-				evaluated_at=EXCLUDED.evaluated_at, evaluator=EXCLUDED.evaluator,
+				evaluated_at=EXCLUDED.evaluated_at, evaluator=EXCLUDED.evaluator, parameters=EXCLUDED.parameters,
 				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()
 			RETURNING id`,
-			orgID, e.MLflowID, versionID, datasetID, e.Name, e.Type, e.Description, e.Summary, e.EvaluatedAt, e.Evaluator, actorID).Scan(&evalID)
+			orgID, e.MLflowID, versionID, datasetID, e.Name, e.Type, e.Description, e.Summary, e.EvaluatedAt, e.Evaluator, paramsJSON, actorID).Scan(&evalID)
 		if err != nil {
 			return fmt.Errorf("postgres: UpsertMLEvaluations upsert: %w", err)
 		}

@@ -403,7 +403,7 @@ func (d *DB) GetMLDataset(ctx context.Context, orgID, id string) (*mlstudio.Data
 
 func (d *DB) ListMLVersionEvaluations(ctx context.Context, orgID, versionID string) ([]mlstudio.Evaluation, error) {
 	rows, err := d.db.QueryContext(ctx, `
-		SELECT id, org_id, mlflow_id, version_id, dataset_id, name, type, description, summary, evaluated_at, evaluator
+		SELECT id, org_id, mlflow_id, version_id, dataset_id, name, type, description, summary, evaluated_at, evaluator, parameters
 		FROM ml_evaluations WHERE org_id=$1 AND version_id=$2 AND deleted_at IS NULL ORDER BY evaluated_at DESC NULLS LAST`, orgID, versionID)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListMLVersionEvaluations: %w", err)
@@ -412,12 +412,16 @@ func (d *DB) ListMLVersionEvaluations(ctx context.Context, orgID, versionID stri
 	var out []mlstudio.Evaluation
 	for rows.Next() {
 		var e mlstudio.Evaluation
+		var params []byte
 		err := rows.Scan(
 			&e.ID, &e.OrgID, &e.MLflowID, &e.VersionID, &e.DatasetID, &e.Name, &e.Type,
-			&e.Description, &e.Summary, &e.EvaluatedAt, &e.Evaluator,
+			&e.Description, &e.Summary, &e.EvaluatedAt, &e.Evaluator, &params,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("postgres: ListMLVersionEvaluations scan: %w", err)
+		}
+		if err := json.Unmarshal(params, &e.Parameters); err != nil {
+			return nil, fmt.Errorf("postgres: ListMLVersionEvaluations parameters: %w", err)
 		}
 		out = append(out, e)
 	}
