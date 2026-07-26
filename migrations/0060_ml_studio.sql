@@ -68,7 +68,7 @@ CREATE TABLE ml_runs (
     status             TEXT        NOT NULL DEFAULT 'running' CHECK (status IN ('running','completed','failed','cancelled')),
     started_at         TIMESTAMPTZ,
     ended_at           TIMESTAMPTZ,
-    duration           TEXT        NOT NULL DEFAULT '',
+    duration           BIGINT      NOT NULL DEFAULT 0,
     notes              TEXT        NOT NULL DEFAULT '',
     parameters         JSONB       NOT NULL DEFAULT '{}',
     metrics            JSONB       NOT NULL DEFAULT '{}',
