@@ -69,6 +69,103 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusCreated, created)
 }
 
+func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
+	p, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	existing, err := h.store.GetMLProject(r.Context(), orgID, r.PathValue("projectId"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if existing == nil {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+	if existing.SourceType != "" {
+		httputil.BadRequest(w, "only manually created projects can be edited")
+		return
+	}
+	var body struct {
+		Name        *string `json:"name"`
+		Type        *string `json:"type"`
+		Description *string `json:"description"`
+		TeamID      *string `json:"teamId"`
+		TeamName    string  `json:"teamName"`
+	}
+	if err := httputil.Decode(r, &body); err != nil {
+		httputil.BadRequest(w, "invalid request body")
+		return
+	}
+	in := mlstudio.ProjectInput{
+		Name:        existing.Name,
+		Type:        existing.Type,
+		Description: existing.Description,
+		TeamID:      existing.TeamID,
+		TeamName:    body.TeamName,
+	}
+	if body.Name != nil {
+		if *body.Name == "" {
+			httputil.BadRequest(w, "name cannot be empty")
+			return
+		}
+		in.Name = *body.Name
+	}
+	if body.Type != nil {
+		if *body.Type == "" {
+			httputil.BadRequest(w, "type cannot be empty")
+			return
+		}
+		in.Type = *body.Type
+	}
+	if body.Description != nil {
+		in.Description = *body.Description
+	}
+	if body.TeamID != nil {
+		if *body.TeamID == "" {
+			httputil.BadRequest(w, "team is required")
+			return
+		}
+		in.TeamID = body.TeamID
+	}
+	if body.TeamID != nil && body.TeamName != "" {
+		httputil.BadRequest(w, "provide either teamId or teamName, not both")
+		return
+	}
+	updated, err := h.store.UpdateMLProject(r.Context(), orgID, existing.ID, p.UserID, in)
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, updated)
+}
+
+func (h *Handler) DeleteProject(w http.ResponseWriter, r *http.Request) {
+	p, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	existing, err := h.store.GetMLProject(r.Context(), orgID, r.PathValue("projectId"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if existing == nil {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+	if existing.SourceType != "" {
+		httputil.BadRequest(w, "only manually created projects can be deleted")
+		return
+	}
+	if err := h.store.DeleteMLProject(r.Context(), orgID, existing.ID, p.UserID); err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *Handler) SyncModels(w http.ResponseWriter, r *http.Request) {
 	p, orgID, ok := h.authorizeOrg(w, r)
 	if !ok {

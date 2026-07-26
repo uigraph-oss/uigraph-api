@@ -103,6 +103,34 @@ func (d *DB) CreateMLProject(ctx context.Context, orgID, actorID string, p mlstu
 	return d.GetMLProject(ctx, orgID, id)
 }
 
+func (d *DB) UpdateMLProject(ctx context.Context, orgID, id, actorID string, p mlstudio.ProjectInput) (*mlstudio.Project, error) {
+	if (p.TeamID == nil || *p.TeamID == "") && p.TeamName != "" {
+		teamID, err := d.resolveTeamID(ctx, orgID, p.TeamName)
+		if err != nil {
+			return nil, err
+		}
+		p.TeamID = &teamID
+	}
+	_, err := d.db.ExecContext(ctx, `
+		UPDATE ml_projects SET name=$1, type=$2, description=$3, team_id=$4, updated_by=$5, updated_at=NOW()
+		WHERE org_id=$6 AND id=$7 AND deleted_at IS NULL`,
+		p.Name, p.Type, p.Description, p.TeamID, actorID, orgID, id)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: UpdateMLProject: %w", err)
+	}
+	return d.GetMLProject(ctx, orgID, id)
+}
+
+func (d *DB) DeleteMLProject(ctx context.Context, orgID, id, actorID string) error {
+	_, err := d.db.ExecContext(ctx, `
+		UPDATE ml_projects SET deleted_at=NOW(), updated_by=$1, updated_at=NOW()
+		WHERE org_id=$2 AND id=$3 AND deleted_at IS NULL`, actorID, orgID, id)
+	if err != nil {
+		return fmt.Errorf("postgres: DeleteMLProject: %w", err)
+	}
+	return nil
+}
+
 func (d *DB) UpsertMLModels(ctx context.Context, orgID, actorID string, in []mlstudio.ModelInput) error {
 	tx, err := d.db.BeginTx(ctx, nil)
 	if err != nil {

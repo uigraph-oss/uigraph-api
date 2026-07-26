@@ -7,6 +7,8 @@ type Store interface {
 	CreateMLProject(ctx context.Context, orgID, actorID string, in ProjectInput) (*Project, error)
 	ListMLProjects(ctx context.Context, orgID string) ([]Project, error)
 	GetMLProject(ctx context.Context, orgID, id string) (*Project, error)
+	UpdateMLProject(ctx context.Context, orgID, id, actorID string, in ProjectInput) (*Project, error)
+	DeleteMLProject(ctx context.Context, orgID, id, actorID string) error
 
 	UpsertMLModels(ctx context.Context, orgID, actorID string, in []ModelInput) error
 	CreateMLModel(ctx context.Context, m Model) error

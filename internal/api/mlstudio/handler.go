@@ -33,6 +33,8 @@ func Register(
 	requireScope("mlstudio:write", "POST", base+"/projects", h.CreateProject)
 	requireScope("mlstudio:read", "GET", base+"/projects", h.ListProjects)
 	requireScope("mlstudio:read", "GET", base+"/projects/{projectId}", h.GetProject)
+	requireScope("mlstudio:write", "PUT", base+"/projects/{projectId}", h.UpdateProject)
+	requireScope("mlstudio:write", "DELETE", base+"/projects/{projectId}", h.DeleteProject)
 
 	requireScope("mlstudio:write", "POST", base+"/models/sync", h.SyncModels)
 	requireScope("mlstudio:write", "POST", base+"/versions/sync", h.SyncVersions)
