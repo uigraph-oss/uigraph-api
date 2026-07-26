@@ -316,15 +316,15 @@ func (d *DB) UpsertMLRuns(ctx context.Context, orgID, actorID string, in []mlstu
 			return fmt.Errorf("postgres: UpsertMLRuns marshal metrics: %w", err)
 		}
 		_, err = tx.ExecContext(ctx, `
-			INSERT INTO ml_runs (org_id, mlflow_id, experiment_id, name, status, started_at, ended_at, duration, notes, parameters, metrics, dataset_id, synced_at, created_by, updated_by)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW(),$13,$13)
+			INSERT INTO ml_runs (org_id, mlflow_id, experiment_id, name, status, started_at, ended_at, notes, parameters, metrics, dataset_id, synced_at, created_by, updated_by)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW(),$12,$12)
 			ON CONFLICT (org_id, mlflow_id) DO UPDATE SET
 				experiment_id=EXCLUDED.experiment_id, name=EXCLUDED.name, status=EXCLUDED.status,
-				started_at=EXCLUDED.started_at, ended_at=EXCLUDED.ended_at, duration=EXCLUDED.duration,
+				started_at=EXCLUDED.started_at, ended_at=EXCLUDED.ended_at,
 				notes=EXCLUDED.notes, parameters=EXCLUDED.parameters, metrics=EXCLUDED.metrics,
 				dataset_id=COALESCE(EXCLUDED.dataset_id, ml_runs.dataset_id),
 				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()`,
-			orgID, run.MLflowID, experimentID, run.Name, run.Status, run.StartedAt, run.EndedAt, run.Duration, run.Notes, paramsJSON, metricsJSON, datasetID, actorID)
+			orgID, run.MLflowID, experimentID, run.Name, run.Status, run.StartedAt, run.EndedAt, run.Notes, paramsJSON, metricsJSON, datasetID, actorID)
 		if err != nil {
 			return fmt.Errorf("postgres: UpsertMLRuns upsert: %w", err)
 		}

@@ -213,7 +213,7 @@ func scanMLRun(row interface{ Scan(...any) error }) (mlstudio.Run, error) {
 	var params, metrics []byte
 	err := row.Scan(
 		&run.ID, &run.OrgID, &run.MLflowID, &run.ExperimentID, &run.Name, &run.Status,
-		&run.StartedAt, &run.EndedAt, &run.Duration, &run.Notes,
+		&run.StartedAt, &run.EndedAt, &run.Notes,
 		&params, &metrics, &run.DatasetID, &run.UpdatedAt, &run.SyncedAt,
 		&run.Source, &run.CreatedBy, &run.CreatedAt,
 	)
@@ -229,7 +229,7 @@ func scanMLRun(row interface{ Scan(...any) error }) (mlstudio.Run, error) {
 	return run, nil
 }
 
-const mlRunCols = `id, org_id, mlflow_id, experiment_id, name, status, started_at, ended_at, duration, notes, parameters, metrics, dataset_id, updated_at, synced_at, source, created_by, created_at`
+const mlRunCols = `id, org_id, mlflow_id, experiment_id, name, status, started_at, ended_at, notes, parameters, metrics, dataset_id, updated_at, synced_at, source, created_by, created_at`
 
 func (d *DB) ListMLRuns(ctx context.Context, orgID string, q mlstudio.RunQuery) ([]mlstudio.Run, int, error) {
 	where := ` FROM ml_runs WHERE org_id=$1 AND deleted_at IS NULL`

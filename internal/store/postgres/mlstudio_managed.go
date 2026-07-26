@@ -340,12 +340,12 @@ func (d *DB) CreateMLRun(ctx context.Context, run mlstudio.Run) error {
 		return fmt.Errorf("postgres: CreateMLRun marshal metrics: %w", err)
 	}
 	const q = `
-		INSERT INTO ml_runs (id, org_id, experiment_id, name, status, started_at, ended_at, duration, notes, parameters, metrics, dataset_id, source, created_by, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$15)`
+		INSERT INTO ml_runs (id, org_id, experiment_id, name, status, started_at, ended_at, notes, parameters, metrics, dataset_id, source, created_by, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$14)`
 	now := time.Now().UTC()
 	_, err = d.db.ExecContext(ctx, q,
 		run.ID, run.OrgID, run.ExperimentID, run.Name, run.Status, run.StartedAt, run.EndedAt,
-		run.Duration, run.Notes, paramsJSON, metricsJSON, run.DatasetID, run.Source, run.CreatedBy, now)
+		run.Notes, paramsJSON, metricsJSON, run.DatasetID, run.Source, run.CreatedBy, now)
 	if err != nil {
 		return fmt.Errorf("postgres: CreateMLRun: %w", err)
 	}
@@ -371,11 +371,11 @@ func (d *DB) UpdateMLRun(ctx context.Context, run mlstudio.Run) error {
 	}
 	const q = `
 		UPDATE ml_runs SET
-			name=$1, status=$2, started_at=$3, ended_at=$4, duration=$5, notes=$6,
-			parameters=$7, metrics=$8, dataset_id=$9, updated_at=$10
-		WHERE org_id=$11 AND id=$12 AND deleted_at IS NULL`
+			name=$1, status=$2, started_at=$3, ended_at=$4, notes=$5,
+			parameters=$6, metrics=$7, dataset_id=$8, updated_at=$9
+		WHERE org_id=$10 AND id=$11 AND deleted_at IS NULL`
 	_, err = d.db.ExecContext(ctx, q,
-		run.Name, run.Status, run.StartedAt, run.EndedAt, run.Duration, run.Notes,
+		run.Name, run.Status, run.StartedAt, run.EndedAt, run.Notes,
 		paramsJSON, metricsJSON, run.DatasetID, time.Now().UTC(), run.OrgID, run.ID)
 	if err != nil {
 		return fmt.Errorf("postgres: UpdateMLRun: %w", err)

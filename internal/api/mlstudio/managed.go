@@ -550,7 +550,6 @@ func (h *Handler) CreateRun(w http.ResponseWriter, r *http.Request) {
 		Status     string                          `json:"status"`
 		StartedAt  *time.Time                      `json:"startedAt"`
 		EndedAt    *time.Time                      `json:"endedAt"`
-		Duration   int64                           `json:"duration"`
 		Notes      string                          `json:"notes"`
 		Parameters map[string]any                  `json:"parameters"`
 		Metrics    map[string]any                  `json:"metrics"`
@@ -577,7 +576,6 @@ func (h *Handler) CreateRun(w http.ResponseWriter, r *http.Request) {
 		Status:       status,
 		StartedAt:    body.StartedAt,
 		EndedAt:      body.EndedAt,
-		Duration:     body.Duration,
 		Notes:        body.Notes,
 		Parameters:   body.Parameters,
 		Metrics:      body.Metrics,
@@ -626,7 +624,6 @@ func (h *Handler) UpdateRun(w http.ResponseWriter, r *http.Request) {
 		Status     *string                          `json:"status"`
 		StartedAt  *time.Time                       `json:"startedAt"`
 		EndedAt    *time.Time                       `json:"endedAt"`
-		Duration   *int64                           `json:"duration"`
 		Notes      *string                          `json:"notes"`
 		Parameters map[string]any                   `json:"parameters"`
 		Metrics    map[string]any                   `json:"metrics"`
@@ -648,9 +645,6 @@ func (h *Handler) UpdateRun(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.EndedAt != nil {
 		existing.EndedAt = body.EndedAt
-	}
-	if body.Duration != nil {
-		existing.Duration = *body.Duration
 	}
 	if body.Notes != nil {
 		existing.Notes = *body.Notes
