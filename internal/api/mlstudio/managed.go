@@ -542,7 +542,7 @@ func (h *Handler) CreateExperiment(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UpdateExperiment(w http.ResponseWriter, r *http.Request) {
-	_, orgID, ok := h.authorizeOrg(w, r)
+	p, orgID, ok := h.authorizeOrg(w, r)
 	if !ok {
 		return
 	}
@@ -592,6 +592,7 @@ func (h *Handler) UpdateExperiment(w http.ResponseWriter, r *http.Request) {
 	if body.Tags != nil {
 		existing.Tags = *body.Tags
 	}
+	existing.UpdatedBy = &p.UserID
 	if err := h.store.UpdateMLExperiment(r.Context(), *existing); err != nil {
 		writeErr(w, r, err)
 		return

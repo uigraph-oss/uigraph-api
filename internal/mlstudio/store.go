@@ -23,6 +23,7 @@ type Store interface {
 	UpsertMLArtifacts(ctx context.Context, orgID, actorID string, in []ArtifactInput) error
 	UpsertMLDatasets(ctx context.Context, orgID, actorID string, in []DatasetInput) error
 	UpsertMLEvaluations(ctx context.Context, orgID, actorID string, in []EvaluationInput) error
+	ResolveOrgUserIDsByEmail(ctx context.Context, orgID string, emails []string) (map[string]string, error)
 
 	ListMLModels(ctx context.Context, orgID, projectID string) ([]Model, error)
 	GetMLModel(ctx context.Context, orgID, id string) (*Model, error)

@@ -80,6 +80,7 @@ type Experiment struct {
 	Tags        []string   `json:"tags"`
 	Source      string     `json:"source"`
 	CreatedBy   string     `json:"createdBy,omitempty"`
+	UpdatedBy   *string    `json:"updatedBy,omitempty"`
 	CreatedAt   *time.Time `json:"createdAt,omitempty"`
 	UpdatedAt   *time.Time `json:"updatedAt,omitempty"`
 	DeletedAt   *time.Time `json:"deletedAt,omitempty"`

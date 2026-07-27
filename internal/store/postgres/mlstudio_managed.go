@@ -417,8 +417,8 @@ func (d *DB) CreateMLExperiment(ctx context.Context, e mlstudio.Experiment) erro
 		tags = []string{}
 	}
 	const q = `
-		INSERT INTO ml_experiments (id, org_id, project_id, name, description, status, tags, source, created_by, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10)`
+		INSERT INTO ml_experiments (id, org_id, project_id, name, description, status, tags, source, created_by, updated_by, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$9,$10,$10)`
 	now := time.Now().UTC()
 	_, err := d.db.ExecContext(ctx, q,
 		e.ID, e.OrgID, e.ProjectID, e.Name, e.Description, e.Status, pq.Array(tags), e.Source, e.CreatedBy, now)
@@ -434,10 +434,10 @@ func (d *DB) UpdateMLExperiment(ctx context.Context, e mlstudio.Experiment) erro
 		tags = []string{}
 	}
 	const q = `
-		UPDATE ml_experiments SET project_id=$1, name=$2, description=$3, status=$4, tags=$5, updated_at=$6
-		WHERE org_id=$7 AND id=$8 AND deleted_at IS NULL`
+		UPDATE ml_experiments SET project_id=$1, name=$2, description=$3, status=$4, tags=$5, updated_by=$6, updated_at=$7
+		WHERE org_id=$8 AND id=$9 AND deleted_at IS NULL`
 	_, err := d.db.ExecContext(ctx, q,
-		e.ProjectID, e.Name, e.Description, e.Status, pq.Array(tags), time.Now().UTC(), e.OrgID, e.ID)
+		e.ProjectID, e.Name, e.Description, e.Status, pq.Array(tags), e.UpdatedBy, time.Now().UTC(), e.OrgID, e.ID)
 	if err != nil {
 		return fmt.Errorf("postgres: UpdateMLExperiment: %w", err)
 	}

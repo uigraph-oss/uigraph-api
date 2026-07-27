@@ -266,12 +266,12 @@ func scanMLExperiment(row interface{ Scan(...any) error }) (mlstudio.Experiment,
 	var e mlstudio.Experiment
 	err := row.Scan(
 		&e.ID, &e.OrgID, &e.MLflowID, &e.ProjectID, &e.Name, &e.Description, &e.Status, pq.Array(&e.Tags),
-		&e.Source, &e.CreatedBy, &e.CreatedAt, &e.UpdatedAt,
+		&e.Source, &e.CreatedBy, &e.UpdatedBy, &e.CreatedAt, &e.UpdatedAt,
 	)
 	return e, err
 }
 
-const mlExperimentCols = `id, org_id, mlflow_id, project_id, name, description, status, tags, source, created_by, created_at, updated_at`
+const mlExperimentCols = `id, org_id, mlflow_id, project_id, name, description, status, tags, source, created_by, updated_by, created_at, updated_at`
 
 func scanMLProject(row interface{ Scan(...any) error }) (mlstudio.Project, error) {
 	var p mlstudio.Project

@@ -149,6 +149,30 @@ func resolveProjectID(ctx context.Context, tx *sql.Tx, orgID, projectName string
 	return id, nil
 }
 
+func (d *DB) ResolveOrgUserIDsByEmail(ctx context.Context, orgID string, emails []string) (map[string]string, error) {
+	out := map[string]string{}
+	if len(emails) == 0 {
+		return out, nil
+	}
+	rows, err := d.db.QueryContext(ctx, `
+		SELECT LOWER(u.email), u.id
+		FROM   users u
+		JOIN   org_members om ON om.user_id = u.id
+		WHERE  om.org_id = $1 AND LOWER(u.email) = ANY($2)`, orgID, pq.Array(emails))
+	if err != nil {
+		return nil, fmt.Errorf("postgres: ResolveOrgUserIDsByEmail: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var email, id string
+		if err := rows.Scan(&email, &id); err != nil {
+			return nil, fmt.Errorf("postgres: ResolveOrgUserIDsByEmail scan: %w", err)
+		}
+		out[email] = id
+	}
+	return out, rows.Err()
+}
+
 func (d *DB) UpsertMLProjects(ctx context.Context, orgID, actorID string, in []mlstudio.ProjectInput) error {
 	tx, err := d.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -262,6 +286,10 @@ func (d *DB) UpsertMLModels(ctx context.Context, orgID, actorID string, in []mls
 		if problemType == "" {
 			problemType = "other"
 		}
+		actor := actorID
+		if m.ActorID != "" {
+			actor = m.ActorID
+		}
 		_, err = tx.ExecContext(ctx, `
 			INSERT INTO ml_models (org_id, mlflow_id, project_id, name, description, tags, problem_type, domain, license, intended_use, limitations, recommendations, considerations, production_version_id, mlflow_created_at, mlflow_updated_at, synced_at, created_by, updated_by)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NOW(),$17,$17)
@@ -274,7 +302,7 @@ func (d *DB) UpsertMLModels(ctx context.Context, orgID, actorID string, in []mls
 				production_version_id=COALESCE(EXCLUDED.production_version_id, ml_models.production_version_id),
 				mlflow_created_at=EXCLUDED.mlflow_created_at, mlflow_updated_at=EXCLUDED.mlflow_updated_at,
 				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()`,
-			orgID, m.MLflowID, projectID, m.Name, m.Description, pq.Array(tags), problemType, m.Domain, m.License, m.IntendedUse, m.Limitations, m.Recommendations, m.Considerations, pv, m.CreatedAt, m.UpdatedAt, actorID)
+			orgID, m.MLflowID, projectID, m.Name, m.Description, pq.Array(tags), problemType, m.Domain, m.License, m.IntendedUse, m.Limitations, m.Recommendations, m.Considerations, pv, m.CreatedAt, m.UpdatedAt, actor)
 		if err != nil {
 			return fmt.Errorf("postgres: UpsertMLModels upsert: %w", err)
 		}
@@ -328,6 +356,10 @@ func (d *DB) UpsertMLModelVersions(ctx context.Context, orgID, actorID string, i
 				runID = id
 			}
 		}
+		actor := actorID
+		if v.ActorID != "" {
+			actor = v.ActorID
+		}
 		_, err = tx.ExecContext(ctx, `
 			INSERT INTO ml_model_versions (org_id, mlflow_id, model_id, version, description, run_id, mlflow_created_at, synced_at, created_by, updated_by)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,NOW(),$8,$8)
@@ -336,7 +368,7 @@ func (d *DB) UpsertMLModelVersions(ctx context.Context, orgID, actorID string, i
 				run_id=COALESCE(EXCLUDED.run_id, ml_model_versions.run_id),
 				mlflow_created_at=EXCLUDED.mlflow_created_at,
 				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()`,
-			orgID, v.MLflowID, modelID, v.Version, v.Description, runID, v.CreatedAt, actorID)
+			orgID, v.MLflowID, modelID, v.Version, v.Description, runID, v.CreatedAt, actor)
 		if err != nil {
 			return fmt.Errorf("postgres: UpsertMLModelVersions upsert: %w", err)
 		}
@@ -362,6 +394,10 @@ func (d *DB) UpsertMLExperiments(ctx context.Context, orgID, actorID string, in 
 		if tags == nil {
 			tags = []string{}
 		}
+		actor := actorID
+		if e.ActorID != "" {
+			actor = e.ActorID
+		}
 		_, err = tx.ExecContext(ctx, `
 			INSERT INTO ml_experiments (org_id, mlflow_id, project_id, name, description, status, tags, synced_at, created_by, updated_by)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,NOW(),$8,$8)
@@ -369,7 +405,7 @@ func (d *DB) UpsertMLExperiments(ctx context.Context, orgID, actorID string, in 
 				project_id=COALESCE(EXCLUDED.project_id, ml_experiments.project_id),
 				name=EXCLUDED.name, description=EXCLUDED.description, status=EXCLUDED.status, tags=EXCLUDED.tags,
 				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()`,
-			orgID, e.MLflowID, projectID, e.Name, e.Description, e.Status, pq.Array(tags), actorID)
+			orgID, e.MLflowID, projectID, e.Name, e.Description, e.Status, pq.Array(tags), actor)
 		if err != nil {
 			return fmt.Errorf("postgres: UpsertMLExperiments upsert: %w", err)
 		}
@@ -405,6 +441,10 @@ func (d *DB) UpsertMLRuns(ctx context.Context, orgID, actorID string, in []mlstu
 				datasetID = id
 			}
 		}
+		actor := actorID
+		if run.ActorID != "" {
+			actor = run.ActorID
+		}
 		var runID string
 		err = tx.QueryRowContext(ctx, `
 			INSERT INTO ml_runs (org_id, mlflow_id, experiment_id, name, status, started_at, ended_at, notes, dataset_id, synced_at, created_by, updated_by)
@@ -416,7 +456,7 @@ func (d *DB) UpsertMLRuns(ctx context.Context, orgID, actorID string, in []mlstu
 				dataset_id=COALESCE(EXCLUDED.dataset_id, ml_runs.dataset_id),
 				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()
 			RETURNING id`,
-			orgID, run.MLflowID, experimentID, run.Name, run.Status, run.StartedAt, run.EndedAt, run.Notes, datasetID, actorID).Scan(&runID)
+			orgID, run.MLflowID, experimentID, run.Name, run.Status, run.StartedAt, run.EndedAt, run.Notes, datasetID, actor).Scan(&runID)
 		if err != nil {
 			return fmt.Errorf("postgres: UpsertMLRuns upsert: %w", err)
 		}
@@ -447,6 +487,10 @@ func (d *DB) UpsertMLArtifacts(ctx context.Context, orgID, actorID string, in []
 		if !ok {
 			return fmt.Errorf("%w: run %q", mlstudio.ErrParentNotFound, a.RunMLflowID)
 		}
+		actor := actorID
+		if a.ActorID != "" {
+			actor = a.ActorID
+		}
 		_, err = tx.ExecContext(ctx, `
 			INSERT INTO ml_artifacts (org_id, mlflow_id, run_id, name, type, uri, download_uri, size, format, synced_at, created_by, updated_by)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW(),$10,$10)
@@ -454,7 +498,7 @@ func (d *DB) UpsertMLArtifacts(ctx context.Context, orgID, actorID string, in []
 				run_id=EXCLUDED.run_id, name=EXCLUDED.name, type=EXCLUDED.type,
 				uri=EXCLUDED.uri, download_uri=EXCLUDED.download_uri, size=EXCLUDED.size, format=EXCLUDED.format,
 				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()`,
-			orgID, a.MLflowID, runID, a.Name, a.Type, a.URI, a.DownloadURI, a.Size, a.Format, actorID)
+			orgID, a.MLflowID, runID, a.Name, a.Type, a.URI, a.DownloadURI, a.Size, a.Format, actor)
 		if err != nil {
 			return fmt.Errorf("postgres: UpsertMLArtifacts upsert: %w", err)
 		}
@@ -495,6 +539,10 @@ func (d *DB) UpsertMLDatasets(ctx context.Context, orgID, actorID string, in []m
 		if err != nil {
 			return fmt.Errorf("postgres: UpsertMLDatasets marshal tags: %w", err)
 		}
+		actor := actorID
+		if ds.ActorID != "" {
+			actor = ds.ActorID
+		}
 		_, err = tx.ExecContext(ctx, `
 			INSERT INTO ml_datasets (org_id, experiment_id, mlflow_id, name, digest, source, source_type, context, row_count, schema, tags, synced_at, created_by, updated_by)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW(),$12,$12)
@@ -502,7 +550,7 @@ func (d *DB) UpsertMLDatasets(ctx context.Context, orgID, actorID string, in []m
 				name=EXCLUDED.name, digest=EXCLUDED.digest, source=EXCLUDED.source, source_type=EXCLUDED.source_type,
 				context=EXCLUDED.context, row_count=EXCLUDED.row_count, schema=EXCLUDED.schema, tags=EXCLUDED.tags,
 				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()`,
-			orgID, experimentID, ds.MLflowID, ds.Name, ds.Digest, ds.Source, ds.SourceType, ds.Context, ds.RowCount, schemaJSON, tagsJSON, actorID)
+			orgID, experimentID, ds.MLflowID, ds.Name, ds.Digest, ds.Source, ds.SourceType, ds.Context, ds.RowCount, schemaJSON, tagsJSON, actor)
 		if err != nil {
 			return fmt.Errorf("postgres: UpsertMLDatasets upsert: %w", err)
 		}
@@ -538,6 +586,10 @@ func (d *DB) UpsertMLEvaluations(ctx context.Context, orgID, actorID string, in 
 		if err != nil {
 			return fmt.Errorf("postgres: UpsertMLEvaluations resolve dataset: %w", err)
 		}
+		actor := actorID
+		if e.ActorID != "" {
+			actor = e.ActorID
+		}
 		var evalID string
 		err = tx.QueryRowContext(ctx, `
 			INSERT INTO ml_evaluations (org_id, mlflow_id, version_id, experiment_id, dataset_id, name, type, description, summary, started_at, ended_at, evaluator, synced_at, created_by, updated_by)
@@ -549,7 +601,7 @@ func (d *DB) UpsertMLEvaluations(ctx context.Context, orgID, actorID string, in 
 				started_at=EXCLUDED.started_at, ended_at=EXCLUDED.ended_at, evaluator=EXCLUDED.evaluator,
 				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()
 			RETURNING id`,
-			orgID, e.MLflowID, versionID, experimentID, datasetID, e.Name, e.Type, e.Description, e.Summary, e.StartedAt, e.EndedAt, e.Evaluator, actorID).Scan(&evalID)
+			orgID, e.MLflowID, versionID, experimentID, datasetID, e.Name, e.Type, e.Description, e.Summary, e.StartedAt, e.EndedAt, e.Evaluator, actor).Scan(&evalID)
 		if err != nil {
 			return fmt.Errorf("postgres: UpsertMLEvaluations upsert: %w", err)
 		}

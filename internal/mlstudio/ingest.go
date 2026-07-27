@@ -28,6 +28,8 @@ type ModelInput struct {
 	ProductionVersionMLflowID *string    `json:"productionVersionMlflowId"`
 	CreatedAt                 *time.Time `json:"createdAt"`
 	UpdatedAt                 *time.Time `json:"updatedAt"`
+	UserEmail                 string     `json:"userEmail"`
+	ActorID                   string     `json:"-"`
 }
 
 type ModelUpdateInput struct {
@@ -48,6 +50,8 @@ type ModelVersionInput struct {
 	Version       string     `json:"version"`
 	Description   string     `json:"description"`
 	CreatedAt     *time.Time `json:"createdAt"`
+	UserEmail     string     `json:"userEmail"`
+	ActorID       string     `json:"-"`
 }
 
 type ExperimentInput struct {
@@ -57,6 +61,8 @@ type ExperimentInput struct {
 	Description string   `json:"description"`
 	Status      string   `json:"status"`
 	Tags        []string `json:"tags"`
+	UserEmail   string   `json:"userEmail"`
+	ActorID     string   `json:"-"`
 }
 
 type RunInput struct {
@@ -70,6 +76,8 @@ type RunInput struct {
 	Notes              string         `json:"notes"`
 	Parameters         map[string]any `json:"parameters"`
 	Metrics            map[string]any `json:"metrics"`
+	UserEmail          string         `json:"userEmail"`
+	ActorID            string         `json:"-"`
 }
 
 type ArtifactInput struct {
@@ -81,6 +89,8 @@ type ArtifactInput struct {
 	DownloadURI string `json:"downloadUri"`
 	Size        string `json:"size"`
 	Format      string `json:"format"`
+	UserEmail   string `json:"userEmail"`
+	ActorID     string `json:"-"`
 }
 
 type DatasetInput struct {
@@ -94,6 +104,8 @@ type DatasetInput struct {
 	RowCount           int64             `json:"rowCount"`
 	Schema             []SchemaField     `json:"schema"`
 	Tags               map[string]string `json:"tags"`
+	UserEmail          string            `json:"userEmail"`
+	ActorID            string            `json:"-"`
 }
 
 type EvaluationInput struct {
@@ -110,4 +122,6 @@ type EvaluationInput struct {
 	Evaluator          string         `json:"evaluator"`
 	Parameters         map[string]any `json:"parameters"`
 	Metrics            map[string]any `json:"metrics"`
+	UserEmail          string         `json:"userEmail"`
+	ActorID            string         `json:"-"`
 }

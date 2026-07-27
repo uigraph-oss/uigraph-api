@@ -1,13 +1,50 @@
 package mlstudio
 
 import (
+	"context"
+	"fmt"
 	"net/http"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/uigraph/app/internal/httputil"
 	"github.com/uigraph/app/internal/mlstudio"
 	storepkg "github.com/uigraph/app/internal/store"
 )
+
+func (h *Handler) resolveActors(ctx context.Context, orgID string, emails []string) (map[string]string, error) {
+	wanted := map[string]bool{}
+	for _, email := range emails {
+		lower := strings.ToLower(strings.TrimSpace(email))
+		if lower == "" {
+			continue
+		}
+		wanted[lower] = true
+	}
+	if len(wanted) == 0 {
+		return map[string]string{}, nil
+	}
+	list := make([]string, 0, len(wanted))
+	for email := range wanted {
+		list = append(list, email)
+	}
+	resolved, err := h.store.ResolveOrgUserIDsByEmail(ctx, orgID, list)
+	if err != nil {
+		return nil, err
+	}
+	var missing []string
+	for _, email := range list {
+		if _, ok := resolved[email]; !ok {
+			missing = append(missing, email)
+		}
+	}
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		return nil, fmt.Errorf("%w: %s", mlstudio.ErrUnknownUser, strings.Join(missing, ", "))
+	}
+	return resolved, nil
+}
 
 func (h *Handler) SyncProjects(w http.ResponseWriter, r *http.Request) {
 	p, orgID, ok := h.authorizeOrg(w, r)
@@ -169,6 +206,21 @@ func (h *Handler) SyncModels(w http.ResponseWriter, r *http.Request) {
 		httputil.BadRequest(w, "invalid request body")
 		return
 	}
+	emails := make([]string, 0, len(in))
+	for i := range in {
+		emails = append(emails, in[i].UserEmail)
+	}
+	actors, err := h.resolveActors(r.Context(), orgID, emails)
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	for i := range in {
+		if in[i].UserEmail == "" {
+			continue
+		}
+		in[i].ActorID = actors[strings.ToLower(strings.TrimSpace(in[i].UserEmail))]
+	}
 	if err := h.store.UpsertMLModels(r.Context(), orgID, p.UserID, in); err != nil {
 		writeErr(w, r, err)
 		return
@@ -218,6 +270,21 @@ func (h *Handler) SyncVersions(w http.ResponseWriter, r *http.Request) {
 		httputil.BadRequest(w, "invalid request body")
 		return
 	}
+	emails := make([]string, 0, len(in))
+	for i := range in {
+		emails = append(emails, in[i].UserEmail)
+	}
+	actors, err := h.resolveActors(r.Context(), orgID, emails)
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	for i := range in {
+		if in[i].UserEmail == "" {
+			continue
+		}
+		in[i].ActorID = actors[strings.ToLower(strings.TrimSpace(in[i].UserEmail))]
+	}
 	if err := h.store.UpsertMLModelVersions(r.Context(), orgID, p.UserID, in); err != nil {
 		writeErr(w, r, err)
 		return
@@ -234,6 +301,21 @@ func (h *Handler) SyncExperiments(w http.ResponseWriter, r *http.Request) {
 	if err := httputil.Decode(r, &in); err != nil {
 		httputil.BadRequest(w, "invalid request body")
 		return
+	}
+	emails := make([]string, 0, len(in))
+	for i := range in {
+		emails = append(emails, in[i].UserEmail)
+	}
+	actors, err := h.resolveActors(r.Context(), orgID, emails)
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	for i := range in {
+		if in[i].UserEmail == "" {
+			continue
+		}
+		in[i].ActorID = actors[strings.ToLower(strings.TrimSpace(in[i].UserEmail))]
 	}
 	if err := h.store.UpsertMLExperiments(r.Context(), orgID, p.UserID, in); err != nil {
 		writeErr(w, r, err)
@@ -258,6 +340,21 @@ func (h *Handler) SyncRuns(w http.ResponseWriter, r *http.Request) {
 			in[i].StartedAt = &now
 		}
 	}
+	emails := make([]string, 0, len(in))
+	for i := range in {
+		emails = append(emails, in[i].UserEmail)
+	}
+	actors, err := h.resolveActors(r.Context(), orgID, emails)
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	for i := range in {
+		if in[i].UserEmail == "" {
+			continue
+		}
+		in[i].ActorID = actors[strings.ToLower(strings.TrimSpace(in[i].UserEmail))]
+	}
 	if err := h.store.UpsertMLRuns(r.Context(), orgID, p.UserID, in); err != nil {
 		writeErr(w, r, err)
 		return
@@ -275,6 +372,21 @@ func (h *Handler) SyncArtifacts(w http.ResponseWriter, r *http.Request) {
 		httputil.BadRequest(w, "invalid request body")
 		return
 	}
+	emails := make([]string, 0, len(in))
+	for i := range in {
+		emails = append(emails, in[i].UserEmail)
+	}
+	actors, err := h.resolveActors(r.Context(), orgID, emails)
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	for i := range in {
+		if in[i].UserEmail == "" {
+			continue
+		}
+		in[i].ActorID = actors[strings.ToLower(strings.TrimSpace(in[i].UserEmail))]
+	}
 	if err := h.store.UpsertMLArtifacts(r.Context(), orgID, p.UserID, in); err != nil {
 		writeErr(w, r, err)
 		return
@@ -291,6 +403,21 @@ func (h *Handler) SyncDatasets(w http.ResponseWriter, r *http.Request) {
 	if err := httputil.Decode(r, &in); err != nil {
 		httputil.BadRequest(w, "invalid request body")
 		return
+	}
+	emails := make([]string, 0, len(in))
+	for i := range in {
+		emails = append(emails, in[i].UserEmail)
+	}
+	actors, err := h.resolveActors(r.Context(), orgID, emails)
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	for i := range in {
+		if in[i].UserEmail == "" {
+			continue
+		}
+		in[i].ActorID = actors[strings.ToLower(strings.TrimSpace(in[i].UserEmail))]
 	}
 	if err := h.store.UpsertMLDatasets(r.Context(), orgID, p.UserID, in); err != nil {
 		writeErr(w, r, err)
@@ -314,6 +441,21 @@ func (h *Handler) SyncEvaluations(w http.ResponseWriter, r *http.Request) {
 		if in[i].StartedAt == nil {
 			in[i].StartedAt = &now
 		}
+	}
+	emails := make([]string, 0, len(in))
+	for i := range in {
+		emails = append(emails, in[i].UserEmail)
+	}
+	actors, err := h.resolveActors(r.Context(), orgID, emails)
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	for i := range in {
+		if in[i].UserEmail == "" {
+			continue
+		}
+		in[i].ActorID = actors[strings.ToLower(strings.TrimSpace(in[i].UserEmail))]
 	}
 	if err := h.store.UpsertMLEvaluations(r.Context(), orgID, p.UserID, in); err != nil {
 		writeErr(w, r, err)
