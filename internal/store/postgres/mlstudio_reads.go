@@ -265,13 +265,13 @@ func (d *DB) GetMLModelVersion(ctx context.Context, orgID, id string) (*mlstudio
 func scanMLExperiment(row interface{ Scan(...any) error }) (mlstudio.Experiment, error) {
 	var e mlstudio.Experiment
 	err := row.Scan(
-		&e.ID, &e.OrgID, &e.MLflowID, &e.ProjectID, &e.Name, &e.Description, &e.Status, pq.Array(&e.Tags), &e.StartedAt,
+		&e.ID, &e.OrgID, &e.MLflowID, &e.ProjectID, &e.Name, &e.Description, &e.Status, pq.Array(&e.Tags),
 		&e.Source, &e.CreatedBy, &e.CreatedAt, &e.UpdatedAt,
 	)
 	return e, err
 }
 
-const mlExperimentCols = `id, org_id, mlflow_id, project_id, name, description, status, tags, started_at, source, created_by, created_at, updated_at`
+const mlExperimentCols = `id, org_id, mlflow_id, project_id, name, description, status, tags, source, created_by, created_at, updated_at`
 
 func scanMLProject(row interface{ Scan(...any) error }) (mlstudio.Project, error) {
 	var p mlstudio.Project
@@ -328,7 +328,7 @@ func (d *DB) ListMLExperiments(ctx context.Context, orgID, projectID string) ([]
 		args = append(args, projectID)
 		q += fmt.Sprintf(" AND project_id=$%d", len(args))
 	}
-	q += " ORDER BY started_at DESC NULLS LAST, name ASC"
+	q += " ORDER BY created_at DESC, name ASC"
 	rows, err := d.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListMLExperiments: %w", err)

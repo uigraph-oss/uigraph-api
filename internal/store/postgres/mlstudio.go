@@ -363,13 +363,13 @@ func (d *DB) UpsertMLExperiments(ctx context.Context, orgID, actorID string, in 
 			tags = []string{}
 		}
 		_, err = tx.ExecContext(ctx, `
-			INSERT INTO ml_experiments (org_id, mlflow_id, project_id, name, description, status, tags, started_at, synced_at, created_by, updated_by)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW(),$9,$9)
+			INSERT INTO ml_experiments (org_id, mlflow_id, project_id, name, description, status, tags, synced_at, created_by, updated_by)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,NOW(),$8,$8)
 			ON CONFLICT (org_id, mlflow_id) DO UPDATE SET
 				project_id=COALESCE(EXCLUDED.project_id, ml_experiments.project_id),
-				name=EXCLUDED.name, description=EXCLUDED.description, status=EXCLUDED.status, tags=EXCLUDED.tags, started_at=EXCLUDED.started_at,
+				name=EXCLUDED.name, description=EXCLUDED.description, status=EXCLUDED.status, tags=EXCLUDED.tags,
 				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()`,
-			orgID, e.MLflowID, projectID, e.Name, e.Description, e.Status, pq.Array(tags), e.StartedAt, actorID)
+			orgID, e.MLflowID, projectID, e.Name, e.Description, e.Status, pq.Array(tags), actorID)
 		if err != nil {
 			return fmt.Errorf("postgres: UpsertMLExperiments upsert: %w", err)
 		}

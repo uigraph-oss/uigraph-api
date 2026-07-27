@@ -496,12 +496,11 @@ func (h *Handler) CreateExperiment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		ProjectID   string     `json:"projectId"`
-		Name        string     `json:"name"`
-		Description string     `json:"description"`
-		Status      string     `json:"status"`
-		Tags        []string   `json:"tags"`
-		StartedAt   *time.Time `json:"startedAt"`
+		ProjectID   string   `json:"projectId"`
+		Name        string   `json:"name"`
+		Description string   `json:"description"`
+		Status      string   `json:"status"`
+		Tags        []string `json:"tags"`
 	}
 	if err := httputil.Decode(r, &body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -527,7 +526,6 @@ func (h *Handler) CreateExperiment(w http.ResponseWriter, r *http.Request) {
 		Description: body.Description,
 		Status:      status,
 		Tags:        body.Tags,
-		StartedAt:   body.StartedAt,
 		Source:      "manual",
 		CreatedBy:   p.UserID,
 	}
@@ -558,12 +556,11 @@ func (h *Handler) UpdateExperiment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		ProjectID   *string    `json:"projectId"`
-		Name        *string    `json:"name"`
-		Description *string    `json:"description"`
-		Status      *string    `json:"status"`
-		Tags        *[]string  `json:"tags"`
-		StartedAt   *time.Time `json:"startedAt"`
+		ProjectID   *string   `json:"projectId"`
+		Name        *string   `json:"name"`
+		Description *string   `json:"description"`
+		Status      *string   `json:"status"`
+		Tags        *[]string `json:"tags"`
 	}
 	if err := httputil.Decode(r, &body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -572,7 +569,7 @@ func (h *Handler) UpdateExperiment(w http.ResponseWriter, r *http.Request) {
 	// Tags are ML Studio metadata rather than MLflow state, so they stay
 	// editable on synced experiments; every other field stays manual-only.
 	syncedFields := body.ProjectID != nil || body.Name != nil || body.Description != nil ||
-		body.Status != nil || body.StartedAt != nil
+		body.Status != nil
 	if existing.Source != "manual" && syncedFields {
 		httputil.BadRequest(w, "only tags can be edited on synced experiments")
 		return
@@ -594,9 +591,6 @@ func (h *Handler) UpdateExperiment(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Tags != nil {
 		existing.Tags = *body.Tags
-	}
-	if body.StartedAt != nil {
-		existing.StartedAt = body.StartedAt
 	}
 	if err := h.store.UpdateMLExperiment(r.Context(), *existing); err != nil {
 		writeErr(w, r, err)
@@ -666,11 +660,7 @@ func (h *Handler) CreateRun(w http.ResponseWriter, r *http.Request) {
 		httputil.BadRequest(w, "startedAt is required")
 		return
 	}
-	if body.EndedAt == nil {
-		httputil.BadRequest(w, "endedAt is required")
-		return
-	}
-	if body.EndedAt.Before(*body.StartedAt) {
+	if body.EndedAt != nil && body.EndedAt.Before(*body.StartedAt) {
 		httputil.BadRequest(w, "endedAt must not be before startedAt")
 		return
 	}
@@ -685,7 +675,7 @@ func (h *Handler) CreateRun(w http.ResponseWriter, r *http.Request) {
 		Name:         body.Name,
 		Status:       status,
 		StartedAt:    *body.StartedAt,
-		EndedAt:      *body.EndedAt,
+		EndedAt:      body.EndedAt,
 		Notes:        body.Notes,
 		Parameters:   body.Parameters,
 		Metrics:      body.Metrics,
@@ -747,16 +737,12 @@ func (h *Handler) UpdateRun(w http.ResponseWriter, r *http.Request) {
 		httputil.BadRequest(w, "startedAt is required")
 		return
 	}
-	if body.EndedAt == nil {
-		httputil.BadRequest(w, "endedAt is required")
-		return
-	}
-	if body.EndedAt.Before(*body.StartedAt) {
+	if body.EndedAt != nil && body.EndedAt.Before(*body.StartedAt) {
 		httputil.BadRequest(w, "endedAt must not be before startedAt")
 		return
 	}
 	existing.StartedAt = *body.StartedAt
-	existing.EndedAt = *body.EndedAt
+	existing.EndedAt = body.EndedAt
 	if body.Notes != nil {
 		existing.Notes = *body.Notes
 	}
@@ -1009,11 +995,7 @@ func (h *Handler) CreateEvaluation(w http.ResponseWriter, r *http.Request) {
 		httputil.BadRequest(w, "startedAt is required")
 		return
 	}
-	if body.EndedAt == nil {
-		httputil.BadRequest(w, "endedAt is required")
-		return
-	}
-	if body.EndedAt.Before(*body.StartedAt) {
+	if body.EndedAt != nil && body.EndedAt.Before(*body.StartedAt) {
 		httputil.BadRequest(w, "endedAt must not be before startedAt")
 		return
 	}
@@ -1037,7 +1019,7 @@ func (h *Handler) CreateEvaluation(w http.ResponseWriter, r *http.Request) {
 		Description:  body.Description,
 		Summary:      body.Summary,
 		StartedAt:    *body.StartedAt,
-		EndedAt:      *body.EndedAt,
+		EndedAt:      body.EndedAt,
 		Evaluator:    body.Evaluator,
 		Parameters:   body.Parameters,
 		Metrics:      body.Metrics,
@@ -1110,16 +1092,12 @@ func (h *Handler) UpdateEvaluation(w http.ResponseWriter, r *http.Request) {
 		httputil.BadRequest(w, "startedAt is required")
 		return
 	}
-	if body.EndedAt == nil {
-		httputil.BadRequest(w, "endedAt is required")
-		return
-	}
-	if body.EndedAt.Before(*body.StartedAt) {
+	if body.EndedAt != nil && body.EndedAt.Before(*body.StartedAt) {
 		httputil.BadRequest(w, "endedAt must not be before startedAt")
 		return
 	}
 	existing.StartedAt = *body.StartedAt
-	existing.EndedAt = *body.EndedAt
+	existing.EndedAt = body.EndedAt
 	if body.Evaluator != nil {
 		existing.Evaluator = *body.Evaluator
 	}

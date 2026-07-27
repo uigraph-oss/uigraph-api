@@ -257,9 +257,6 @@ func (h *Handler) SyncRuns(w http.ResponseWriter, r *http.Request) {
 		if in[i].StartedAt == nil {
 			in[i].StartedAt = &now
 		}
-		if in[i].EndedAt == nil {
-			in[i].EndedAt = &now
-		}
 	}
 	if err := h.store.UpsertMLRuns(r.Context(), orgID, p.UserID, in); err != nil {
 		writeErr(w, r, err)
@@ -316,9 +313,6 @@ func (h *Handler) SyncEvaluations(w http.ResponseWriter, r *http.Request) {
 	for i := range in {
 		if in[i].StartedAt == nil {
 			in[i].StartedAt = &now
-		}
-		if in[i].EndedAt == nil {
-			in[i].EndedAt = &now
 		}
 	}
 	if err := h.store.UpsertMLEvaluations(r.Context(), orgID, p.UserID, in); err != nil {

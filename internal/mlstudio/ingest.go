@@ -51,13 +51,12 @@ type ModelVersionInput struct {
 }
 
 type ExperimentInput struct {
-	MLflowID    string     `json:"mlflowId"`
-	ProjectName string     `json:"projectName"`
-	Name        string     `json:"name"`
-	Description string     `json:"description"`
-	Status      string     `json:"status"`
-	Tags        []string   `json:"tags"`
-	StartedAt   *time.Time `json:"startedAt"`
+	MLflowID    string   `json:"mlflowId"`
+	ProjectName string   `json:"projectName"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Status      string   `json:"status"`
+	Tags        []string `json:"tags"`
 }
 
 type RunInput struct {

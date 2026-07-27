@@ -78,7 +78,6 @@ type Experiment struct {
 	Description string     `json:"description"`
 	Status      string     `json:"status"`
 	Tags        []string   `json:"tags"`
-	StartedAt   *time.Time `json:"startedAt,omitempty"`
 	Source      string     `json:"source"`
 	CreatedBy   string     `json:"createdBy,omitempty"`
 	CreatedAt   *time.Time `json:"createdAt,omitempty"`
@@ -94,7 +93,7 @@ type Run struct {
 	Name         string         `json:"name"`
 	Status       string         `json:"status"`
 	StartedAt    time.Time      `json:"startedAt"`
-	EndedAt      time.Time      `json:"endedAt"`
+	EndedAt      *time.Time     `json:"endedAt,omitempty"`
 	Notes        string         `json:"notes"`
 	Parameters   map[string]any `json:"parameters"`
 	Metrics      map[string]any `json:"metrics"`
@@ -199,7 +198,7 @@ type Evaluation struct {
 	Description  string         `json:"description"`
 	Summary      string         `json:"summary"`
 	StartedAt    time.Time      `json:"startedAt"`
-	EndedAt      time.Time      `json:"endedAt"`
+	EndedAt      *time.Time     `json:"endedAt,omitempty"`
 	Evaluator    string         `json:"evaluator"`
 	Source       string         `json:"source"`
 	CreatedBy    *string        `json:"createdBy,omitempty"`
