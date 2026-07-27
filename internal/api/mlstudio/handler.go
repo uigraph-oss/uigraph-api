@@ -1,0 +1,146 @@
+package mlstudio
+
+import (
+	"errors"
+	"net/http"
+
+	"github.com/lib/pq"
+
+	"github.com/uigraph/app/internal/httputil"
+	"github.com/uigraph/app/internal/identity"
+	authmw "github.com/uigraph/app/internal/middleware"
+	"github.com/uigraph/app/internal/mlstudio"
+	"github.com/uigraph/app/internal/storage"
+	storepkg "github.com/uigraph/app/internal/store"
+)
+
+type Handler struct {
+	store   mlstudio.Store
+	storage storage.Client
+}
+
+func New(s mlstudio.Store, st storage.Client) *Handler {
+	return &Handler{store: s, storage: st}
+}
+
+func Register(
+	mux *http.ServeMux,
+	s mlstudio.Store,
+	st storage.Client,
+	requireScope func(scope, method, pattern string, h http.HandlerFunc),
+) {
+	h := New(s, st)
+	const base = "/api/v1/orgs/{orgID}/ml"
+
+	requireScope("mlstudio:write", "POST", base+"/projects/sync", h.SyncProjects)
+	requireScope("mlstudio:write", "POST", base+"/projects", h.CreateProject)
+	requireScope("mlstudio:read", "GET", base+"/projects", h.ListProjects)
+	requireScope("mlstudio:read", "GET", base+"/projects/{projectId}", h.GetProject)
+	requireScope("mlstudio:write", "PUT", base+"/projects/{projectId}", h.UpdateProject)
+	requireScope("mlstudio:write", "DELETE", base+"/projects/{projectId}", h.DeleteProject)
+
+	requireScope("mlstudio:write", "POST", base+"/models/sync", h.SyncModels)
+	requireScope("mlstudio:write", "POST", base+"/versions/sync", h.SyncVersions)
+	requireScope("mlstudio:write", "POST", base+"/experiments/sync", h.SyncExperiments)
+	requireScope("mlstudio:write", "POST", base+"/runs/sync", h.SyncRuns)
+	requireScope("mlstudio:write", "POST", base+"/artifacts/sync", h.SyncArtifacts)
+	requireScope("mlstudio:write", "POST", base+"/datasets/sync", h.SyncDatasets)
+	requireScope("mlstudio:write", "POST", base+"/evaluations/sync", h.SyncEvaluations)
+
+	requireScope("mlstudio:write", "POST", base+"/models", h.CreateModel)
+	requireScope("mlstudio:write", "PATCH", base+"/models/{modelId}", h.UpdateModel)
+	requireScope("mlstudio:write", "PUT", base+"/models/{modelId}", h.UpdateModelInfo)
+	requireScope("mlstudio:write", "DELETE", base+"/models/{modelId}", h.DeleteModel)
+
+	requireScope("mlstudio:read", "GET", base+"/models", h.ListModels)
+	requireScope("mlstudio:read", "GET", base+"/models/{modelId}", h.GetModel)
+	requireScope("mlstudio:read", "GET", base+"/models/{modelId}/versions", h.ListVersions)
+	requireScope("mlstudio:read", "GET", base+"/versions", h.ListAllVersions)
+	requireScope("mlstudio:read", "GET", base+"/versions/explore", h.ListVersionsExplore)
+	requireScope("mlstudio:read", "GET", base+"/deployment-updates", h.ListVersionDeploymentUpdates)
+	requireScope("mlstudio:read", "GET", base+"/runs", h.ListAllRuns)
+	requireScope("mlstudio:read", "GET", base+"/artifacts", h.ListAllArtifacts)
+	requireScope("mlstudio:read", "GET", base+"/versions/{versionId}", h.GetVersion)
+	requireScope("mlstudio:read", "GET", base+"/evaluations", h.ListAllEvaluations)
+	requireScope("mlstudio:read", "GET", base+"/versions/{versionId}/evaluations", h.ListVersionEvaluations)
+	requireScope("mlstudio:read", "GET", base+"/experiments/{experimentId}/evaluations", h.ListExperimentEvaluations)
+	requireScope("mlstudio:read", "GET", base+"/evaluations/{evaluationId}", h.GetEvaluation)
+	requireScope("mlstudio:write", "PUT", base+"/versions/{versionId}/run", h.SetVersionRun)
+	requireScope("mlstudio:write", "PUT", base+"/versions/{versionId}/evaluations", h.LinkVersionEvaluations)
+	requireScope("mlstudio:write", "POST", base+"/versions/{versionId}/deployment-updates", h.CreateVersionDeploymentUpdate)
+	requireScope("mlstudio:read", "GET", base+"/versions/{versionId}/deployment-updates", h.ListVersionDeploymentUpdates)
+	requireScope("mlstudio:write", "POST", base+"/experiments", h.CreateExperiment)
+	requireScope("mlstudio:read", "GET", base+"/experiments", h.ListExperiments)
+	requireScope("mlstudio:read", "GET", base+"/experiments/{experimentId}", h.GetExperiment)
+	requireScope("mlstudio:write", "PUT", base+"/experiments/{experimentId}", h.UpdateExperiment)
+	requireScope("mlstudio:write", "DELETE", base+"/experiments/{experimentId}", h.DeleteExperiment)
+	requireScope("mlstudio:write", "POST", base+"/experiments/{experimentId}/runs", h.CreateRun)
+	requireScope("mlstudio:read", "GET", base+"/experiments/{experimentId}/runs", h.ListRuns)
+	requireScope("mlstudio:read", "GET", base+"/runs/{runId}", h.GetRun)
+	requireScope("mlstudio:write", "PUT", base+"/runs/{runId}", h.UpdateRun)
+	requireScope("mlstudio:write", "DELETE", base+"/runs/{runId}", h.DeleteRun)
+	requireScope("mlstudio:read", "GET", base+"/runs/{runId}/artifacts", h.ListRunArtifacts)
+	requireScope("mlstudio:write", "POST", base+"/runs/{runId}/artifacts", h.CreateArtifact)
+	requireScope("mlstudio:write", "POST", base+"/runs/{runId}/artifacts/upload", h.UploadArtifact)
+	requireScope("mlstudio:write", "PUT", base+"/artifacts/{artifactId}", h.UpdateArtifact)
+	requireScope("mlstudio:write", "DELETE", base+"/artifacts/{artifactId}", h.DeleteArtifact)
+	requireScope("mlstudio:write", "POST", base+"/experiments/{experimentId}/datasets", h.CreateDataset)
+	requireScope("mlstudio:read", "GET", base+"/datasets", h.ListDatasets)
+	requireScope("mlstudio:read", "GET", base+"/datasets/{datasetId}", h.GetDataset)
+	requireScope("mlstudio:write", "PUT", base+"/datasets/{datasetId}", h.UpdateDataset)
+	requireScope("mlstudio:write", "DELETE", base+"/datasets/{datasetId}", h.DeleteDataset)
+	requireScope("mlstudio:write", "POST", base+"/experiments/{experimentId}/evaluations", h.CreateEvaluation)
+	requireScope("mlstudio:write", "PUT", base+"/evaluations/{evaluationId}", h.UpdateEvaluation)
+	requireScope("mlstudio:write", "DELETE", base+"/evaluations/{evaluationId}", h.DeleteEvaluation)
+
+	requireScope("mlstudio:write", "POST", base+"/deployments", h.CreateDeployment)
+	requireScope("mlstudio:read", "GET", base+"/deployments", h.ListDeployments)
+	requireScope("mlstudio:read", "GET", base+"/deployments/{deploymentId}", h.GetDeployment)
+	requireScope("mlstudio:write", "PUT", base+"/deployments/{deploymentId}", h.UpdateDeployment)
+	requireScope("mlstudio:write", "DELETE", base+"/deployments/{deploymentId}", h.DeleteDeployment)
+
+	requireScope("mlstudio:write", "POST", base+"/findings", h.CreateFinding)
+	requireScope("mlstudio:read", "GET", base+"/findings", h.ListFindings)
+	requireScope("mlstudio:read", "GET", base+"/findings/{findingId}", h.GetFinding)
+	requireScope("mlstudio:write", "PUT", base+"/findings/{findingId}", h.UpdateFinding)
+	requireScope("mlstudio:write", "DELETE", base+"/findings/{findingId}", h.DeleteFinding)
+}
+
+func (h *Handler) authorizeOrg(w http.ResponseWriter, r *http.Request) (identity.Principal, string, bool) {
+	p, ok := authmw.PrincipalFromCtx(r.Context())
+	if !ok {
+		httputil.Unauthorized(w)
+		return identity.Principal{}, "", false
+	}
+	orgID := r.PathValue("orgID")
+	if p.Kind == identity.PrincipalServiceAccount && p.OrgID != orgID {
+		httputil.Forbidden(w)
+		return identity.Principal{}, "", false
+	}
+	return p, orgID, true
+}
+
+func writeErr(w http.ResponseWriter, r *http.Request, err error) {
+	if errors.Is(err, mlstudio.ErrParentNotFound) {
+		httputil.BadRequest(w, err.Error())
+		return
+	}
+	if errors.Is(err, mlstudio.ErrUnknownUser) {
+		httputil.BadRequest(w, err.Error())
+		return
+	}
+	if errors.Is(err, mlstudio.ErrInvalidValue) {
+		httputil.BadRequest(w, err.Error())
+		return
+	}
+	if errors.Is(err, storepkg.ErrTeamNotFound) {
+		httputil.BadRequest(w, err.Error())
+		return
+	}
+	var pqErr *pq.Error
+	if errors.As(err, &pqErr) && (pqErr.Code == "23514" || pqErr.Code == "23503") {
+		httputil.BadRequest(w, pqErr.Message)
+		return
+	}
+	httputil.Error(w, r, err)
+}

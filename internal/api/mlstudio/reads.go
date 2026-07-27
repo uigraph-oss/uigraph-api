@@ -1,0 +1,388 @@
+package mlstudio
+
+import (
+	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/uigraph/app/internal/httputil"
+	"github.com/uigraph/app/internal/mlstudio"
+	storepkg "github.com/uigraph/app/internal/store"
+)
+
+// artifactPresignTTL is how long a minted artifact download URL is valid.
+const artifactPresignTTL = time.Hour
+
+// presignArtifactDownload fills in DownloadURI for an uploaded artifact. Rows
+// synced from MLflow and rows added as a link already carry their own URI and
+// have no storage key, so they are left alone. A presign failure is not fatal:
+// the rest of the artifact is still worth returning, just without a link.
+func (h *Handler) presignArtifactDownload(r *http.Request, a *mlstudio.Artifact) {
+	if a.StorageKey == "" {
+		return
+	}
+	url, err := h.storage.PresignURL(r.Context(), a.StorageKey, artifactPresignTTL)
+	if err != nil {
+		return
+	}
+	a.DownloadURI = url
+}
+
+func (h *Handler) presignArtifactDownloads(r *http.Request, artifacts []mlstudio.Artifact) {
+	for i := range artifacts {
+		h.presignArtifactDownload(r, &artifacts[i])
+	}
+}
+
+func parseIntDefault(s string, def int) int {
+	if s == "" {
+		return def
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return def
+	}
+	return n
+}
+
+func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
+	_, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	projects, err := h.store.ListMLProjects(r.Context(), orgID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{"projects": projects})
+}
+
+func (h *Handler) GetProject(w http.ResponseWriter, r *http.Request) {
+	_, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	p, err := h.store.GetMLProject(r.Context(), orgID, r.PathValue("projectId"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if p == nil {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, p)
+}
+
+func (h *Handler) ListModels(w http.ResponseWriter, r *http.Request) {
+	_, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	models, err := h.store.ListMLModels(r.Context(), orgID, r.URL.Query().Get("projectId"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{"models": models})
+}
+
+func (h *Handler) GetModel(w http.ResponseWriter, r *http.Request) {
+	_, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	m, err := h.store.GetMLModel(r.Context(), orgID, r.PathValue("modelId"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if m == nil {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, m)
+}
+
+func (h *Handler) ListVersions(w http.ResponseWriter, r *http.Request) {
+	_, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	versions, err := h.store.ListMLModelVersions(r.Context(), orgID, r.PathValue("modelId"), r.URL.Query().Get("projectId"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{"versions": versions})
+}
+
+func (h *Handler) ListAllVersions(w http.ResponseWriter, r *http.Request) {
+	_, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	versions, err := h.store.ListMLModelVersions(r.Context(), orgID, r.URL.Query().Get("modelId"), r.URL.Query().Get("projectId"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{"versions": versions})
+}
+
+func (h *Handler) ListVersionsExplore(w http.ResponseWriter, r *http.Request) {
+	_, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	q := mlstudio.ModelVersionQuery{
+		TeamID:    r.URL.Query().Get("teamId"),
+		ProjectID: r.URL.Query().Get("projectId"),
+		ModelID:   r.URL.Query().Get("modelId"),
+		Search:    r.URL.Query().Get("search"),
+		Limit:     parseIntDefault(r.URL.Query().Get("limit"), 0),
+		Offset:    parseIntDefault(r.URL.Query().Get("offset"), 0),
+	}
+	items, total, err := h.store.ListMLModelVersionsExplore(r.Context(), orgID, q)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{"items": items, "total": total})
+}
+
+func (h *Handler) ListAllRuns(w http.ResponseWriter, r *http.Request) {
+	_, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	q := mlstudio.RunQuery{
+		ExperimentID: r.URL.Query().Get("experimentId"),
+		ProjectID:    r.URL.Query().Get("projectId"),
+		Search:       r.URL.Query().Get("search"),
+		Limit:        parseIntDefault(r.URL.Query().Get("limit"), 0),
+		Offset:       parseIntDefault(r.URL.Query().Get("offset"), 0),
+	}
+	runs, total, err := h.store.ListMLRuns(r.Context(), orgID, q)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{"runs": runs, "total": total})
+}
+
+func (h *Handler) ListAllArtifacts(w http.ResponseWriter, r *http.Request) {
+	_, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	artifacts, err := h.store.ListMLArtifacts(r.Context(), orgID, r.URL.Query().Get("runId"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	h.presignArtifactDownloads(r, artifacts)
+	httputil.JSON(w, http.StatusOK, map[string]any{"artifacts": artifacts})
+}
+
+func (h *Handler) GetVersion(w http.ResponseWriter, r *http.Request) {
+	_, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	v, err := h.store.GetMLModelVersion(r.Context(), orgID, r.PathValue("versionId"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if v == nil {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, v)
+}
+
+func (h *Handler) ListAllEvaluations(w http.ResponseWriter, r *http.Request) {
+	_, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	q := mlstudio.EvaluationQuery{
+		ExperimentID: r.URL.Query().Get("experimentId"),
+		ProjectID:    r.URL.Query().Get("projectId"),
+		Search:       r.URL.Query().Get("search"),
+		Limit:        parseIntDefault(r.URL.Query().Get("limit"), 0),
+		Offset:       parseIntDefault(r.URL.Query().Get("offset"), 0),
+	}
+	evals, total, err := h.store.ListMLEvaluations(r.Context(), orgID, q)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{"evaluations": evals, "total": total})
+}
+
+func (h *Handler) ListVersionEvaluations(w http.ResponseWriter, r *http.Request) {
+	_, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	q := mlstudio.EvaluationQuery{
+		Search: r.URL.Query().Get("search"),
+		Limit:  parseIntDefault(r.URL.Query().Get("limit"), 0),
+		Offset: parseIntDefault(r.URL.Query().Get("offset"), 0),
+	}
+	evals, total, err := h.store.ListMLVersionEvaluations(r.Context(), orgID, r.PathValue("versionId"), q)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{"evaluations": evals, "total": total})
+}
+
+func (h *Handler) ListExperimentEvaluations(w http.ResponseWriter, r *http.Request) {
+	_, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	q := mlstudio.EvaluationQuery{
+		Search: r.URL.Query().Get("search"),
+		Limit:  parseIntDefault(r.URL.Query().Get("limit"), 0),
+		Offset: parseIntDefault(r.URL.Query().Get("offset"), 0),
+	}
+	evals, total, err := h.store.ListMLExperimentEvaluations(r.Context(), orgID, r.PathValue("experimentId"), q)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{"evaluations": evals, "total": total})
+}
+
+func (h *Handler) GetEvaluation(w http.ResponseWriter, r *http.Request) {
+	_, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	e, err := h.store.GetMLEvaluation(r.Context(), orgID, r.PathValue("evaluationId"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if e == nil {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, e)
+}
+
+func (h *Handler) ListExperiments(w http.ResponseWriter, r *http.Request) {
+	_, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	experiments, err := h.store.ListMLExperiments(r.Context(), orgID, r.URL.Query().Get("projectId"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{"experiments": experiments})
+}
+
+func (h *Handler) GetExperiment(w http.ResponseWriter, r *http.Request) {
+	_, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	e, err := h.store.GetMLExperiment(r.Context(), orgID, r.PathValue("experimentId"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if e == nil {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, e)
+}
+
+func (h *Handler) ListRuns(w http.ResponseWriter, r *http.Request) {
+	_, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	q := mlstudio.RunQuery{
+		ExperimentID: r.PathValue("experimentId"),
+		ProjectID:    r.URL.Query().Get("projectId"),
+		Search:       r.URL.Query().Get("search"),
+		Limit:        parseIntDefault(r.URL.Query().Get("limit"), 0),
+		Offset:       parseIntDefault(r.URL.Query().Get("offset"), 0),
+	}
+	runs, total, err := h.store.ListMLRuns(r.Context(), orgID, q)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{"runs": runs, "total": total})
+}
+
+func (h *Handler) GetRun(w http.ResponseWriter, r *http.Request) {
+	_, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	run, err := h.store.GetMLRun(r.Context(), orgID, r.PathValue("runId"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if run == nil {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, run)
+}
+
+func (h *Handler) ListRunArtifacts(w http.ResponseWriter, r *http.Request) {
+	_, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	artifacts, err := h.store.ListMLArtifacts(r.Context(), orgID, r.PathValue("runId"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	h.presignArtifactDownloads(r, artifacts)
+	httputil.JSON(w, http.StatusOK, map[string]any{"artifacts": artifacts})
+}
+
+func (h *Handler) ListDatasets(w http.ResponseWriter, r *http.Request) {
+	_, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	datasets, err := h.store.ListMLDatasets(r.Context(), orgID, r.URL.Query().Get("experimentId"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{"datasets": datasets})
+}
+
+func (h *Handler) GetDataset(w http.ResponseWriter, r *http.Request) {
+	_, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	ds, err := h.store.GetMLDataset(r.Context(), orgID, r.PathValue("datasetId"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if ds == nil {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, ds)
+}

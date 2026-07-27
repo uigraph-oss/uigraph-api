@@ -75,11 +75,10 @@ type ServiceDependency struct {
 
 type ServiceDependencyEdge struct {
 	ServiceDependency
-	Consumer         *Service `json:"consumer,omitempty"`
-	Provider         *Service `json:"provider,omitempty"`
-	Direction        string   `json:"direction"`
+	Consumer  *Service `json:"consumer,omitempty"`
+	Provider  *Service `json:"provider,omitempty"`
+	Direction string   `json:"direction"`
 }
-
 
 // ── API Group ─────────────────────────────────────────────────────────────────
 

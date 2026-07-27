@@ -1,0 +1,76 @@
+package mlstudio
+
+import "context"
+
+type Store interface {
+	UpsertMLProjects(ctx context.Context, orgID, actorID string, in []ProjectInput) error
+	CreateMLProject(ctx context.Context, orgID, actorID string, in ProjectInput) (*Project, error)
+	ListMLProjects(ctx context.Context, orgID string) ([]Project, error)
+	GetMLProject(ctx context.Context, orgID, id string) (*Project, error)
+	UpdateMLProject(ctx context.Context, orgID, id, actorID string, in ProjectInput) (*Project, error)
+	DeleteMLProject(ctx context.Context, orgID, id, actorID string) error
+
+	UpsertMLModels(ctx context.Context, orgID, actorID string, in []ModelInput) error
+	CreateMLModel(ctx context.Context, m Model) error
+	UpdateMLModel(ctx context.Context, orgID, id, actorID string, in ModelUpdateInput) error
+	UpdateMLModelInfo(ctx context.Context, m Model) error
+	DeleteMLModel(ctx context.Context, orgID, id, deletedBy string) error
+	UpsertMLModelVersions(ctx context.Context, orgID, actorID string, in []ModelVersionInput) error
+	CreateMLModelVersion(ctx context.Context, v ModelVersion) error
+	SetMLModelVersionRun(ctx context.Context, orgID, versionID string, runID *string, actorID string) error
+	UpsertMLExperiments(ctx context.Context, orgID, actorID string, in []ExperimentInput) error
+	UpsertMLRuns(ctx context.Context, orgID, actorID string, in []RunInput) error
+	UpsertMLArtifacts(ctx context.Context, orgID, actorID string, in []ArtifactInput) error
+	UpsertMLDatasets(ctx context.Context, orgID, actorID string, in []DatasetInput) error
+	UpsertMLEvaluations(ctx context.Context, orgID, actorID string, in []EvaluationInput) error
+	ResolveOrgUserIDsByEmail(ctx context.Context, orgID string, emails []string) (map[string]string, error)
+
+	ListMLModels(ctx context.Context, orgID, projectID string) ([]Model, error)
+	GetMLModel(ctx context.Context, orgID, id string) (*Model, error)
+	ListMLModelVersions(ctx context.Context, orgID, modelID, projectID string) ([]ModelVersion, error)
+	ListMLModelVersionsExplore(ctx context.Context, orgID string, q ModelVersionQuery) ([]ModelVersionExploreItem, int, error)
+	GetMLModelVersion(ctx context.Context, orgID, id string) (*ModelVersion, error)
+	ListMLExperiments(ctx context.Context, orgID, projectID string) ([]Experiment, error)
+	GetMLExperiment(ctx context.Context, orgID, id string) (*Experiment, error)
+	CreateMLExperiment(ctx context.Context, e Experiment) error
+	UpdateMLExperiment(ctx context.Context, e Experiment) error
+	DeleteMLExperiment(ctx context.Context, orgID, id, deletedBy string) error
+	ListMLRuns(ctx context.Context, orgID string, q RunQuery) ([]Run, int, error)
+	GetMLRun(ctx context.Context, orgID, id string) (*Run, error)
+	CreateMLRun(ctx context.Context, run Run) error
+	UpdateMLRun(ctx context.Context, run Run) error
+	DeleteMLRun(ctx context.Context, orgID, id, deletedBy string) error
+	ListMLArtifacts(ctx context.Context, orgID, runID string) ([]Artifact, error)
+	GetMLArtifact(ctx context.Context, orgID, id string) (*Artifact, error)
+	CreateMLArtifact(ctx context.Context, a Artifact) error
+	UpdateMLArtifact(ctx context.Context, a Artifact) error
+	DeleteMLArtifact(ctx context.Context, orgID, id, deletedBy string) error
+	ListMLDatasets(ctx context.Context, orgID, experimentID string) ([]Dataset, error)
+	GetMLDataset(ctx context.Context, orgID, id string) (*Dataset, error)
+	CreateMLDataset(ctx context.Context, ds Dataset) error
+	UpdateMLDataset(ctx context.Context, ds Dataset) error
+	DeleteMLDataset(ctx context.Context, orgID, id, deletedBy string) error
+	ListMLEvaluations(ctx context.Context, orgID string, q EvaluationQuery) ([]Evaluation, int, error)
+	ListMLVersionEvaluations(ctx context.Context, orgID, versionID string, q EvaluationQuery) ([]Evaluation, int, error)
+	ListMLExperimentEvaluations(ctx context.Context, orgID, experimentID string, q EvaluationQuery) ([]Evaluation, int, error)
+	GetMLEvaluation(ctx context.Context, orgID, id string) (*Evaluation, error)
+	CreateMLEvaluation(ctx context.Context, eval Evaluation) error
+	UpdateMLEvaluation(ctx context.Context, eval Evaluation) error
+	DeleteMLEvaluation(ctx context.Context, orgID, id, deletedBy string) error
+	SetMLEvaluationsVersion(ctx context.Context, orgID, versionID string, evaluationIDs []string, actorID string) error
+
+	CreateVersionDeploymentUpdate(ctx context.Context, u VersionDeploymentUpdate) error
+	ListVersionDeploymentUpdates(ctx context.Context, orgID, versionID, projectID string) ([]VersionDeploymentUpdate, error)
+
+	CreateMLDeployment(ctx context.Context, d Deployment) error
+	GetMLDeployment(ctx context.Context, orgID, id string) (*Deployment, error)
+	ListMLDeployments(ctx context.Context, orgID, modelID, versionID string) ([]Deployment, error)
+	UpdateMLDeployment(ctx context.Context, d Deployment) error
+	DeleteMLDeployment(ctx context.Context, orgID, id, deletedBy string) error
+
+	CreateMLFinding(ctx context.Context, f Finding) error
+	GetMLFinding(ctx context.Context, orgID, id string) (*Finding, error)
+	ListMLFindings(ctx context.Context, orgID, modelID, projectID string) ([]Finding, error)
+	UpdateMLFinding(ctx context.Context, f Finding) error
+	DeleteMLFinding(ctx context.Context, orgID, id, deletedBy string) error
+}
