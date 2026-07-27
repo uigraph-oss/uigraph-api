@@ -102,6 +102,155 @@ func (d *DB) ListMLModelVersions(ctx context.Context, orgID, modelID, projectID 
 	return out, rows.Err()
 }
 
+func (d *DB) ListMLModelVersionsExplore(ctx context.Context, orgID string, q mlstudio.ModelVersionQuery) ([]mlstudio.ModelVersionExploreItem, int, error) {
+	where := ` FROM ml_model_versions WHERE org_id=$1 AND deleted_at IS NULL`
+	args := []any{orgID}
+	if q.ModelID != "" {
+		args = append(args, q.ModelID)
+		where += fmt.Sprintf(" AND model_id=$%d", len(args))
+	}
+	if q.ProjectID != "" {
+		args = append(args, q.ProjectID)
+		where += fmt.Sprintf(" AND model_id IN (SELECT id FROM ml_models WHERE project_id=$%d)", len(args))
+	}
+	if q.TeamID != "" {
+		args = append(args, q.TeamID)
+		where += fmt.Sprintf(" AND model_id IN (SELECT id FROM ml_models WHERE project_id IN (SELECT id FROM ml_projects WHERE team_id=$%d))", len(args))
+	}
+	if q.Search != "" {
+		args = append(args, "%"+q.Search+"%")
+		where += fmt.Sprintf(" AND (version ILIKE $%d OR description ILIKE $%d OR model_id IN (SELECT id FROM ml_models WHERE name ILIKE $%d))", len(args), len(args), len(args))
+	}
+
+	var total int
+	if err := d.db.QueryRowContext(ctx, `SELECT COUNT(*)`+where, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("postgres: ListMLModelVersionsExplore count: %w", err)
+	}
+
+	sel := `SELECT ` + mlVersionCols + where +
+		` ORDER BY (SELECT name FROM ml_models WHERE id = model_id) ASC,` +
+		` NULLIF(regexp_replace(version, '\D', '', 'g'), '')::bigint DESC NULLS LAST,` +
+		` version DESC`
+	if q.Limit > 0 {
+		args = append(args, q.Limit)
+		sel += fmt.Sprintf(" LIMIT $%d", len(args))
+	}
+	if q.Offset > 0 {
+		args = append(args, q.Offset)
+		sel += fmt.Sprintf(" OFFSET $%d", len(args))
+	}
+
+	rows, err := d.db.QueryContext(ctx, sel, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("postgres: ListMLModelVersionsExplore: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []mlstudio.ModelVersionExploreItem
+	var modelIDs []string
+	for rows.Next() {
+		v, err := scanMLModelVersion(rows)
+		if err != nil {
+			return nil, 0, fmt.Errorf("postgres: ListMLModelVersionsExplore scan: %w", err)
+		}
+		out = append(out, mlstudio.ModelVersionExploreItem{ModelVersion: v})
+		modelIDs = append(modelIDs, v.ModelID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	if len(out) == 0 {
+		return out, total, nil
+	}
+
+	models := map[string]mlstudio.Model{}
+	modelRows, err := d.db.QueryContext(ctx, `SELECT `+mlModelCols+` FROM ml_models WHERE id = ANY($1)`, pq.Array(modelIDs))
+	if err != nil {
+		return nil, 0, fmt.Errorf("postgres: ListMLModelVersionsExplore models: %w", err)
+	}
+	defer func() { _ = modelRows.Close() }()
+	var projectIDs []string
+	for modelRows.Next() {
+		m, err := scanMLModel(modelRows)
+		if err != nil {
+			return nil, 0, fmt.Errorf("postgres: ListMLModelVersionsExplore models scan: %w", err)
+		}
+		models[m.ID] = m
+		if m.ProjectID != nil {
+			projectIDs = append(projectIDs, *m.ProjectID)
+		}
+	}
+	if err := modelRows.Err(); err != nil {
+		return nil, 0, err
+	}
+
+	projects := map[string]mlstudio.Project{}
+	teams := map[string]mlstudio.TeamRef{}
+	if len(projectIDs) > 0 {
+		projectRows, err := d.db.QueryContext(ctx, `SELECT `+mlProjectCols+` FROM ml_projects WHERE id = ANY($1)`, pq.Array(projectIDs))
+		if err != nil {
+			return nil, 0, fmt.Errorf("postgres: ListMLModelVersionsExplore projects: %w", err)
+		}
+		defer func() { _ = projectRows.Close() }()
+		var teamIDs []string
+		for projectRows.Next() {
+			p, err := scanMLProject(projectRows)
+			if err != nil {
+				return nil, 0, fmt.Errorf("postgres: ListMLModelVersionsExplore projects scan: %w", err)
+			}
+			projects[p.ID] = p
+			if p.TeamID != nil {
+				teamIDs = append(teamIDs, *p.TeamID)
+			}
+		}
+		if err := projectRows.Err(); err != nil {
+			return nil, 0, err
+		}
+
+		if len(teamIDs) > 0 {
+			teamRows, err := d.db.QueryContext(ctx, `SELECT id, name FROM teams WHERE id = ANY($1)`, pq.Array(teamIDs))
+			if err != nil {
+				return nil, 0, fmt.Errorf("postgres: ListMLModelVersionsExplore teams: %w", err)
+			}
+			defer func() { _ = teamRows.Close() }()
+			for teamRows.Next() {
+				var t mlstudio.TeamRef
+				if err := teamRows.Scan(&t.ID, &t.Name); err != nil {
+					return nil, 0, fmt.Errorf("postgres: ListMLModelVersionsExplore teams scan: %w", err)
+				}
+				teams[t.ID] = t
+			}
+			if err := teamRows.Err(); err != nil {
+				return nil, 0, err
+			}
+		}
+	}
+
+	for i := range out {
+		model, ok := models[out[i].ModelID]
+		if !ok {
+			return nil, 0, fmt.Errorf("postgres: ListMLModelVersionsExplore: model %s not found for version %s", out[i].ModelID, out[i].ID)
+		}
+		out[i].Model = model
+		if model.ProjectID == nil {
+			continue
+		}
+		project, ok := projects[*model.ProjectID]
+		if !ok {
+			continue
+		}
+		out[i].Project = &project
+		if project.TeamID == nil {
+			continue
+		}
+		team, ok := teams[*project.TeamID]
+		if !ok {
+			continue
+		}
+		out[i].Team = &team
+	}
+	return out, total, nil
+}
+
 func (d *DB) GetMLModelVersion(ctx context.Context, orgID, id string) (*mlstudio.ModelVersion, error) {
 	v, err := scanMLModelVersion(d.db.QueryRowContext(ctx, `SELECT `+mlVersionCols+` FROM ml_model_versions WHERE org_id=$1 AND id=$2 AND deleted_at IS NULL`, orgID, id))
 	if errors.Is(err, sql.ErrNoRows) {

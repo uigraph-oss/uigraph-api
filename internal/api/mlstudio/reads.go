@@ -106,6 +106,27 @@ func (h *Handler) ListAllVersions(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"versions": versions})
 }
 
+func (h *Handler) ListVersionsExplore(w http.ResponseWriter, r *http.Request) {
+	_, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	q := mlstudio.ModelVersionQuery{
+		TeamID:    r.URL.Query().Get("teamId"),
+		ProjectID: r.URL.Query().Get("projectId"),
+		ModelID:   r.URL.Query().Get("modelId"),
+		Search:    r.URL.Query().Get("search"),
+		Limit:     parseIntDefault(r.URL.Query().Get("limit"), 0),
+		Offset:    parseIntDefault(r.URL.Query().Get("offset"), 0),
+	}
+	items, total, err := h.store.ListMLModelVersionsExplore(r.Context(), orgID, q)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{"items": items, "total": total})
+}
+
 func (h *Handler) ListAllRuns(w http.ResponseWriter, r *http.Request) {
 	_, orgID, ok := h.authorizeOrg(w, r)
 	if !ok {

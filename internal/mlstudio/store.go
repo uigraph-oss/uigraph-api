@@ -27,6 +27,7 @@ type Store interface {
 	ListMLModels(ctx context.Context, orgID, projectID string) ([]Model, error)
 	GetMLModel(ctx context.Context, orgID, id string) (*Model, error)
 	ListMLModelVersions(ctx context.Context, orgID, modelID, projectID string) ([]ModelVersion, error)
+	ListMLModelVersionsExplore(ctx context.Context, orgID string, q ModelVersionQuery) ([]ModelVersionExploreItem, int, error)
 	GetMLModelVersion(ctx context.Context, orgID, id string) (*ModelVersion, error)
 	ListMLExperiments(ctx context.Context, orgID, projectID string) ([]Experiment, error)
 	GetMLExperiment(ctx context.Context, orgID, id string) (*Experiment, error)

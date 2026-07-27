@@ -123,6 +123,27 @@ type EvaluationQuery struct {
 	Offset       int
 }
 
+type ModelVersionQuery struct {
+	TeamID    string
+	ProjectID string
+	ModelID   string
+	Search    string
+	Limit     int
+	Offset    int
+}
+
+type TeamRef struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+type ModelVersionExploreItem struct {
+	ModelVersion
+	Model   Model    `json:"model"`
+	Project *Project `json:"project,omitempty"`
+	Team    *TeamRef `json:"team,omitempty"`
+}
+
 type Artifact struct {
 	ID          string     `json:"id"`
 	OrgID       string     `json:"orgId"`
