@@ -117,6 +117,9 @@ func (d *DB) CreateMLFinding(ctx context.Context, f mlstudio.Finding) error {
 	if err := replaceMLFindingRuns(ctx, tx, f.ID, f.RunIDs); err != nil {
 		return err
 	}
+	if err := replaceMLFindingEvaluations(ctx, tx, f.ID, f.EvaluationIDs); err != nil {
+		return err
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("postgres: CreateMLFinding commit: %w", err)
 	}
@@ -131,6 +134,19 @@ func replaceMLFindingRuns(ctx context.Context, tx *sql.Tx, findingID string, run
 		_, err := tx.ExecContext(ctx, `INSERT INTO ml_finding_runs (finding_id, run_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, findingID, runID)
 		if err != nil {
 			return fmt.Errorf("postgres: replaceMLFindingRuns insert: %w", err)
+		}
+	}
+	return nil
+}
+
+func replaceMLFindingEvaluations(ctx context.Context, tx *sql.Tx, findingID string, evaluationIDs []string) error {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM ml_finding_evaluations WHERE finding_id=$1`, findingID); err != nil {
+		return fmt.Errorf("postgres: replaceMLFindingEvaluations clear: %w", err)
+	}
+	for _, evaluationID := range evaluationIDs {
+		_, err := tx.ExecContext(ctx, `INSERT INTO ml_finding_evaluations (finding_id, evaluation_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, findingID, evaluationID)
+		if err != nil {
+			return fmt.Errorf("postgres: replaceMLFindingEvaluations insert: %w", err)
 		}
 	}
 	return nil
@@ -151,6 +167,11 @@ func (d *DB) GetMLFinding(ctx context.Context, orgID, id string) (*mlstudio.Find
 		return nil, err
 	}
 	f.RunIDs = runIDs
+	evaluationIDs, err := d.listMLFindingEvaluationIDs(ctx, f.ID)
+	if err != nil {
+		return nil, err
+	}
+	f.EvaluationIDs = evaluationIDs
 	return &f, nil
 }
 
@@ -176,6 +197,23 @@ func (d *DB) listMLFindingRunIDs(ctx context.Context, findingID string) ([]strin
 			return nil, fmt.Errorf("postgres: listMLFindingRunIDs scan: %w", err)
 		}
 		out = append(out, runID)
+	}
+	return out, rows.Err()
+}
+
+func (d *DB) listMLFindingEvaluationIDs(ctx context.Context, findingID string) ([]string, error) {
+	rows, err := d.db.QueryContext(ctx, `SELECT evaluation_id FROM ml_finding_evaluations WHERE finding_id=$1 ORDER BY evaluation_id ASC`, findingID)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: listMLFindingEvaluationIDs: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := []string{}
+	for rows.Next() {
+		var evaluationID string
+		if err := rows.Scan(&evaluationID); err != nil {
+			return nil, fmt.Errorf("postgres: listMLFindingEvaluationIDs scan: %w", err)
+		}
+		out = append(out, evaluationID)
 	}
 	return out, rows.Err()
 }
@@ -207,6 +245,7 @@ func (d *DB) ListMLFindings(ctx context.Context, orgID, modelID, projectID strin
 			return nil, fmt.Errorf("postgres: ListMLFindings scan: %w", err)
 		}
 		f.RunIDs = []string{}
+		f.EvaluationIDs = []string{}
 		out = append(out, f)
 		ids = append(ids, f.ID)
 	}
@@ -237,6 +276,27 @@ func (d *DB) ListMLFindings(ctx context.Context, orgID, modelID, projectID strin
 			out[i].RunIDs = runIDs
 		}
 	}
+	evalRows, err := d.db.QueryContext(ctx, `SELECT finding_id, evaluation_id FROM ml_finding_evaluations WHERE finding_id = ANY($1) ORDER BY evaluation_id ASC`, pq.Array(ids))
+	if err != nil {
+		return nil, fmt.Errorf("postgres: ListMLFindings evaluations: %w", err)
+	}
+	defer func() { _ = evalRows.Close() }()
+	evalsByFinding := map[string][]string{}
+	for evalRows.Next() {
+		var findingID, evaluationID string
+		if err := evalRows.Scan(&findingID, &evaluationID); err != nil {
+			return nil, fmt.Errorf("postgres: ListMLFindings evaluations scan: %w", err)
+		}
+		evalsByFinding[findingID] = append(evalsByFinding[findingID], evaluationID)
+	}
+	if err := evalRows.Err(); err != nil {
+		return nil, err
+	}
+	for i := range out {
+		if evaluationIDs, ok := evalsByFinding[out[i].ID]; ok {
+			out[i].EvaluationIDs = evaluationIDs
+		}
+	}
 	return out, nil
 }
 
@@ -254,6 +314,9 @@ func (d *DB) UpdateMLFinding(ctx context.Context, f mlstudio.Finding) error {
 		return fmt.Errorf("postgres: UpdateMLFinding: %w", err)
 	}
 	if err := replaceMLFindingRuns(ctx, tx, f.ID, f.RunIDs); err != nil {
+		return err
+	}
+	if err := replaceMLFindingEvaluations(ctx, tx, f.ID, f.EvaluationIDs); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {
@@ -521,6 +584,72 @@ func (d *DB) DeleteMLDataset(ctx context.Context, orgID, id, deletedBy string) e
 	_, err := d.db.ExecContext(ctx, q, time.Now().UTC(), deletedBy, orgID, id)
 	if err != nil {
 		return fmt.Errorf("postgres: DeleteMLDataset: %w", err)
+	}
+	return nil
+}
+
+func (d *DB) CreateMLEvaluation(ctx context.Context, eval mlstudio.Evaluation) error {
+	tx, err := d.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("postgres: CreateMLEvaluation begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	const q = `
+		INSERT INTO ml_evaluations (id, org_id, experiment_id, version_id, dataset_id, name, type, description, summary, evaluated_at, evaluator, source, created_by, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$14)`
+	now := time.Now().UTC()
+	_, err = tx.ExecContext(ctx, q,
+		eval.ID, eval.OrgID, eval.ExperimentID, eval.VersionID, eval.DatasetID, eval.Name, eval.Type,
+		eval.Description, eval.Summary, eval.EvaluatedAt, eval.Evaluator, eval.Source, eval.CreatedBy, now)
+	if err != nil {
+		return fmt.Errorf("postgres: CreateMLEvaluation: %w", err)
+	}
+	if err := replaceMLParams(ctx, tx, "ml_evaluations_params", "eval_id", eval.ID, eval.Parameters); err != nil {
+		return fmt.Errorf("postgres: CreateMLEvaluation parameters: %w", err)
+	}
+	if err := replaceMLMetrics(ctx, tx, "ml_evaluations_metrics", "eval_id", eval.ID, eval.Metrics); err != nil {
+		return fmt.Errorf("postgres: CreateMLEvaluation metrics: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("postgres: CreateMLEvaluation commit: %w", err)
+	}
+	return nil
+}
+
+func (d *DB) UpdateMLEvaluation(ctx context.Context, eval mlstudio.Evaluation) error {
+	tx, err := d.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("postgres: UpdateMLEvaluation begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	const q = `
+		UPDATE ml_evaluations SET
+			name=$1, type=$2, description=$3, summary=$4, evaluated_at=$5,
+			evaluator=$6, dataset_id=$7, updated_at=$8
+		WHERE org_id=$9 AND id=$10 AND deleted_at IS NULL`
+	_, err = tx.ExecContext(ctx, q,
+		eval.Name, eval.Type, eval.Description, eval.Summary, eval.EvaluatedAt,
+		eval.Evaluator, eval.DatasetID, time.Now().UTC(), eval.OrgID, eval.ID)
+	if err != nil {
+		return fmt.Errorf("postgres: UpdateMLEvaluation: %w", err)
+	}
+	if err := replaceMLParams(ctx, tx, "ml_evaluations_params", "eval_id", eval.ID, eval.Parameters); err != nil {
+		return fmt.Errorf("postgres: UpdateMLEvaluation parameters: %w", err)
+	}
+	if err := replaceMLMetrics(ctx, tx, "ml_evaluations_metrics", "eval_id", eval.ID, eval.Metrics); err != nil {
+		return fmt.Errorf("postgres: UpdateMLEvaluation metrics: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("postgres: UpdateMLEvaluation commit: %w", err)
+	}
+	return nil
+}
+
+func (d *DB) DeleteMLEvaluation(ctx context.Context, orgID, id, deletedBy string) error {
+	const q = `UPDATE ml_evaluations SET deleted_at=$1, deleted_by=$2 WHERE org_id=$3 AND id=$4 AND deleted_at IS NULL`
+	_, err := d.db.ExecContext(ctx, q, time.Now().UTC(), deletedBy, orgID, id)
+	if err != nil {
+		return fmt.Errorf("postgres: DeleteMLEvaluation: %w", err)
 	}
 	return nil
 }

@@ -57,6 +57,7 @@ func Register(
 	requireScope("mlstudio:read", "GET", base+"/runs", h.ListAllRuns)
 	requireScope("mlstudio:read", "GET", base+"/artifacts", h.ListAllArtifacts)
 	requireScope("mlstudio:read", "GET", base+"/versions/{versionId}", h.GetVersion)
+	requireScope("mlstudio:read", "GET", base+"/evaluations", h.ListAllEvaluations)
 	requireScope("mlstudio:read", "GET", base+"/versions/{versionId}/evaluations", h.ListVersionEvaluations)
 	requireScope("mlstudio:read", "GET", base+"/experiments/{experimentId}/evaluations", h.ListExperimentEvaluations)
 	requireScope("mlstudio:read", "GET", base+"/evaluations/{evaluationId}", h.GetEvaluation)
@@ -80,6 +81,9 @@ func Register(
 	requireScope("mlstudio:read", "GET", base+"/datasets/{datasetId}", h.GetDataset)
 	requireScope("mlstudio:write", "PUT", base+"/datasets/{datasetId}", h.UpdateDataset)
 	requireScope("mlstudio:write", "DELETE", base+"/datasets/{datasetId}", h.DeleteDataset)
+	requireScope("mlstudio:write", "POST", base+"/experiments/{experimentId}/evaluations", h.CreateEvaluation)
+	requireScope("mlstudio:write", "PUT", base+"/evaluations/{evaluationId}", h.UpdateEvaluation)
+	requireScope("mlstudio:write", "DELETE", base+"/evaluations/{evaluationId}", h.DeleteEvaluation)
 
 	requireScope("mlstudio:write", "POST", base+"/deployments", h.CreateDeployment)
 	requireScope("mlstudio:read", "GET", base+"/deployments", h.ListDeployments)

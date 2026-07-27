@@ -44,9 +44,13 @@ type Store interface {
 	CreateMLDataset(ctx context.Context, ds Dataset) error
 	UpdateMLDataset(ctx context.Context, ds Dataset) error
 	DeleteMLDataset(ctx context.Context, orgID, id, deletedBy string) error
+	ListMLEvaluations(ctx context.Context, orgID string, q EvaluationQuery) ([]Evaluation, int, error)
 	ListMLVersionEvaluations(ctx context.Context, orgID, versionID string, q EvaluationQuery) ([]Evaluation, int, error)
 	ListMLExperimentEvaluations(ctx context.Context, orgID, experimentID string, q EvaluationQuery) ([]Evaluation, int, error)
 	GetMLEvaluation(ctx context.Context, orgID, id string) (*Evaluation, error)
+	CreateMLEvaluation(ctx context.Context, eval Evaluation) error
+	UpdateMLEvaluation(ctx context.Context, eval Evaluation) error
+	DeleteMLEvaluation(ctx context.Context, orgID, id, deletedBy string) error
 	SetMLEvaluationsVersion(ctx context.Context, orgID, versionID string, evaluationIDs []string, actorID string) error
 
 	CreateVersionDeploymentUpdate(ctx context.Context, u VersionDeploymentUpdate) error

@@ -116,9 +116,11 @@ type RunQuery struct {
 }
 
 type EvaluationQuery struct {
-	Search string
-	Limit  int
-	Offset int
+	ExperimentID string
+	ProjectID    string
+	Search       string
+	Limit        int
+	Offset       int
 }
 
 type Artifact struct {
@@ -165,7 +167,7 @@ type Dataset struct {
 type Evaluation struct {
 	ID           string         `json:"id"`
 	OrgID        string         `json:"orgId"`
-	MLflowID     string         `json:"mlflowId"`
+	MLflowID     *string        `json:"mlflowId,omitempty"`
 	VersionID    string         `json:"versionId"`
 	ExperimentID string         `json:"experimentId"`
 	ModelName    string         `json:"modelName"`
@@ -177,6 +179,7 @@ type Evaluation struct {
 	Summary      string         `json:"summary"`
 	EvaluatedAt  *time.Time     `json:"evaluatedAt,omitempty"`
 	Evaluator    string         `json:"evaluator"`
+	Source       string         `json:"source"`
 	CreatedBy    *string        `json:"createdBy,omitempty"`
 	Parameters   map[string]any `json:"parameters"`
 	Metrics      map[string]any `json:"metrics"`

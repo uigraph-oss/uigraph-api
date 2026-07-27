@@ -3,6 +3,7 @@ package mlstudio
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -181,12 +182,13 @@ func (h *Handler) CreateFinding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		ModelID     string   `json:"modelId"`
-		VersionID   *string  `json:"versionId"`
-		Title       string   `json:"title"`
-		Summary     string   `json:"summary"`
-		Description string   `json:"description"`
-		RunIDs      []string `json:"runIds"`
+		ModelID       string   `json:"modelId"`
+		VersionID     *string  `json:"versionId"`
+		Title         string   `json:"title"`
+		Summary       string   `json:"summary"`
+		Description   string   `json:"description"`
+		RunIDs        []string `json:"runIds"`
+		EvaluationIDs []string `json:"evaluationIds"`
 	}
 	if err := httputil.Decode(r, &body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -207,16 +209,20 @@ func (h *Handler) CreateFinding(w http.ResponseWriter, r *http.Request) {
 	if !h.ensureRunsInOrg(w, r, orgID, body.RunIDs) {
 		return
 	}
+	if !h.ensureEvaluationsInOrg(w, r, orgID, body.EvaluationIDs) {
+		return
+	}
 	f := mlstudio.Finding{
-		ID:          uuid.NewString(),
-		OrgID:       orgID,
-		ModelID:     body.ModelID,
-		VersionID:   body.VersionID,
-		Title:       body.Title,
-		Summary:     body.Summary,
-		Description: body.Description,
-		RunIDs:      body.RunIDs,
-		CreatedBy:   p.UserID,
+		ID:            uuid.NewString(),
+		OrgID:         orgID,
+		ModelID:       body.ModelID,
+		VersionID:     body.VersionID,
+		Title:         body.Title,
+		Summary:       body.Summary,
+		Description:   body.Description,
+		RunIDs:        body.RunIDs,
+		EvaluationIDs: body.EvaluationIDs,
+		CreatedBy:     p.UserID,
 	}
 	if err := h.store.CreateMLFinding(r.Context(), f); err != nil {
 		writeErr(w, r, err)
@@ -276,11 +282,12 @@ func (h *Handler) UpdateFinding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		VersionID   *string   `json:"versionId"`
-		Title       *string   `json:"title"`
-		Summary     *string   `json:"summary"`
-		Description *string   `json:"description"`
-		RunIDs      *[]string `json:"runIds"`
+		VersionID     *string   `json:"versionId"`
+		Title         *string   `json:"title"`
+		Summary       *string   `json:"summary"`
+		Description   *string   `json:"description"`
+		RunIDs        *[]string `json:"runIds"`
+		EvaluationIDs *[]string `json:"evaluationIds"`
 	}
 	if err := httputil.Decode(r, &body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -306,6 +313,12 @@ func (h *Handler) UpdateFinding(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		existing.RunIDs = *body.RunIDs
+	}
+	if body.EvaluationIDs != nil {
+		if !h.ensureEvaluationsInOrg(w, r, orgID, *body.EvaluationIDs) {
+			return
+		}
+		existing.EvaluationIDs = *body.EvaluationIDs
 	}
 	if err := h.store.UpdateMLFinding(r.Context(), *existing); err != nil {
 		writeErr(w, r, err)
@@ -918,6 +931,198 @@ func (h *Handler) DeleteDataset(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+var allowedEvaluationTypes = []string{
+	"Offline Benchmark",
+	"Online A/B Test",
+	"Human Review",
+	"Production Monitoring",
+}
+
+func validEvaluationType(t string) bool {
+	for _, allowed := range allowedEvaluationTypes {
+		if t == allowed {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *Handler) CreateEvaluation(w http.ResponseWriter, r *http.Request) {
+	p, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	experimentID := r.PathValue("experimentId")
+	if !h.ensureExperimentInOrg(w, r, orgID, experimentID) {
+		return
+	}
+	var body struct {
+		VersionID   string         `json:"versionId"`
+		DatasetID   *string        `json:"datasetId"`
+		Name        string         `json:"name"`
+		Type        string         `json:"type"`
+		Description string         `json:"description"`
+		Summary     string         `json:"summary"`
+		EvaluatedAt *time.Time     `json:"evaluatedAt"`
+		Evaluator   string         `json:"evaluator"`
+		Parameters  map[string]any `json:"parameters"`
+		Metrics     map[string]any `json:"metrics"`
+	}
+	if err := httputil.Decode(r, &body); err != nil {
+		httputil.BadRequest(w, "invalid request body")
+		return
+	}
+	if body.Name == "" {
+		httputil.BadRequest(w, "name is required")
+		return
+	}
+	if body.VersionID == "" {
+		httputil.BadRequest(w, "versionId is required")
+		return
+	}
+	if !validEvaluationType(body.Type) {
+		httputil.BadRequest(w, fmt.Sprintf("type must be one of %s", strings.Join(allowedEvaluationTypes, ", ")))
+		return
+	}
+	version, err := h.store.GetMLModelVersion(r.Context(), orgID, body.VersionID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if version == nil {
+		httputil.BadRequest(w, "version not found in org")
+		return
+	}
+	eval := mlstudio.Evaluation{
+		ID:           uuid.NewString(),
+		OrgID:        orgID,
+		ExperimentID: experimentID,
+		VersionID:    body.VersionID,
+		DatasetID:    body.DatasetID,
+		Name:         body.Name,
+		Type:         body.Type,
+		Description:  body.Description,
+		Summary:      body.Summary,
+		EvaluatedAt:  body.EvaluatedAt,
+		Evaluator:    body.Evaluator,
+		Parameters:   body.Parameters,
+		Metrics:      body.Metrics,
+		Source:       "manual",
+		CreatedBy:    &p.UserID,
+	}
+	if err := h.store.CreateMLEvaluation(r.Context(), eval); err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	created, err := h.store.GetMLEvaluation(r.Context(), orgID, eval.ID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusCreated, created)
+}
+
+func (h *Handler) UpdateEvaluation(w http.ResponseWriter, r *http.Request) {
+	_, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	existing, err := h.store.GetMLEvaluation(r.Context(), orgID, r.PathValue("evaluationId"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if existing == nil {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+	if existing.Source != "manual" {
+		httputil.BadRequest(w, "only manually logged evaluations can be edited")
+		return
+	}
+	var body struct {
+		DatasetID   *string        `json:"datasetId"`
+		Name        *string        `json:"name"`
+		Type        *string        `json:"type"`
+		Description *string        `json:"description"`
+		Summary     *string        `json:"summary"`
+		EvaluatedAt *time.Time     `json:"evaluatedAt"`
+		Evaluator   *string        `json:"evaluator"`
+		Parameters  map[string]any `json:"parameters"`
+		Metrics     map[string]any `json:"metrics"`
+	}
+	if err := httputil.Decode(r, &body); err != nil {
+		httputil.BadRequest(w, "invalid request body")
+		return
+	}
+	if body.Name != nil {
+		existing.Name = *body.Name
+	}
+	if body.Type != nil {
+		if !validEvaluationType(*body.Type) {
+			httputil.BadRequest(w, fmt.Sprintf("type must be one of %s", strings.Join(allowedEvaluationTypes, ", ")))
+			return
+		}
+		existing.Type = *body.Type
+	}
+	if body.Description != nil {
+		existing.Description = *body.Description
+	}
+	if body.Summary != nil {
+		existing.Summary = *body.Summary
+	}
+	if body.EvaluatedAt != nil {
+		existing.EvaluatedAt = body.EvaluatedAt
+	}
+	if body.Evaluator != nil {
+		existing.Evaluator = *body.Evaluator
+	}
+	if body.DatasetID != nil {
+		existing.DatasetID = body.DatasetID
+	}
+	if body.Parameters != nil {
+		existing.Parameters = body.Parameters
+	}
+	if body.Metrics != nil {
+		existing.Metrics = body.Metrics
+	}
+	if err := h.store.UpdateMLEvaluation(r.Context(), *existing); err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	updated, err := h.store.GetMLEvaluation(r.Context(), orgID, existing.ID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, updated)
+}
+
+func (h *Handler) DeleteEvaluation(w http.ResponseWriter, r *http.Request) {
+	p, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	existing, err := h.store.GetMLEvaluation(r.Context(), orgID, r.PathValue("evaluationId"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if existing == nil {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+	if existing.Source != "manual" {
+		httputil.BadRequest(w, "only manually logged evaluations can be deleted")
+		return
+	}
+	if err := h.store.DeleteMLEvaluation(r.Context(), orgID, existing.ID, p.UserID); err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 var allowedVersionTransitions = map[string][]string{
 	"candidate":  {"staging"},
 	"staging":    {"production", "candidate"},
@@ -1131,6 +1336,21 @@ func (h *Handler) ensureRunsInOrg(w http.ResponseWriter, r *http.Request, orgID 
 		}
 		if run == nil {
 			httputil.BadRequest(w, "run not found in org: "+runID)
+			return false
+		}
+	}
+	return true
+}
+
+func (h *Handler) ensureEvaluationsInOrg(w http.ResponseWriter, r *http.Request, orgID string, evaluationIDs []string) bool {
+	for _, evaluationID := range evaluationIDs {
+		evaluation, err := h.store.GetMLEvaluation(r.Context(), orgID, evaluationID)
+		if err != nil {
+			httputil.Error(w, r, err)
+			return false
+		}
+		if evaluation == nil {
+			httputil.BadRequest(w, "evaluation not found in org: "+evaluationID)
 			return false
 		}
 	}

@@ -21,16 +21,17 @@ type Deployment struct {
 }
 
 type Finding struct {
-	ID          string     `json:"id"`
-	OrgID       string     `json:"orgId"`
-	ModelID     string     `json:"modelId"`
-	VersionID   *string    `json:"versionId,omitempty"`
-	Title       string     `json:"title"`
-	Summary     string     `json:"summary"`
-	Description string     `json:"description"`
-	RunIDs      []string   `json:"runIds"`
-	CreatedBy   string     `json:"createdBy"`
-	CreatedAt   time.Time  `json:"createdAt"`
-	UpdatedAt   time.Time  `json:"updatedAt"`
-	DeletedAt   *time.Time `json:"deletedAt,omitempty"`
+	ID            string     `json:"id"`
+	OrgID         string     `json:"orgId"`
+	ModelID       string     `json:"modelId"`
+	VersionID     *string    `json:"versionId,omitempty"`
+	Title         string     `json:"title"`
+	Summary       string     `json:"summary"`
+	Description   string     `json:"description"`
+	RunIDs        []string   `json:"runIds"`
+	EvaluationIDs []string   `json:"evaluationIds"`
+	CreatedBy     string     `json:"createdBy"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	UpdatedAt     time.Time  `json:"updatedAt"`
+	DeletedAt     *time.Time `json:"deletedAt,omitempty"`
 }
