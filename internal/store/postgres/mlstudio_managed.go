@@ -588,6 +588,44 @@ func (d *DB) DeleteMLDataset(ctx context.Context, orgID, id, deletedBy string) e
 	return nil
 }
 
+func (d *DB) CreateMLArtifact(ctx context.Context, a mlstudio.Artifact) error {
+	const q = `
+		INSERT INTO ml_artifacts (id, org_id, run_id, name, type, uri, download_uri, size, format,
+			source, storage_key, mime_type, size_bytes, created_by, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$15)`
+	now := time.Now().UTC()
+	_, err := d.db.ExecContext(ctx, q,
+		a.ID, a.OrgID, a.RunID, a.Name, a.Type, a.URI, a.DownloadURI, a.Size, a.Format,
+		a.Source, a.StorageKey, a.MimeType, a.SizeBytes, a.CreatedBy, now)
+	if err != nil {
+		return fmt.Errorf("postgres: CreateMLArtifact: %w", err)
+	}
+	return nil
+}
+
+func (d *DB) UpdateMLArtifact(ctx context.Context, a mlstudio.Artifact) error {
+	const q = `
+		UPDATE ml_artifacts SET
+			name=$1, type=$2, uri=$3, download_uri=$4, size=$5, format=$6, updated_at=$7
+		WHERE org_id=$8 AND id=$9 AND deleted_at IS NULL`
+	_, err := d.db.ExecContext(ctx, q,
+		a.Name, a.Type, a.URI, a.DownloadURI, a.Size, a.Format,
+		time.Now().UTC(), a.OrgID, a.ID)
+	if err != nil {
+		return fmt.Errorf("postgres: UpdateMLArtifact: %w", err)
+	}
+	return nil
+}
+
+func (d *DB) DeleteMLArtifact(ctx context.Context, orgID, id, deletedBy string) error {
+	const q = `UPDATE ml_artifacts SET deleted_at=$1, deleted_by=$2 WHERE org_id=$3 AND id=$4 AND deleted_at IS NULL`
+	_, err := d.db.ExecContext(ctx, q, time.Now().UTC(), deletedBy, orgID, id)
+	if err != nil {
+		return fmt.Errorf("postgres: DeleteMLArtifact: %w", err)
+	}
+	return nil
+}
+
 func (d *DB) CreateMLEvaluation(ctx context.Context, eval mlstudio.Evaluation) error {
 	tx, err := d.db.BeginTx(ctx, nil)
 	if err != nil {

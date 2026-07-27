@@ -10,23 +10,26 @@ import (
 	"github.com/uigraph/app/internal/identity"
 	authmw "github.com/uigraph/app/internal/middleware"
 	"github.com/uigraph/app/internal/mlstudio"
+	"github.com/uigraph/app/internal/storage"
 	storepkg "github.com/uigraph/app/internal/store"
 )
 
 type Handler struct {
-	store mlstudio.Store
+	store   mlstudio.Store
+	storage storage.Client
 }
 
-func New(s mlstudio.Store) *Handler {
-	return &Handler{store: s}
+func New(s mlstudio.Store, st storage.Client) *Handler {
+	return &Handler{store: s, storage: st}
 }
 
 func Register(
 	mux *http.ServeMux,
 	s mlstudio.Store,
+	st storage.Client,
 	requireScope func(scope, method, pattern string, h http.HandlerFunc),
 ) {
-	h := New(s)
+	h := New(s, st)
 	const base = "/api/v1/orgs/{orgID}/ml"
 
 	requireScope("mlstudio:write", "POST", base+"/projects/sync", h.SyncProjects)
@@ -77,6 +80,10 @@ func Register(
 	requireScope("mlstudio:write", "PUT", base+"/runs/{runId}", h.UpdateRun)
 	requireScope("mlstudio:write", "DELETE", base+"/runs/{runId}", h.DeleteRun)
 	requireScope("mlstudio:read", "GET", base+"/runs/{runId}/artifacts", h.ListRunArtifacts)
+	requireScope("mlstudio:write", "POST", base+"/runs/{runId}/artifacts", h.CreateArtifact)
+	requireScope("mlstudio:write", "POST", base+"/runs/{runId}/artifacts/upload", h.UploadArtifact)
+	requireScope("mlstudio:write", "PUT", base+"/artifacts/{artifactId}", h.UpdateArtifact)
+	requireScope("mlstudio:write", "DELETE", base+"/artifacts/{artifactId}", h.DeleteArtifact)
 	requireScope("mlstudio:write", "POST", base+"/experiments/{experimentId}/datasets", h.CreateDataset)
 	requireScope("mlstudio:read", "GET", base+"/datasets", h.ListDatasets)
 	requireScope("mlstudio:read", "GET", base+"/datasets/{datasetId}", h.GetDataset)

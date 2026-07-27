@@ -41,6 +41,10 @@ type Store interface {
 	UpdateMLRun(ctx context.Context, run Run) error
 	DeleteMLRun(ctx context.Context, orgID, id, deletedBy string) error
 	ListMLArtifacts(ctx context.Context, orgID, runID string) ([]Artifact, error)
+	GetMLArtifact(ctx context.Context, orgID, id string) (*Artifact, error)
+	CreateMLArtifact(ctx context.Context, a Artifact) error
+	UpdateMLArtifact(ctx context.Context, a Artifact) error
+	DeleteMLArtifact(ctx context.Context, orgID, id, deletedBy string) error
 	ListMLDatasets(ctx context.Context, orgID, experimentID string) ([]Dataset, error)
 	GetMLDataset(ctx context.Context, orgID, id string) (*Dataset, error)
 	CreateMLDataset(ctx context.Context, ds Dataset) error

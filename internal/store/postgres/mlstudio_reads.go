@@ -470,13 +470,30 @@ func scanMLArtifact(row interface{ Scan(...any) error }) (mlstudio.Artifact, err
 	var a mlstudio.Artifact
 	err := row.Scan(
 		&a.ID, &a.OrgID, &a.MLflowID, &a.RunID, &a.Name, &a.Type,
-		&a.URI, &a.DownloadURI, &a.Size, &a.Format, &a.UpdatedAt, &a.SyncedAt,
+		&a.URI, &a.DownloadURI, &a.Size, &a.Format,
+		&a.Source, &a.StorageKey, &a.MimeType, &a.SizeBytes, &a.CreatedBy,
+		&a.UpdatedAt, &a.SyncedAt,
 	)
 	return a, err
 }
 
+const mlArtifactCols = `id, org_id, mlflow_id, run_id, name, type, uri, download_uri, size, format, ` +
+	`source, storage_key, mime_type, size_bytes, created_by, updated_at, synced_at`
+
+func (d *DB) GetMLArtifact(ctx context.Context, orgID, id string) (*mlstudio.Artifact, error) {
+	q := `SELECT ` + mlArtifactCols + ` FROM ml_artifacts WHERE org_id=$1 AND id=$2 AND deleted_at IS NULL`
+	a, err := scanMLArtifact(d.db.QueryRowContext(ctx, q, orgID, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("postgres: GetMLArtifact: %w", err)
+	}
+	return &a, nil
+}
+
 func (d *DB) ListMLArtifacts(ctx context.Context, orgID, runID string) ([]mlstudio.Artifact, error) {
-	q := `SELECT id, org_id, mlflow_id, run_id, name, type, uri, download_uri, size, format, updated_at, synced_at
+	q := `SELECT ` + mlArtifactCols + `
 		FROM ml_artifacts WHERE org_id=$1 AND deleted_at IS NULL`
 	args := []any{orgID}
 	if runID != "" {

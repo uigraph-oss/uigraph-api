@@ -55,6 +55,11 @@ func ServiceDocFileKey(orgID, serviceID, docID, filename string) string {
 	return orgID + "/services/" + serviceID + "/docs/" + docID + "/" + filename
 }
 
+// MLArtifactKey returns the object key for a manually uploaded run artifact.
+func MLArtifactKey(orgID, runID, artifactID, filename string) string {
+	return orgID + "/ml/runs/" + runID + "/artifacts/" + artifactID + "/" + filename
+}
+
 // FileKey returns the object key for a user-uploaded file.
 func FileKey(orgID, fileID, filename string) string {
 	return orgID + "/files/" + fileID + "/" + filename

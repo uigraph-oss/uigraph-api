@@ -227,7 +227,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	pricing := modelpricing.New()
 	mcpusageapi.Register(mux, s, pricing, scopeFn)
 
-	mlstudioapi.Register(mux, s, scopeFn)
+	mlstudioapi.Register(mux, s, st, scopeFn)
 
 	return authmw.CORS(mux)
 }

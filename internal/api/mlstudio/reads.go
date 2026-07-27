@@ -3,11 +3,36 @@ package mlstudio
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/uigraph/app/internal/httputil"
 	"github.com/uigraph/app/internal/mlstudio"
 	storepkg "github.com/uigraph/app/internal/store"
 )
+
+// artifactPresignTTL is how long a minted artifact download URL is valid.
+const artifactPresignTTL = time.Hour
+
+// presignArtifactDownload fills in DownloadURI for an uploaded artifact. Rows
+// synced from MLflow and rows added as a link already carry their own URI and
+// have no storage key, so they are left alone. A presign failure is not fatal:
+// the rest of the artifact is still worth returning, just without a link.
+func (h *Handler) presignArtifactDownload(r *http.Request, a *mlstudio.Artifact) {
+	if a.StorageKey == "" {
+		return
+	}
+	url, err := h.storage.PresignURL(r.Context(), a.StorageKey, artifactPresignTTL)
+	if err != nil {
+		return
+	}
+	a.DownloadURI = url
+}
+
+func (h *Handler) presignArtifactDownloads(r *http.Request, artifacts []mlstudio.Artifact) {
+	for i := range artifacts {
+		h.presignArtifactDownload(r, &artifacts[i])
+	}
+}
 
 func parseIntDefault(s string, def int) int {
 	if s == "" {
@@ -157,6 +182,7 @@ func (h *Handler) ListAllArtifacts(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, r, err)
 		return
 	}
+	h.presignArtifactDownloads(r, artifacts)
 	httputil.JSON(w, http.StatusOK, map[string]any{"artifacts": artifacts})
 }
 
@@ -327,6 +353,7 @@ func (h *Handler) ListRunArtifacts(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, r, err)
 		return
 	}
+	h.presignArtifactDownloads(r, artifacts)
 	httputil.JSON(w, http.StatusOK, map[string]any{"artifacts": artifacts})
 }
 

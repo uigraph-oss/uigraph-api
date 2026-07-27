@@ -1,6 +1,7 @@
 package mlstudio
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/uigraph/app/internal/httputil"
 	"github.com/uigraph/app/internal/mlstudio"
+	"github.com/uigraph/app/internal/storage"
 	storepkg "github.com/uigraph/app/internal/store"
 )
 
@@ -940,6 +942,235 @@ func (h *Handler) DeleteDataset(w http.ResponseWriter, r *http.Request) {
 	if err := h.store.DeleteMLDataset(r.Context(), orgID, existing.ID, p.UserID); err != nil {
 		httputil.Error(w, r, err)
 		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// maxArtifactUploadBytes caps manually uploaded artifacts at 5MB. This is the
+// authoritative check; the browser enforces the same limit for feedback only.
+const maxArtifactUploadBytes = 5 << 20
+
+func (h *Handler) CreateArtifact(w http.ResponseWriter, r *http.Request) {
+	p, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	runID := r.PathValue("runId")
+	if !h.ensureRunsInOrg(w, r, orgID, []string{runID}) {
+		return
+	}
+	var body struct {
+		Name        string `json:"name"`
+		Type        string `json:"type"`
+		URI         string `json:"uri"`
+		DownloadURI string `json:"downloadUri"`
+		Size        string `json:"size"`
+		Format      string `json:"format"`
+		MimeType    string `json:"mimeType"`
+		SizeBytes   *int64 `json:"sizeBytes"`
+	}
+	if err := httputil.Decode(r, &body); err != nil {
+		httputil.BadRequest(w, "invalid request body")
+		return
+	}
+	if body.Name == "" {
+		httputil.BadRequest(w, "name is required")
+		return
+	}
+	if body.Type == "" {
+		httputil.BadRequest(w, "type is required")
+		return
+	}
+	a := mlstudio.Artifact{
+		ID:          uuid.NewString(),
+		OrgID:       orgID,
+		RunID:       runID,
+		Name:        body.Name,
+		Type:        body.Type,
+		URI:         body.URI,
+		DownloadURI: body.DownloadURI,
+		Size:        body.Size,
+		Format:      body.Format,
+		Source:      "manual",
+		MimeType:    body.MimeType,
+		SizeBytes:   body.SizeBytes,
+		CreatedBy:   p.UserID,
+	}
+	if err := h.store.CreateMLArtifact(r.Context(), a); err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	created, err := h.store.GetMLArtifact(r.Context(), orgID, a.ID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusCreated, created)
+}
+
+func (h *Handler) UploadArtifact(w http.ResponseWriter, r *http.Request) {
+	p, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	runID := r.PathValue("runId")
+	if !h.ensureRunsInOrg(w, r, orgID, []string{runID}) {
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, maxArtifactUploadBytes)
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			httputil.JSON(w, http.StatusRequestEntityTooLarge, map[string]any{
+				"error": map[string]any{
+					"code":    "file_too_large",
+					"message": "file must be 5MB or smaller",
+				},
+			})
+			return
+		}
+		httputil.BadRequest(w, "missing file")
+		return
+	}
+	defer func() { _ = file.Close() }()
+
+	contentType := header.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	artifactID := uuid.NewString()
+	key := storage.MLArtifactKey(orgID, runID, artifactID, header.Filename)
+	if err := h.storage.Upload(r.Context(), key, contentType, file, header.Size); err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+
+	name := r.FormValue("name")
+	if name == "" {
+		name = header.Filename
+	}
+	artifactType := r.FormValue("type")
+	if artifactType == "" {
+		httputil.BadRequest(w, "type is required")
+		return
+	}
+	size := header.Size
+	a := mlstudio.Artifact{
+		ID:         artifactID,
+		OrgID:      orgID,
+		RunID:      runID,
+		Name:       name,
+		Type:       artifactType,
+		Size:       r.FormValue("size"),
+		Format:     r.FormValue("format"),
+		Source:     "manual",
+		StorageKey: key,
+		MimeType:   contentType,
+		SizeBytes:  &size,
+		CreatedBy:  p.UserID,
+	}
+	if err := h.store.CreateMLArtifact(r.Context(), a); err != nil {
+		_ = h.storage.Delete(r.Context(), key)
+		writeErr(w, r, err)
+		return
+	}
+	created, err := h.store.GetMLArtifact(r.Context(), orgID, a.ID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	h.presignArtifactDownload(r, created)
+	httputil.JSON(w, http.StatusCreated, created)
+}
+
+func (h *Handler) UpdateArtifact(w http.ResponseWriter, r *http.Request) {
+	_, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	existing, err := h.store.GetMLArtifact(r.Context(), orgID, r.PathValue("artifactId"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if existing == nil {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+	if existing.Source != "manual" {
+		httputil.BadRequest(w, "only manually added artifacts can be edited")
+		return
+	}
+	var body struct {
+		Name        *string `json:"name"`
+		Type        *string `json:"type"`
+		URI         *string `json:"uri"`
+		DownloadURI *string `json:"downloadUri"`
+		Size        *string `json:"size"`
+		Format      *string `json:"format"`
+	}
+	if err := httputil.Decode(r, &body); err != nil {
+		httputil.BadRequest(w, "invalid request body")
+		return
+	}
+	if body.Name != nil {
+		existing.Name = *body.Name
+	}
+	if body.Type != nil {
+		existing.Type = *body.Type
+	}
+	if body.URI != nil {
+		existing.URI = *body.URI
+	}
+	if body.DownloadURI != nil {
+		existing.DownloadURI = *body.DownloadURI
+	}
+	if body.Size != nil {
+		existing.Size = *body.Size
+	}
+	if body.Format != nil {
+		existing.Format = *body.Format
+	}
+	if err := h.store.UpdateMLArtifact(r.Context(), *existing); err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	updated, err := h.store.GetMLArtifact(r.Context(), orgID, existing.ID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	h.presignArtifactDownload(r, updated)
+	httputil.JSON(w, http.StatusOK, updated)
+}
+
+func (h *Handler) DeleteArtifact(w http.ResponseWriter, r *http.Request) {
+	p, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	existing, err := h.store.GetMLArtifact(r.Context(), orgID, r.PathValue("artifactId"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if existing == nil {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+	if existing.Source != "manual" {
+		httputil.BadRequest(w, "only manually added artifacts can be deleted")
+		return
+	}
+	if err := h.store.DeleteMLArtifact(r.Context(), orgID, existing.ID, p.UserID); err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if existing.StorageKey != "" {
+		_ = h.storage.Delete(r.Context(), existing.StorageKey)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

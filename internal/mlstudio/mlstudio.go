@@ -148,7 +148,7 @@ type ModelVersionExploreItem struct {
 type Artifact struct {
 	ID          string     `json:"id"`
 	OrgID       string     `json:"orgId"`
-	MLflowID    string     `json:"mlflowId"`
+	MLflowID    *string    `json:"mlflowId,omitempty"`
 	RunID       string     `json:"runId"`
 	Name        string     `json:"name"`
 	Type        string     `json:"type"`
@@ -156,6 +156,11 @@ type Artifact struct {
 	DownloadURI string     `json:"downloadUri"`
 	Size        string     `json:"size"`
 	Format      string     `json:"format"`
+	Source      string     `json:"source"`
+	StorageKey  string     `json:"-"`
+	MimeType    string     `json:"mimeType"`
+	SizeBytes   *int64     `json:"sizeBytes,omitempty"`
+	CreatedBy   string     `json:"createdBy"`
 	UpdatedAt   *time.Time `json:"updatedAt,omitempty"`
 	SyncedAt    *time.Time `json:"syncedAt,omitempty"`
 }
