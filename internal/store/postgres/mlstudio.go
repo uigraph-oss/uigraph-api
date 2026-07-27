@@ -441,22 +441,26 @@ func (d *DB) UpsertMLRuns(ctx context.Context, orgID, actorID string, in []mlstu
 				datasetID = id
 			}
 		}
+		tags := run.Tags
+		if tags == nil {
+			tags = []string{}
+		}
 		actor := actorID
 		if run.ActorID != "" {
 			actor = run.ActorID
 		}
 		var runID string
 		err = tx.QueryRowContext(ctx, `
-			INSERT INTO ml_runs (org_id, mlflow_id, experiment_id, name, status, started_at, ended_at, notes, dataset_id, synced_at, created_by, updated_by)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW(),$10,$10)
+			INSERT INTO ml_runs (org_id, mlflow_id, experiment_id, name, status, started_at, ended_at, notes, tags, dataset_id, synced_at, created_by, updated_by)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW(),$11,$11)
 			ON CONFLICT (org_id, mlflow_id) DO UPDATE SET
 				experiment_id=EXCLUDED.experiment_id, name=EXCLUDED.name, status=EXCLUDED.status,
 				started_at=EXCLUDED.started_at, ended_at=EXCLUDED.ended_at,
-				notes=EXCLUDED.notes,
+				notes=EXCLUDED.notes, tags=EXCLUDED.tags,
 				dataset_id=COALESCE(EXCLUDED.dataset_id, ml_runs.dataset_id),
 				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()
 			RETURNING id`,
-			orgID, run.MLflowID, experimentID, run.Name, run.Status, run.StartedAt, run.EndedAt, run.Notes, datasetID, actor).Scan(&runID)
+			orgID, run.MLflowID, experimentID, run.Name, run.Status, run.StartedAt, run.EndedAt, run.Notes, pq.Array(tags), datasetID, actor).Scan(&runID)
 		if err != nil {
 			return fmt.Errorf("postgres: UpsertMLRuns upsert: %w", err)
 		}
@@ -533,11 +537,7 @@ func (d *DB) UpsertMLDatasets(ctx context.Context, orgID, actorID string, in []m
 		}
 		tags := ds.Tags
 		if tags == nil {
-			tags = map[string]string{}
-		}
-		tagsJSON, err := jsonBytes(tags)
-		if err != nil {
-			return fmt.Errorf("postgres: UpsertMLDatasets marshal tags: %w", err)
+			tags = []string{}
 		}
 		actor := actorID
 		if ds.ActorID != "" {
@@ -550,7 +550,7 @@ func (d *DB) UpsertMLDatasets(ctx context.Context, orgID, actorID string, in []m
 				name=EXCLUDED.name, digest=EXCLUDED.digest, source=EXCLUDED.source, source_type=EXCLUDED.source_type,
 				context=EXCLUDED.context, row_count=EXCLUDED.row_count, schema=EXCLUDED.schema, tags=EXCLUDED.tags,
 				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()`,
-			orgID, experimentID, ds.MLflowID, ds.Name, ds.Digest, ds.Source, ds.SourceType, ds.Context, ds.RowCount, schemaJSON, tagsJSON, actor)
+			orgID, experimentID, ds.MLflowID, ds.Name, ds.Digest, ds.Source, ds.SourceType, ds.Context, ds.RowCount, schemaJSON, pq.Array(tags), actor)
 		if err != nil {
 			return fmt.Errorf("postgres: UpsertMLDatasets upsert: %w", err)
 		}
@@ -586,22 +586,27 @@ func (d *DB) UpsertMLEvaluations(ctx context.Context, orgID, actorID string, in 
 		if err != nil {
 			return fmt.Errorf("postgres: UpsertMLEvaluations resolve dataset: %w", err)
 		}
+		tags := e.Tags
+		if tags == nil {
+			tags = []string{}
+		}
 		actor := actorID
 		if e.ActorID != "" {
 			actor = e.ActorID
 		}
 		var evalID string
 		err = tx.QueryRowContext(ctx, `
-			INSERT INTO ml_evaluations (org_id, mlflow_id, version_id, experiment_id, dataset_id, name, type, description, summary, started_at, ended_at, evaluator, synced_at, created_by, updated_by)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW(),$13,$13)
+			INSERT INTO ml_evaluations (org_id, mlflow_id, version_id, experiment_id, dataset_id, name, type, description, summary, started_at, ended_at, evaluator, tags, synced_at, created_by, updated_by)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW(),$14,$14)
 			ON CONFLICT (org_id, mlflow_id) DO UPDATE SET
 				version_id=EXCLUDED.version_id, experiment_id=EXCLUDED.experiment_id,
 				dataset_id=COALESCE(EXCLUDED.dataset_id, ml_evaluations.dataset_id),
 				name=EXCLUDED.name, type=EXCLUDED.type, description=EXCLUDED.description, summary=EXCLUDED.summary,
 				started_at=EXCLUDED.started_at, ended_at=EXCLUDED.ended_at, evaluator=EXCLUDED.evaluator,
+				tags=EXCLUDED.tags,
 				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()
 			RETURNING id`,
-			orgID, e.MLflowID, versionID, experimentID, datasetID, e.Name, e.Type, e.Description, e.Summary, e.StartedAt, e.EndedAt, e.Evaluator, actor).Scan(&evalID)
+			orgID, e.MLflowID, versionID, experimentID, datasetID, e.Name, e.Type, e.Description, e.Summary, e.StartedAt, e.EndedAt, e.Evaluator, pq.Array(tags), actor).Scan(&evalID)
 		if err != nil {
 			return fmt.Errorf("postgres: UpsertMLEvaluations upsert: %w", err)
 		}

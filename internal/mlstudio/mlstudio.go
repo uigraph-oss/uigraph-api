@@ -96,6 +96,7 @@ type Run struct {
 	StartedAt    time.Time      `json:"startedAt"`
 	EndedAt      *time.Time     `json:"endedAt,omitempty"`
 	Notes        string         `json:"notes"`
+	Tags         []string       `json:"tags"`
 	Parameters   map[string]any `json:"parameters"`
 	Metrics      map[string]any `json:"metrics"`
 	DatasetID    *string        `json:"datasetId,omitempty"`
@@ -166,23 +167,23 @@ type SchemaField struct {
 }
 
 type Dataset struct {
-	ID           string            `json:"id"`
-	OrgID        string            `json:"orgId"`
-	ExperimentID string            `json:"experimentId"`
-	MLflowID     *string           `json:"mlflowId,omitempty"`
-	Name         string            `json:"name"`
-	Digest       string            `json:"digest"`
-	Source       string            `json:"source"`
-	SourceType   string            `json:"sourceType"`
-	Context      string            `json:"context"`
-	RowCount     int64             `json:"rowCount"`
-	Schema       []SchemaField     `json:"schema"`
-	Tags         map[string]string `json:"tags"`
-	Origin       string            `json:"origin"`
-	CreatedBy    string            `json:"createdBy,omitempty"`
-	CreatedAt    *time.Time        `json:"createdAt,omitempty"`
-	UpdatedAt    *time.Time        `json:"updatedAt,omitempty"`
-	DeletedAt    *time.Time        `json:"deletedAt,omitempty"`
+	ID           string        `json:"id"`
+	OrgID        string        `json:"orgId"`
+	ExperimentID string        `json:"experimentId"`
+	MLflowID     *string       `json:"mlflowId,omitempty"`
+	Name         string        `json:"name"`
+	Digest       string        `json:"digest"`
+	Source       string        `json:"source"`
+	SourceType   string        `json:"sourceType"`
+	Context      string        `json:"context"`
+	RowCount     int64         `json:"rowCount"`
+	Schema       []SchemaField `json:"schema"`
+	Tags         []string      `json:"tags"`
+	Origin       string        `json:"origin"`
+	CreatedBy    string        `json:"createdBy,omitempty"`
+	CreatedAt    *time.Time    `json:"createdAt,omitempty"`
+	UpdatedAt    *time.Time    `json:"updatedAt,omitempty"`
+	DeletedAt    *time.Time    `json:"deletedAt,omitempty"`
 }
 
 type Evaluation struct {
@@ -201,6 +202,7 @@ type Evaluation struct {
 	StartedAt    time.Time      `json:"startedAt"`
 	EndedAt      *time.Time     `json:"endedAt,omitempty"`
 	Evaluator    string         `json:"evaluator"`
+	Tags         []string       `json:"tags"`
 	Source       string         `json:"source"`
 	CreatedBy    *string        `json:"createdBy,omitempty"`
 	Parameters   map[string]any `json:"parameters"`

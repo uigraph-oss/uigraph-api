@@ -360,7 +360,7 @@ func scanMLRun(row interface{ Scan(...any) error }) (mlstudio.Run, error) {
 	var run mlstudio.Run
 	err := row.Scan(
 		&run.ID, &run.OrgID, &run.MLflowID, &run.ExperimentID, &run.Name, &run.Status,
-		&run.StartedAt, &run.EndedAt, &run.Notes,
+		&run.StartedAt, &run.EndedAt, &run.Notes, pq.Array(&run.Tags),
 		&run.DatasetID, &run.UpdatedAt, &run.SyncedAt,
 		&run.Source, &run.CreatedBy, &run.CreatedAt,
 	)
@@ -370,7 +370,7 @@ func scanMLRun(row interface{ Scan(...any) error }) (mlstudio.Run, error) {
 	return run, nil
 }
 
-const mlRunCols = `id, org_id, mlflow_id, experiment_id, name, status, started_at, ended_at, notes, dataset_id, updated_at, synced_at, source, created_by, created_at`
+const mlRunCols = `id, org_id, mlflow_id, experiment_id, name, status, started_at, ended_at, notes, tags, dataset_id, updated_at, synced_at, source, created_by, created_at`
 
 func (d *DB) attachMLRunValues(ctx context.Context, runs []mlstudio.Run) error {
 	ids := make([]string, 0, len(runs))
@@ -502,19 +502,16 @@ func (d *DB) ListMLArtifacts(ctx context.Context, orgID, runID string) ([]mlstud
 
 func scanMLDataset(row interface{ Scan(...any) error }) (mlstudio.Dataset, error) {
 	var ds mlstudio.Dataset
-	var schema, tags []byte
+	var schema []byte
 	err := row.Scan(
 		&ds.ID, &ds.OrgID, &ds.ExperimentID, &ds.MLflowID, &ds.Name, &ds.Digest,
-		&ds.Source, &ds.SourceType, &ds.Context, &ds.RowCount, &schema, &tags,
+		&ds.Source, &ds.SourceType, &ds.Context, &ds.RowCount, &schema, pq.Array(&ds.Tags),
 		&ds.Origin, &ds.CreatedBy, &ds.CreatedAt, &ds.UpdatedAt,
 	)
 	if err != nil {
 		return ds, err
 	}
 	if err := json.Unmarshal(schema, &ds.Schema); err != nil {
-		return ds, err
-	}
-	if err := json.Unmarshal(tags, &ds.Tags); err != nil {
 		return ds, err
 	}
 	return ds, nil
@@ -560,7 +557,7 @@ func (d *DB) GetMLDataset(ctx context.Context, orgID, id string) (*mlstudio.Data
 const mlEvaluationCols = `
 	e.id, e.org_id, e.mlflow_id, e.version_id, e.experiment_id, m.name, v.version,
 	e.dataset_id, e.name, e.type, e.description, e.summary, e.started_at, e.ended_at, e.evaluator,
-	e.source, e.created_by`
+	e.tags, e.source, e.created_by`
 
 const mlEvaluationFrom = `
 	FROM ml_evaluations e
@@ -574,7 +571,7 @@ func scanMLEvaluation(row interface{ Scan(...any) error }) (mlstudio.Evaluation,
 	err := row.Scan(
 		&e.ID, &e.OrgID, &e.MLflowID, &e.VersionID, &e.ExperimentID, &e.ModelName, &e.Version,
 		&e.DatasetID, &e.Name, &e.Type, &e.Description, &e.Summary, &e.StartedAt, &e.EndedAt, &e.Evaluator,
-		&e.Source, &e.CreatedBy,
+		pq.Array(&e.Tags), &e.Source, &e.CreatedBy,
 	)
 	if err != nil {
 		return e, err

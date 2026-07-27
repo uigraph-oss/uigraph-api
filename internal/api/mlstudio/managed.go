@@ -645,6 +645,7 @@ func (h *Handler) CreateRun(w http.ResponseWriter, r *http.Request) {
 		StartedAt  *time.Time     `json:"startedAt"`
 		EndedAt    *time.Time     `json:"endedAt"`
 		Notes      string         `json:"notes"`
+		Tags       []string       `json:"tags"`
 		Parameters map[string]any `json:"parameters"`
 		Metrics    map[string]any `json:"metrics"`
 		DatasetID  *string        `json:"datasetId"`
@@ -678,6 +679,7 @@ func (h *Handler) CreateRun(w http.ResponseWriter, r *http.Request) {
 		StartedAt:    *body.StartedAt,
 		EndedAt:      body.EndedAt,
 		Notes:        body.Notes,
+		Tags:         body.Tags,
 		Parameters:   body.Parameters,
 		Metrics:      body.Metrics,
 		DatasetID:    body.DatasetID,
@@ -720,6 +722,7 @@ func (h *Handler) UpdateRun(w http.ResponseWriter, r *http.Request) {
 		StartedAt  *time.Time     `json:"startedAt"`
 		EndedAt    *time.Time     `json:"endedAt"`
 		Notes      *string        `json:"notes"`
+		Tags       *[]string      `json:"tags"`
 		Parameters map[string]any `json:"parameters"`
 		Metrics    map[string]any `json:"metrics"`
 		DatasetID  *string        `json:"datasetId"`
@@ -746,6 +749,9 @@ func (h *Handler) UpdateRun(w http.ResponseWriter, r *http.Request) {
 	existing.EndedAt = body.EndedAt
 	if body.Notes != nil {
 		existing.Notes = *body.Notes
+	}
+	if body.Tags != nil {
+		existing.Tags = *body.Tags
 	}
 	if body.Parameters != nil {
 		existing.Parameters = body.Parameters
@@ -803,13 +809,13 @@ func (h *Handler) CreateDataset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Name       string            `json:"name"`
-		Digest     string            `json:"digest"`
-		Source     string            `json:"source"`
-		SourceType string            `json:"sourceType"`
-		Context    string            `json:"context"`
-		RowCount   int64             `json:"rowCount"`
-		Tags       map[string]string `json:"tags"`
+		Name       string   `json:"name"`
+		Digest     string   `json:"digest"`
+		Source     string   `json:"source"`
+		SourceType string   `json:"sourceType"`
+		Context    string   `json:"context"`
+		RowCount   int64    `json:"rowCount"`
+		Tags       []string `json:"tags"`
 	}
 	if err := httputil.Decode(r, &body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -868,13 +874,13 @@ func (h *Handler) UpdateDataset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Name       *string           `json:"name"`
-		Digest     *string           `json:"digest"`
-		Source     *string           `json:"source"`
-		SourceType *string           `json:"sourceType"`
-		Context    *string           `json:"context"`
-		RowCount   *int64            `json:"rowCount"`
-		Tags       map[string]string `json:"tags"`
+		Name       *string   `json:"name"`
+		Digest     *string   `json:"digest"`
+		Source     *string   `json:"source"`
+		SourceType *string   `json:"sourceType"`
+		Context    *string   `json:"context"`
+		RowCount   *int64    `json:"rowCount"`
+		Tags       *[]string `json:"tags"`
 	}
 	if err := httputil.Decode(r, &body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -899,7 +905,7 @@ func (h *Handler) UpdateDataset(w http.ResponseWriter, r *http.Request) {
 		existing.RowCount = *body.RowCount
 	}
 	if body.Tags != nil {
-		existing.Tags = body.Tags
+		existing.Tags = *body.Tags
 	}
 	if err := h.store.UpdateMLDataset(r.Context(), *existing); err != nil {
 		writeErr(w, r, err)
@@ -973,6 +979,7 @@ func (h *Handler) CreateEvaluation(w http.ResponseWriter, r *http.Request) {
 		StartedAt   *time.Time     `json:"startedAt"`
 		EndedAt     *time.Time     `json:"endedAt"`
 		Evaluator   string         `json:"evaluator"`
+		Tags        []string       `json:"tags"`
 		Parameters  map[string]any `json:"parameters"`
 		Metrics     map[string]any `json:"metrics"`
 	}
@@ -1022,6 +1029,7 @@ func (h *Handler) CreateEvaluation(w http.ResponseWriter, r *http.Request) {
 		StartedAt:    *body.StartedAt,
 		EndedAt:      body.EndedAt,
 		Evaluator:    body.Evaluator,
+		Tags:         body.Tags,
 		Parameters:   body.Parameters,
 		Metrics:      body.Metrics,
 		Source:       "manual",
@@ -1066,6 +1074,7 @@ func (h *Handler) UpdateEvaluation(w http.ResponseWriter, r *http.Request) {
 		StartedAt   *time.Time     `json:"startedAt"`
 		EndedAt     *time.Time     `json:"endedAt"`
 		Evaluator   *string        `json:"evaluator"`
+		Tags        *[]string      `json:"tags"`
 		Parameters  map[string]any `json:"parameters"`
 		Metrics     map[string]any `json:"metrics"`
 	}
@@ -1101,6 +1110,9 @@ func (h *Handler) UpdateEvaluation(w http.ResponseWriter, r *http.Request) {
 	existing.EndedAt = body.EndedAt
 	if body.Evaluator != nil {
 		existing.Evaluator = *body.Evaluator
+	}
+	if body.Tags != nil {
+		existing.Tags = *body.Tags
 	}
 	if body.DatasetID != nil {
 		existing.DatasetID = body.DatasetID

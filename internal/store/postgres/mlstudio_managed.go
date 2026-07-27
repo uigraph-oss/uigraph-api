@@ -460,12 +460,16 @@ func (d *DB) CreateMLRun(ctx context.Context, run mlstudio.Run) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 	const q = `
-		INSERT INTO ml_runs (id, org_id, experiment_id, name, status, started_at, ended_at, notes, dataset_id, source, created_by, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12)`
+		INSERT INTO ml_runs (id, org_id, experiment_id, name, status, started_at, ended_at, notes, tags, dataset_id, source, created_by, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$13)`
 	now := time.Now().UTC()
+	tags := run.Tags
+	if tags == nil {
+		tags = []string{}
+	}
 	_, err = tx.ExecContext(ctx, q,
 		run.ID, run.OrgID, run.ExperimentID, run.Name, run.Status, run.StartedAt, run.EndedAt,
-		run.Notes, run.DatasetID, run.Source, run.CreatedBy, now)
+		run.Notes, pq.Array(tags), run.DatasetID, run.Source, run.CreatedBy, now)
 	if err != nil {
 		return fmt.Errorf("postgres: CreateMLRun: %w", err)
 	}
@@ -489,11 +493,15 @@ func (d *DB) UpdateMLRun(ctx context.Context, run mlstudio.Run) error {
 	defer func() { _ = tx.Rollback() }()
 	const q = `
 		UPDATE ml_runs SET
-			name=$1, status=$2, started_at=$3, ended_at=$4, notes=$5,
-			dataset_id=$6, updated_at=$7
-		WHERE org_id=$8 AND id=$9 AND deleted_at IS NULL`
+			name=$1, status=$2, started_at=$3, ended_at=$4, notes=$5, tags=$6,
+			dataset_id=$7, updated_at=$8
+		WHERE org_id=$9 AND id=$10 AND deleted_at IS NULL`
+	tags := run.Tags
+	if tags == nil {
+		tags = []string{}
+	}
 	_, err = tx.ExecContext(ctx, q,
-		run.Name, run.Status, run.StartedAt, run.EndedAt, run.Notes,
+		run.Name, run.Status, run.StartedAt, run.EndedAt, run.Notes, pq.Array(tags),
 		run.DatasetID, time.Now().UTC(), run.OrgID, run.ID)
 	if err != nil {
 		return fmt.Errorf("postgres: UpdateMLRun: %w", err)
@@ -526,15 +534,11 @@ func (d *DB) CreateMLDataset(ctx context.Context, ds mlstudio.Dataset) error {
 	}
 	tags := ds.Tags
 	if tags == nil {
-		tags = map[string]string{}
+		tags = []string{}
 	}
 	schemaJSON, err := jsonBytes(schema)
 	if err != nil {
 		return fmt.Errorf("postgres: CreateMLDataset marshal schema: %w", err)
-	}
-	tagsJSON, err := jsonBytes(tags)
-	if err != nil {
-		return fmt.Errorf("postgres: CreateMLDataset marshal tags: %w", err)
 	}
 	const q = `
 		INSERT INTO ml_datasets (id, org_id, experiment_id, name, digest, source, source_type, context, row_count, schema, tags, origin, created_by, created_at, updated_at)
@@ -542,7 +546,7 @@ func (d *DB) CreateMLDataset(ctx context.Context, ds mlstudio.Dataset) error {
 	now := time.Now().UTC()
 	_, err = d.db.ExecContext(ctx, q,
 		ds.ID, ds.OrgID, ds.ExperimentID, ds.Name, ds.Digest, ds.Source, ds.SourceType, ds.Context,
-		ds.RowCount, schemaJSON, tagsJSON, ds.Origin, ds.CreatedBy, now)
+		ds.RowCount, schemaJSON, pq.Array(tags), ds.Origin, ds.CreatedBy, now)
 	if err != nil {
 		return fmt.Errorf("postgres: CreateMLDataset: %w", err)
 	}
@@ -556,22 +560,18 @@ func (d *DB) UpdateMLDataset(ctx context.Context, ds mlstudio.Dataset) error {
 	}
 	tags := ds.Tags
 	if tags == nil {
-		tags = map[string]string{}
+		tags = []string{}
 	}
 	schemaJSON, err := jsonBytes(schema)
 	if err != nil {
 		return fmt.Errorf("postgres: UpdateMLDataset marshal schema: %w", err)
-	}
-	tagsJSON, err := jsonBytes(tags)
-	if err != nil {
-		return fmt.Errorf("postgres: UpdateMLDataset marshal tags: %w", err)
 	}
 	const q = `
 		UPDATE ml_datasets SET
 			name=$1, digest=$2, source=$3, source_type=$4, context=$5, row_count=$6, schema=$7, tags=$8, updated_at=$9
 		WHERE org_id=$10 AND id=$11 AND deleted_at IS NULL`
 	_, err = d.db.ExecContext(ctx, q,
-		ds.Name, ds.Digest, ds.Source, ds.SourceType, ds.Context, ds.RowCount, schemaJSON, tagsJSON,
+		ds.Name, ds.Digest, ds.Source, ds.SourceType, ds.Context, ds.RowCount, schemaJSON, pq.Array(tags),
 		time.Now().UTC(), ds.OrgID, ds.ID)
 	if err != nil {
 		return fmt.Errorf("postgres: UpdateMLDataset: %w", err)
@@ -595,12 +595,16 @@ func (d *DB) CreateMLEvaluation(ctx context.Context, eval mlstudio.Evaluation) e
 	}
 	defer func() { _ = tx.Rollback() }()
 	const q = `
-		INSERT INTO ml_evaluations (id, org_id, experiment_id, version_id, dataset_id, name, type, description, summary, started_at, ended_at, evaluator, source, created_by, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$15)`
+		INSERT INTO ml_evaluations (id, org_id, experiment_id, version_id, dataset_id, name, type, description, summary, started_at, ended_at, evaluator, tags, source, created_by, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$16)`
 	now := time.Now().UTC()
+	tags := eval.Tags
+	if tags == nil {
+		tags = []string{}
+	}
 	_, err = tx.ExecContext(ctx, q,
 		eval.ID, eval.OrgID, eval.ExperimentID, eval.VersionID, eval.DatasetID, eval.Name, eval.Type,
-		eval.Description, eval.Summary, eval.StartedAt, eval.EndedAt, eval.Evaluator, eval.Source, eval.CreatedBy, now)
+		eval.Description, eval.Summary, eval.StartedAt, eval.EndedAt, eval.Evaluator, pq.Array(tags), eval.Source, eval.CreatedBy, now)
 	if err != nil {
 		return fmt.Errorf("postgres: CreateMLEvaluation: %w", err)
 	}
@@ -625,11 +629,15 @@ func (d *DB) UpdateMLEvaluation(ctx context.Context, eval mlstudio.Evaluation) e
 	const q = `
 		UPDATE ml_evaluations SET
 			name=$1, type=$2, description=$3, summary=$4, started_at=$5, ended_at=$6,
-			evaluator=$7, dataset_id=$8, updated_at=$9
-		WHERE org_id=$10 AND id=$11 AND deleted_at IS NULL`
+			evaluator=$7, tags=$8, dataset_id=$9, updated_at=$10
+		WHERE org_id=$11 AND id=$12 AND deleted_at IS NULL`
+	tags := eval.Tags
+	if tags == nil {
+		tags = []string{}
+	}
 	_, err = tx.ExecContext(ctx, q,
 		eval.Name, eval.Type, eval.Description, eval.Summary, eval.StartedAt, eval.EndedAt,
-		eval.Evaluator, eval.DatasetID, time.Now().UTC(), eval.OrgID, eval.ID)
+		eval.Evaluator, pq.Array(tags), eval.DatasetID, time.Now().UTC(), eval.OrgID, eval.ID)
 	if err != nil {
 		return fmt.Errorf("postgres: UpdateMLEvaluation: %w", err)
 	}
