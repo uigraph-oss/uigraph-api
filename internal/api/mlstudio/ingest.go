@@ -56,6 +56,12 @@ func (h *Handler) SyncProjects(w http.ResponseWriter, r *http.Request) {
 		httputil.BadRequest(w, "invalid request body")
 		return
 	}
+	for i := range in {
+		if in[i].Type != "model" && in[i].Type != "training" {
+			httputil.BadRequest(w, "type must be one of model, training")
+			return
+		}
+	}
 	if err := h.store.UpsertMLProjects(r.Context(), orgID, p.UserID, in); err != nil {
 		writeErr(w, r, err)
 		return
@@ -81,6 +87,10 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Name == "" || body.Type == "" {
 		httputil.BadRequest(w, "name and type are required")
+		return
+	}
+	if body.Type != "model" && body.Type != "training" {
+		httputil.BadRequest(w, "type must be one of model, training")
 		return
 	}
 	hasTeamID := body.TeamID != nil && *body.TeamID != ""
@@ -147,8 +157,8 @@ func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		in.Name = *body.Name
 	}
 	if body.Type != nil {
-		if *body.Type == "" {
-			httputil.BadRequest(w, "type cannot be empty")
+		if *body.Type != "model" && *body.Type != "training" {
+			httputil.BadRequest(w, "type must be one of model, training")
 			return
 		}
 		in.Type = *body.Type
@@ -221,6 +231,15 @@ func (h *Handler) SyncModels(w http.ResponseWriter, r *http.Request) {
 		}
 		in[i].ActorID = actors[strings.ToLower(strings.TrimSpace(in[i].UserEmail))]
 	}
+	for i := range in {
+		if in[i].ProblemType == "" {
+			in[i].ProblemType = "other"
+		}
+		if in[i].ProblemType != "classification" && in[i].ProblemType != "regression" && in[i].ProblemType != "ranking" && in[i].ProblemType != "generation" && in[i].ProblemType != "embedding" && in[i].ProblemType != "other" {
+			httputil.BadRequest(w, "problemType must be one of classification, regression, ranking, generation, embedding, other")
+			return
+		}
+	}
 	if err := h.store.UpsertMLModels(r.Context(), orgID, p.UserID, in); err != nil {
 		writeErr(w, r, err)
 		return
@@ -237,6 +256,13 @@ func (h *Handler) UpdateModel(w http.ResponseWriter, r *http.Request) {
 	var in mlstudio.ModelUpdateInput
 	if err := httputil.Decode(r, &in); err != nil {
 		httputil.BadRequest(w, "invalid request body")
+		return
+	}
+	if in.ProblemType == "" {
+		in.ProblemType = "other"
+	}
+	if in.ProblemType != "classification" && in.ProblemType != "regression" && in.ProblemType != "ranking" && in.ProblemType != "generation" && in.ProblemType != "embedding" && in.ProblemType != "other" {
+		httputil.BadRequest(w, "problemType must be one of classification, regression, ranking, generation, embedding, other")
 		return
 	}
 	existing, err := h.store.GetMLModel(r.Context(), orgID, id)
@@ -317,6 +343,15 @@ func (h *Handler) SyncExperiments(w http.ResponseWriter, r *http.Request) {
 		}
 		in[i].ActorID = actors[strings.ToLower(strings.TrimSpace(in[i].UserEmail))]
 	}
+	for i := range in {
+		if in[i].Status == "" {
+			in[i].Status = "active"
+		}
+		if in[i].Status != "active" && in[i].Status != "concluded" && in[i].Status != "archived" {
+			httputil.BadRequest(w, "status must be one of active, concluded, archived")
+			return
+		}
+	}
 	if err := h.store.UpsertMLExperiments(r.Context(), orgID, p.UserID, in); err != nil {
 		writeErr(w, r, err)
 		return
@@ -354,6 +389,15 @@ func (h *Handler) SyncRuns(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		in[i].ActorID = actors[strings.ToLower(strings.TrimSpace(in[i].UserEmail))]
+	}
+	for i := range in {
+		if in[i].Status == "" {
+			in[i].Status = "running"
+		}
+		if in[i].Status != "running" && in[i].Status != "completed" && in[i].Status != "failed" && in[i].Status != "cancelled" {
+			httputil.BadRequest(w, "status must be one of running, completed, failed, cancelled")
+			return
+		}
 	}
 	if err := h.store.UpsertMLRuns(r.Context(), orgID, p.UserID, in); err != nil {
 		writeErr(w, r, err)
@@ -419,6 +463,15 @@ func (h *Handler) SyncDatasets(w http.ResponseWriter, r *http.Request) {
 		}
 		in[i].ActorID = actors[strings.ToLower(strings.TrimSpace(in[i].UserEmail))]
 	}
+	for i := range in {
+		if in[i].Context == "" {
+			in[i].Context = "training"
+		}
+		if in[i].Context != "training" && in[i].Context != "evaluation" {
+			httputil.BadRequest(w, "context must be one of training, evaluation")
+			return
+		}
+	}
 	if err := h.store.UpsertMLDatasets(r.Context(), orgID, p.UserID, in); err != nil {
 		writeErr(w, r, err)
 		return
@@ -456,6 +509,12 @@ func (h *Handler) SyncEvaluations(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		in[i].ActorID = actors[strings.ToLower(strings.TrimSpace(in[i].UserEmail))]
+	}
+	for i := range in {
+		if in[i].Type != "Offline Benchmark" && in[i].Type != "Online A/B Test" && in[i].Type != "Human Review" && in[i].Type != "Production Monitoring" {
+			httputil.BadRequest(w, "type must be one of Offline Benchmark, Online A/B Test, Human Review, Production Monitoring")
+			return
+		}
 	}
 	if err := h.store.UpsertMLEvaluations(r.Context(), orgID, p.UserID, in); err != nil {
 		writeErr(w, r, err)

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -61,6 +60,10 @@ func (h *Handler) CreateDeployment(w http.ResponseWriter, r *http.Request) {
 	}
 	if dep.Status == "" {
 		dep.Status = "live"
+	}
+	if dep.Status != "live" && dep.Status != "rolling-out" && dep.Status != "rolled-back" && dep.Status != "stopped" {
+		httputil.BadRequest(w, "status must be one of live, rolling-out, rolled-back, stopped")
+		return
 	}
 	if err := h.store.CreateMLDeployment(r.Context(), dep); err != nil {
 		writeErr(w, r, err)
@@ -140,6 +143,10 @@ func (h *Handler) UpdateDeployment(w http.ResponseWriter, r *http.Request) {
 		existing.Environment = *body.Environment
 	}
 	if body.Status != nil {
+		if *body.Status != "live" && *body.Status != "rolling-out" && *body.Status != "rolled-back" && *body.Status != "stopped" {
+			httputil.BadRequest(w, "status must be one of live, rolling-out, rolled-back, stopped")
+			return
+		}
 		existing.Status = *body.Status
 	}
 	if body.Endpoint != nil {
@@ -374,6 +381,10 @@ func (h *Handler) CreateModel(w http.ResponseWriter, r *http.Request) {
 	if problemType == "" {
 		problemType = "other"
 	}
+	if problemType != "classification" && problemType != "regression" && problemType != "ranking" && problemType != "generation" && problemType != "embedding" && problemType != "other" {
+		httputil.BadRequest(w, "problemType must be one of classification, regression, ranking, generation, embedding, other")
+		return
+	}
 	projectID := body.ProjectID
 	m := mlstudio.Model{
 		ID:          uuid.NewString(),
@@ -450,6 +461,10 @@ func (h *Handler) UpdateModelInfo(w http.ResponseWriter, r *http.Request) {
 		existing.Domain = *body.Domain
 	}
 	if body.ProblemType != nil {
+		if *body.ProblemType != "classification" && *body.ProblemType != "regression" && *body.ProblemType != "ranking" && *body.ProblemType != "generation" && *body.ProblemType != "embedding" && *body.ProblemType != "other" {
+			httputil.BadRequest(w, "problemType must be one of classification, regression, ranking, generation, embedding, other")
+			return
+		}
 		existing.ProblemType = *body.ProblemType
 	}
 	if body.Tags != nil {
@@ -518,6 +533,10 @@ func (h *Handler) CreateExperiment(w http.ResponseWriter, r *http.Request) {
 	status := body.Status
 	if status == "" {
 		status = "active"
+	}
+	if status != "active" && status != "concluded" && status != "archived" {
+		httputil.BadRequest(w, "status must be one of active, concluded, archived")
+		return
 	}
 	projectID := body.ProjectID
 	e := mlstudio.Experiment{
@@ -589,6 +608,10 @@ func (h *Handler) UpdateExperiment(w http.ResponseWriter, r *http.Request) {
 		existing.Description = *body.Description
 	}
 	if body.Status != nil {
+		if *body.Status != "active" && *body.Status != "concluded" && *body.Status != "archived" {
+			httputil.BadRequest(w, "status must be one of active, concluded, archived")
+			return
+		}
 		existing.Status = *body.Status
 	}
 	if body.Tags != nil {
@@ -672,6 +695,10 @@ func (h *Handler) CreateRun(w http.ResponseWriter, r *http.Request) {
 	if status == "" {
 		status = "running"
 	}
+	if status != "running" && status != "completed" && status != "failed" && status != "cancelled" {
+		httputil.BadRequest(w, "status must be one of running, completed, failed, cancelled")
+		return
+	}
 	run := mlstudio.Run{
 		ID:           uuid.NewString(),
 		OrgID:        orgID,
@@ -737,6 +764,10 @@ func (h *Handler) UpdateRun(w http.ResponseWriter, r *http.Request) {
 		existing.Name = *body.Name
 	}
 	if body.Status != nil {
+		if *body.Status != "running" && *body.Status != "completed" && *body.Status != "failed" && *body.Status != "cancelled" {
+			httputil.BadRequest(w, "status must be one of running, completed, failed, cancelled")
+			return
+		}
 		existing.Status = *body.Status
 	}
 	if body.StartedAt == nil {
@@ -831,6 +862,10 @@ func (h *Handler) CreateDataset(w http.ResponseWriter, r *http.Request) {
 	if context == "" {
 		context = "training"
 	}
+	if context != "training" && context != "evaluation" {
+		httputil.BadRequest(w, "context must be one of training, evaluation")
+		return
+	}
 	ds := mlstudio.Dataset{
 		ID:           uuid.NewString(),
 		OrgID:        orgID,
@@ -901,6 +936,10 @@ func (h *Handler) UpdateDataset(w http.ResponseWriter, r *http.Request) {
 		existing.SourceType = *body.SourceType
 	}
 	if body.Context != nil {
+		if *body.Context != "training" && *body.Context != "evaluation" {
+			httputil.BadRequest(w, "context must be one of training, evaluation")
+			return
+		}
 		existing.Context = *body.Context
 	}
 	if body.RowCount != nil {
@@ -1175,22 +1214,6 @@ func (h *Handler) DeleteArtifact(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-var allowedEvaluationTypes = []string{
-	"Offline Benchmark",
-	"Online A/B Test",
-	"Human Review",
-	"Production Monitoring",
-}
-
-func validEvaluationType(t string) bool {
-	for _, allowed := range allowedEvaluationTypes {
-		if t == allowed {
-			return true
-		}
-	}
-	return false
-}
-
 func (h *Handler) CreateEvaluation(w http.ResponseWriter, r *http.Request) {
 	p, orgID, ok := h.authorizeOrg(w, r)
 	if !ok {
@@ -1226,8 +1249,8 @@ func (h *Handler) CreateEvaluation(w http.ResponseWriter, r *http.Request) {
 		httputil.BadRequest(w, "versionId is required")
 		return
 	}
-	if !validEvaluationType(body.Type) {
-		httputil.BadRequest(w, fmt.Sprintf("type must be one of %s", strings.Join(allowedEvaluationTypes, ", ")))
+	if body.Type != "Offline Benchmark" && body.Type != "Online A/B Test" && body.Type != "Human Review" && body.Type != "Production Monitoring" {
+		httputil.BadRequest(w, "type must be one of Offline Benchmark, Online A/B Test, Human Review, Production Monitoring")
 		return
 	}
 	if body.StartedAt == nil {
@@ -1317,8 +1340,8 @@ func (h *Handler) UpdateEvaluation(w http.ResponseWriter, r *http.Request) {
 		existing.Name = *body.Name
 	}
 	if body.Type != nil {
-		if !validEvaluationType(*body.Type) {
-			httputil.BadRequest(w, fmt.Sprintf("type must be one of %s", strings.Join(allowedEvaluationTypes, ", ")))
+		if *body.Type != "Offline Benchmark" && *body.Type != "Online A/B Test" && *body.Type != "Human Review" && *body.Type != "Production Monitoring" {
+			httputil.BadRequest(w, "type must be one of Offline Benchmark, Online A/B Test, Human Review, Production Monitoring")
 			return
 		}
 		existing.Type = *body.Type

@@ -291,8 +291,8 @@ func (d *DB) UpsertMLModels(ctx context.Context, orgID, actorID string, in []mls
 			actor = m.ActorID
 		}
 		_, err = tx.ExecContext(ctx, `
-			INSERT INTO ml_models (org_id, mlflow_id, project_id, name, description, tags, problem_type, domain, license, intended_use, limitations, recommendations, considerations, production_version_id, mlflow_created_at, mlflow_updated_at, synced_at, created_by, updated_by)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NOW(),$17,$17)
+			INSERT INTO ml_models (org_id, mlflow_id, project_id, name, description, tags, problem_type, domain, license, intended_use, limitations, recommendations, considerations, production_version_id, mlflow_created_at, mlflow_updated_at, origin, synced_at, created_by, updated_by)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'mlflow',NOW(),$17,$17)
 			ON CONFLICT (org_id, mlflow_id) DO UPDATE SET
 				project_id=COALESCE(EXCLUDED.project_id, ml_models.project_id),
 				name=EXCLUDED.name, description=EXCLUDED.description, tags=EXCLUDED.tags,
@@ -361,8 +361,8 @@ func (d *DB) UpsertMLModelVersions(ctx context.Context, orgID, actorID string, i
 			actor = v.ActorID
 		}
 		_, err = tx.ExecContext(ctx, `
-			INSERT INTO ml_model_versions (org_id, mlflow_id, model_id, version, description, run_id, mlflow_created_at, synced_at, created_by, updated_by)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,NOW(),$8,$8)
+			INSERT INTO ml_model_versions (org_id, mlflow_id, model_id, version, description, run_id, mlflow_created_at, source, synced_at, created_by, updated_by)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,'mlflow',NOW(),$8,$8)
 			ON CONFLICT (org_id, mlflow_id) DO UPDATE SET
 				model_id=EXCLUDED.model_id, version=EXCLUDED.version, description=EXCLUDED.description,
 				run_id=COALESCE(EXCLUDED.run_id, ml_model_versions.run_id),
@@ -399,8 +399,8 @@ func (d *DB) UpsertMLExperiments(ctx context.Context, orgID, actorID string, in 
 			actor = e.ActorID
 		}
 		_, err = tx.ExecContext(ctx, `
-			INSERT INTO ml_experiments (org_id, mlflow_id, project_id, name, description, status, tags, synced_at, created_by, updated_by)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,NOW(),$8,$8)
+			INSERT INTO ml_experiments (org_id, mlflow_id, project_id, name, description, status, tags, source, synced_at, created_by, updated_by)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,'mlflow',NOW(),$8,$8)
 			ON CONFLICT (org_id, mlflow_id) DO UPDATE SET
 				project_id=COALESCE(EXCLUDED.project_id, ml_experiments.project_id),
 				name=EXCLUDED.name, description=EXCLUDED.description, status=EXCLUDED.status, tags=EXCLUDED.tags,
@@ -451,8 +451,8 @@ func (d *DB) UpsertMLRuns(ctx context.Context, orgID, actorID string, in []mlstu
 		}
 		var runID string
 		err = tx.QueryRowContext(ctx, `
-			INSERT INTO ml_runs (org_id, mlflow_id, experiment_id, name, status, started_at, ended_at, notes, tags, dataset_id, synced_at, created_by, updated_by)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW(),$11,$11)
+			INSERT INTO ml_runs (org_id, mlflow_id, experiment_id, name, status, started_at, ended_at, notes, tags, dataset_id, source, synced_at, created_by, updated_by)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'mlflow',NOW(),$11,$11)
 			ON CONFLICT (org_id, mlflow_id) DO UPDATE SET
 				experiment_id=EXCLUDED.experiment_id, name=EXCLUDED.name, status=EXCLUDED.status,
 				started_at=EXCLUDED.started_at, ended_at=EXCLUDED.ended_at,
@@ -496,8 +496,8 @@ func (d *DB) UpsertMLArtifacts(ctx context.Context, orgID, actorID string, in []
 			actor = a.ActorID
 		}
 		_, err = tx.ExecContext(ctx, `
-			INSERT INTO ml_artifacts (org_id, mlflow_id, run_id, name, type, uri, download_uri, size, format, synced_at, created_by, updated_by)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW(),$10,$10)
+			INSERT INTO ml_artifacts (org_id, mlflow_id, run_id, name, type, uri, download_uri, size, format, source, synced_at, created_by, updated_by)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'mlflow',NOW(),$10,$10)
 			ON CONFLICT (org_id, mlflow_id) DO UPDATE SET
 				run_id=EXCLUDED.run_id, name=EXCLUDED.name, type=EXCLUDED.type,
 				uri=EXCLUDED.uri, download_uri=EXCLUDED.download_uri, size=EXCLUDED.size, format=EXCLUDED.format,
@@ -544,8 +544,8 @@ func (d *DB) UpsertMLDatasets(ctx context.Context, orgID, actorID string, in []m
 			actor = ds.ActorID
 		}
 		_, err = tx.ExecContext(ctx, `
-			INSERT INTO ml_datasets (org_id, experiment_id, mlflow_id, name, digest, source, source_type, context, row_count, schema, tags, synced_at, created_by, updated_by)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW(),$12,$12)
+			INSERT INTO ml_datasets (org_id, experiment_id, mlflow_id, name, digest, source, source_type, context, row_count, schema, tags, origin, synced_at, created_by, updated_by)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'mlflow',NOW(),$12,$12)
 			ON CONFLICT (org_id, experiment_id, mlflow_id) DO UPDATE SET
 				name=EXCLUDED.name, digest=EXCLUDED.digest, source=EXCLUDED.source, source_type=EXCLUDED.source_type,
 				context=EXCLUDED.context, row_count=EXCLUDED.row_count, schema=EXCLUDED.schema, tags=EXCLUDED.tags,
@@ -596,8 +596,8 @@ func (d *DB) UpsertMLEvaluations(ctx context.Context, orgID, actorID string, in 
 		}
 		var evalID string
 		err = tx.QueryRowContext(ctx, `
-			INSERT INTO ml_evaluations (org_id, mlflow_id, version_id, experiment_id, dataset_id, name, type, description, summary, started_at, ended_at, evaluator, tags, synced_at, created_by, updated_by)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW(),$14,$14)
+			INSERT INTO ml_evaluations (org_id, mlflow_id, version_id, experiment_id, dataset_id, name, type, description, summary, started_at, ended_at, evaluator, tags, source, synced_at, created_by, updated_by)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'mlflow',NOW(),$14,$14)
 			ON CONFLICT (org_id, mlflow_id) DO UPDATE SET
 				version_id=EXCLUDED.version_id, experiment_id=EXCLUDED.experiment_id,
 				dataset_id=COALESCE(EXCLUDED.dataset_id, ml_evaluations.dataset_id),
