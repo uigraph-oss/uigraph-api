@@ -2,6 +2,7 @@ package mlstudio
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/uigraph/app/internal/httputil"
 	"github.com/uigraph/app/internal/mlstudio"
@@ -251,6 +252,15 @@ func (h *Handler) SyncRuns(w http.ResponseWriter, r *http.Request) {
 		httputil.BadRequest(w, "invalid request body")
 		return
 	}
+	now := time.Now().UTC()
+	for i := range in {
+		if in[i].StartedAt == nil {
+			in[i].StartedAt = &now
+		}
+		if in[i].EndedAt == nil {
+			in[i].EndedAt = &now
+		}
+	}
 	if err := h.store.UpsertMLRuns(r.Context(), orgID, p.UserID, in); err != nil {
 		writeErr(w, r, err)
 		return
@@ -301,6 +311,15 @@ func (h *Handler) SyncEvaluations(w http.ResponseWriter, r *http.Request) {
 	if err := httputil.Decode(r, &in); err != nil {
 		httputil.BadRequest(w, "invalid request body")
 		return
+	}
+	now := time.Now().UTC()
+	for i := range in {
+		if in[i].StartedAt == nil {
+			in[i].StartedAt = &now
+		}
+		if in[i].EndedAt == nil {
+			in[i].EndedAt = &now
+		}
 	}
 	if err := h.store.UpsertMLEvaluations(r.Context(), orgID, p.UserID, in); err != nil {
 		writeErr(w, r, err)

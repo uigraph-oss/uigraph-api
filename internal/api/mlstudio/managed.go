@@ -662,6 +662,18 @@ func (h *Handler) CreateRun(w http.ResponseWriter, r *http.Request) {
 		httputil.BadRequest(w, "name is required")
 		return
 	}
+	if body.StartedAt == nil {
+		httputil.BadRequest(w, "startedAt is required")
+		return
+	}
+	if body.EndedAt == nil {
+		httputil.BadRequest(w, "endedAt is required")
+		return
+	}
+	if body.EndedAt.Before(*body.StartedAt) {
+		httputil.BadRequest(w, "endedAt must not be before startedAt")
+		return
+	}
 	status := body.Status
 	if status == "" {
 		status = "running"
@@ -672,8 +684,8 @@ func (h *Handler) CreateRun(w http.ResponseWriter, r *http.Request) {
 		ExperimentID: experimentID,
 		Name:         body.Name,
 		Status:       status,
-		StartedAt:    body.StartedAt,
-		EndedAt:      body.EndedAt,
+		StartedAt:    *body.StartedAt,
+		EndedAt:      *body.EndedAt,
 		Notes:        body.Notes,
 		Parameters:   body.Parameters,
 		Metrics:      body.Metrics,
@@ -731,12 +743,20 @@ func (h *Handler) UpdateRun(w http.ResponseWriter, r *http.Request) {
 	if body.Status != nil {
 		existing.Status = *body.Status
 	}
-	if body.StartedAt != nil {
-		existing.StartedAt = body.StartedAt
+	if body.StartedAt == nil {
+		httputil.BadRequest(w, "startedAt is required")
+		return
 	}
-	if body.EndedAt != nil {
-		existing.EndedAt = body.EndedAt
+	if body.EndedAt == nil {
+		httputil.BadRequest(w, "endedAt is required")
+		return
 	}
+	if body.EndedAt.Before(*body.StartedAt) {
+		httputil.BadRequest(w, "endedAt must not be before startedAt")
+		return
+	}
+	existing.StartedAt = *body.StartedAt
+	existing.EndedAt = *body.EndedAt
 	if body.Notes != nil {
 		existing.Notes = *body.Notes
 	}
@@ -963,7 +983,8 @@ func (h *Handler) CreateEvaluation(w http.ResponseWriter, r *http.Request) {
 		Type        string         `json:"type"`
 		Description string         `json:"description"`
 		Summary     string         `json:"summary"`
-		EvaluatedAt *time.Time     `json:"evaluatedAt"`
+		StartedAt   *time.Time     `json:"startedAt"`
+		EndedAt     *time.Time     `json:"endedAt"`
 		Evaluator   string         `json:"evaluator"`
 		Parameters  map[string]any `json:"parameters"`
 		Metrics     map[string]any `json:"metrics"`
@@ -982,6 +1003,18 @@ func (h *Handler) CreateEvaluation(w http.ResponseWriter, r *http.Request) {
 	}
 	if !validEvaluationType(body.Type) {
 		httputil.BadRequest(w, fmt.Sprintf("type must be one of %s", strings.Join(allowedEvaluationTypes, ", ")))
+		return
+	}
+	if body.StartedAt == nil {
+		httputil.BadRequest(w, "startedAt is required")
+		return
+	}
+	if body.EndedAt == nil {
+		httputil.BadRequest(w, "endedAt is required")
+		return
+	}
+	if body.EndedAt.Before(*body.StartedAt) {
+		httputil.BadRequest(w, "endedAt must not be before startedAt")
 		return
 	}
 	version, err := h.store.GetMLModelVersion(r.Context(), orgID, body.VersionID)
@@ -1003,7 +1036,8 @@ func (h *Handler) CreateEvaluation(w http.ResponseWriter, r *http.Request) {
 		Type:         body.Type,
 		Description:  body.Description,
 		Summary:      body.Summary,
-		EvaluatedAt:  body.EvaluatedAt,
+		StartedAt:    *body.StartedAt,
+		EndedAt:      *body.EndedAt,
 		Evaluator:    body.Evaluator,
 		Parameters:   body.Parameters,
 		Metrics:      body.Metrics,
@@ -1046,7 +1080,8 @@ func (h *Handler) UpdateEvaluation(w http.ResponseWriter, r *http.Request) {
 		Type        *string        `json:"type"`
 		Description *string        `json:"description"`
 		Summary     *string        `json:"summary"`
-		EvaluatedAt *time.Time     `json:"evaluatedAt"`
+		StartedAt   *time.Time     `json:"startedAt"`
+		EndedAt     *time.Time     `json:"endedAt"`
 		Evaluator   *string        `json:"evaluator"`
 		Parameters  map[string]any `json:"parameters"`
 		Metrics     map[string]any `json:"metrics"`
@@ -1071,9 +1106,20 @@ func (h *Handler) UpdateEvaluation(w http.ResponseWriter, r *http.Request) {
 	if body.Summary != nil {
 		existing.Summary = *body.Summary
 	}
-	if body.EvaluatedAt != nil {
-		existing.EvaluatedAt = body.EvaluatedAt
+	if body.StartedAt == nil {
+		httputil.BadRequest(w, "startedAt is required")
+		return
 	}
+	if body.EndedAt == nil {
+		httputil.BadRequest(w, "endedAt is required")
+		return
+	}
+	if body.EndedAt.Before(*body.StartedAt) {
+		httputil.BadRequest(w, "endedAt must not be before startedAt")
+		return
+	}
+	existing.StartedAt = *body.StartedAt
+	existing.EndedAt = *body.EndedAt
 	if body.Evaluator != nil {
 		existing.Evaluator = *body.Evaluator
 	}

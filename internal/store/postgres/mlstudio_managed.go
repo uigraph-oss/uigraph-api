@@ -595,12 +595,12 @@ func (d *DB) CreateMLEvaluation(ctx context.Context, eval mlstudio.Evaluation) e
 	}
 	defer func() { _ = tx.Rollback() }()
 	const q = `
-		INSERT INTO ml_evaluations (id, org_id, experiment_id, version_id, dataset_id, name, type, description, summary, evaluated_at, evaluator, source, created_by, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$14)`
+		INSERT INTO ml_evaluations (id, org_id, experiment_id, version_id, dataset_id, name, type, description, summary, started_at, ended_at, evaluator, source, created_by, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$15)`
 	now := time.Now().UTC()
 	_, err = tx.ExecContext(ctx, q,
 		eval.ID, eval.OrgID, eval.ExperimentID, eval.VersionID, eval.DatasetID, eval.Name, eval.Type,
-		eval.Description, eval.Summary, eval.EvaluatedAt, eval.Evaluator, eval.Source, eval.CreatedBy, now)
+		eval.Description, eval.Summary, eval.StartedAt, eval.EndedAt, eval.Evaluator, eval.Source, eval.CreatedBy, now)
 	if err != nil {
 		return fmt.Errorf("postgres: CreateMLEvaluation: %w", err)
 	}
@@ -624,11 +624,11 @@ func (d *DB) UpdateMLEvaluation(ctx context.Context, eval mlstudio.Evaluation) e
 	defer func() { _ = tx.Rollback() }()
 	const q = `
 		UPDATE ml_evaluations SET
-			name=$1, type=$2, description=$3, summary=$4, evaluated_at=$5,
-			evaluator=$6, dataset_id=$7, updated_at=$8
-		WHERE org_id=$9 AND id=$10 AND deleted_at IS NULL`
+			name=$1, type=$2, description=$3, summary=$4, started_at=$5, ended_at=$6,
+			evaluator=$7, dataset_id=$8, updated_at=$9
+		WHERE org_id=$10 AND id=$11 AND deleted_at IS NULL`
 	_, err = tx.ExecContext(ctx, q,
-		eval.Name, eval.Type, eval.Description, eval.Summary, eval.EvaluatedAt,
+		eval.Name, eval.Type, eval.Description, eval.Summary, eval.StartedAt, eval.EndedAt,
 		eval.Evaluator, eval.DatasetID, time.Now().UTC(), eval.OrgID, eval.ID)
 	if err != nil {
 		return fmt.Errorf("postgres: UpdateMLEvaluation: %w", err)

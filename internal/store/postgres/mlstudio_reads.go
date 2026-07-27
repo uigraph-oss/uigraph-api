@@ -419,7 +419,7 @@ func (d *DB) ListMLRuns(ctx context.Context, orgID string, q mlstudio.RunQuery) 
 		return nil, 0, fmt.Errorf("postgres: ListMLRuns count: %w", err)
 	}
 
-	sel := `SELECT ` + mlRunCols + where + ` ORDER BY started_at DESC NULLS LAST`
+	sel := `SELECT ` + mlRunCols + where + ` ORDER BY started_at DESC`
 	if q.Limit > 0 {
 		args = append(args, q.Limit)
 		sel += fmt.Sprintf(" LIMIT $%d", len(args))
@@ -559,7 +559,7 @@ func (d *DB) GetMLDataset(ctx context.Context, orgID, id string) (*mlstudio.Data
 
 const mlEvaluationCols = `
 	e.id, e.org_id, e.mlflow_id, e.version_id, e.experiment_id, m.name, v.version,
-	e.dataset_id, e.name, e.type, e.description, e.summary, e.evaluated_at, e.evaluator,
+	e.dataset_id, e.name, e.type, e.description, e.summary, e.started_at, e.ended_at, e.evaluator,
 	e.source, e.created_by`
 
 const mlEvaluationFrom = `
@@ -573,7 +573,7 @@ func scanMLEvaluation(row interface{ Scan(...any) error }) (mlstudio.Evaluation,
 	var e mlstudio.Evaluation
 	err := row.Scan(
 		&e.ID, &e.OrgID, &e.MLflowID, &e.VersionID, &e.ExperimentID, &e.ModelName, &e.Version,
-		&e.DatasetID, &e.Name, &e.Type, &e.Description, &e.Summary, &e.EvaluatedAt, &e.Evaluator,
+		&e.DatasetID, &e.Name, &e.Type, &e.Description, &e.Summary, &e.StartedAt, &e.EndedAt, &e.Evaluator,
 		&e.Source, &e.CreatedBy,
 	)
 	if err != nil {
@@ -629,7 +629,7 @@ func (d *DB) ListMLEvaluations(ctx context.Context, orgID string, q mlstudio.Eva
 		return nil, 0, fmt.Errorf("postgres: ListMLEvaluations count: %w", err)
 	}
 
-	sel := `SELECT ` + mlEvaluationCols + where + ` ORDER BY e.evaluated_at DESC NULLS LAST`
+	sel := `SELECT ` + mlEvaluationCols + where + ` ORDER BY e.started_at DESC`
 	if q.Limit > 0 {
 		args = append(args, q.Limit)
 		sel += fmt.Sprintf(" LIMIT $%d", len(args))
@@ -682,7 +682,7 @@ func (d *DB) listMLEvaluations(ctx context.Context, label, scopeCol, orgID, scop
 		return nil, 0, fmt.Errorf("postgres: %s count: %w", label, err)
 	}
 
-	sel := `SELECT ` + mlEvaluationCols + where + ` ORDER BY e.evaluated_at DESC NULLS LAST`
+	sel := `SELECT ` + mlEvaluationCols + where + ` ORDER BY e.started_at DESC`
 	if q.Limit > 0 {
 		args = append(args, q.Limit)
 		sel += fmt.Sprintf(" LIMIT $%d", len(args))

@@ -540,16 +540,16 @@ func (d *DB) UpsertMLEvaluations(ctx context.Context, orgID, actorID string, in 
 		}
 		var evalID string
 		err = tx.QueryRowContext(ctx, `
-			INSERT INTO ml_evaluations (org_id, mlflow_id, version_id, experiment_id, dataset_id, name, type, description, summary, evaluated_at, evaluator, synced_at, created_by, updated_by)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW(),$12,$12)
+			INSERT INTO ml_evaluations (org_id, mlflow_id, version_id, experiment_id, dataset_id, name, type, description, summary, started_at, ended_at, evaluator, synced_at, created_by, updated_by)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW(),$13,$13)
 			ON CONFLICT (org_id, mlflow_id) DO UPDATE SET
 				version_id=EXCLUDED.version_id, experiment_id=EXCLUDED.experiment_id,
 				dataset_id=COALESCE(EXCLUDED.dataset_id, ml_evaluations.dataset_id),
 				name=EXCLUDED.name, type=EXCLUDED.type, description=EXCLUDED.description, summary=EXCLUDED.summary,
-				evaluated_at=EXCLUDED.evaluated_at, evaluator=EXCLUDED.evaluator,
+				started_at=EXCLUDED.started_at, ended_at=EXCLUDED.ended_at, evaluator=EXCLUDED.evaluator,
 				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()
 			RETURNING id`,
-			orgID, e.MLflowID, versionID, experimentID, datasetID, e.Name, e.Type, e.Description, e.Summary, e.EvaluatedAt, e.Evaluator, actorID).Scan(&evalID)
+			orgID, e.MLflowID, versionID, experimentID, datasetID, e.Name, e.Type, e.Description, e.Summary, e.StartedAt, e.EndedAt, e.Evaluator, actorID).Scan(&evalID)
 		if err != nil {
 			return fmt.Errorf("postgres: UpsertMLEvaluations upsert: %w", err)
 		}
