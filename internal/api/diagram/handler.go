@@ -68,6 +68,7 @@ func Register(
 	requireScope("diagrams:write", "POST", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/thumbnail", h.UpdateThumbnail)
 	requireScope("diagrams:write", "POST", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/thumbnail/prepare", h.PrepareThumbnailUpload)
 	requireScope("diagrams:write", "POST", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/thumbnail/confirm", h.ConfirmThumbnailUpload)
+	requireScope("diagrams:write", "POST", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/thumbnail/generate", h.GenerateThumbnail)
 	requireScope("diagrams:read", "GET", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/content", h.GetContent)
 	requireScope("diagrams:read", "GET", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/images", h.ListImages)
 	requireScope("diagrams:write", "POST", "/api/v1/orgs/{orgID}/diagrams/{diagramID}/images", h.CreateImage)
