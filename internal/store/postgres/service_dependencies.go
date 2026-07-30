@@ -26,20 +26,24 @@ func (d *DB) SyncServiceDependencies(ctx context.Context, orgID, serviceID, acto
 	}
 	defer func() { _ = tx.Rollback() }()
 	now := time.Now().UTC()
-	if _, err := tx.ExecContext(ctx, `UPDATE service_dependencies SET deleted_at=$1, deleted_by=$2 WHERE source_service_id=$3 AND deleted_at IS NULL`, now, actorID, serviceID); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE service_dependencies SET deleted_at=$1, deleted_by=$2 WHERE service_id=$3 AND deleted_at IS NULL`, now, actorID, serviceID); err != nil {
 		return fmt.Errorf("postgres: SyncServiceDependencies clear: %w", err)
 	}
 	for _, dependency := range dependencies {
-		var providerID string
-		err := tx.QueryRowContext(ctx, `SELECT id FROM services WHERE org_id=$1 AND name=$2 AND status='active' AND deleted_at IS NULL`, orgID, dependency.ProviderServiceName).Scan(&providerID)
+		var dependencyID *string
+		var resolved string
+		err := tx.QueryRowContext(ctx, `SELECT id FROM services WHERE org_id=$1 AND name=$2 AND status='active' AND deleted_at IS NULL`, orgID, dependency.DependencyName).Scan(&resolved)
 		if err != nil && err != sql.ErrNoRows {
-			return fmt.Errorf("postgres: SyncServiceDependencies provider: %w", err)
+			return fmt.Errorf("postgres: SyncServiceDependencies resolve dependency: %w", err)
 		}
-		if providerID == serviceID {
-			return fmt.Errorf("%w: dependency must not reference its consumer service", store.ErrInvalidDependency)
+		if err == nil {
+			if resolved == serviceID {
+				return fmt.Errorf("%w: dependency must not reference its own service", store.ErrInvalidDependency)
+			}
+			dependencyID = &resolved
 		}
 		var id string
-		err = tx.QueryRowContext(ctx, `INSERT INTO service_dependencies (source_service_id, org_id, name, provider_service_name, type, criticality, description, api_group_name, database_name, api_endpoint_names, created_by, updated_by, created_by_commit_hash, updated_by_commit_hash, created_at, updated_at, deleted_at, deleted_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11,$12,$12,$13,$13,NULL,NULL) ON CONFLICT (source_service_id, name) DO UPDATE SET provider_service_name=EXCLUDED.provider_service_name, type=EXCLUDED.type, criticality=EXCLUDED.criticality, description=EXCLUDED.description, api_group_name=EXCLUDED.api_group_name, database_name=EXCLUDED.database_name, api_endpoint_names=EXCLUDED.api_endpoint_names, updated_by=EXCLUDED.updated_by, updated_by_commit_hash=EXCLUDED.updated_by_commit_hash, updated_at=EXCLUDED.updated_at, deleted_at=NULL, deleted_by=NULL RETURNING id`, serviceID, orgID, dependency.Name, dependency.ProviderServiceName, nullableText(dependency.Type), dependency.Criticality, dependency.Description, dependency.APIGroupName, dependency.DatabaseName, pq.Array(dependency.APIEndpointNames), actorID, commitHash, now).Scan(&id)
+		err = tx.QueryRowContext(ctx, `INSERT INTO service_dependencies (service_id, dependency_id, dependency_name, direction, org_id, name, type, criticality, description, api_group_name, database_name, api_endpoint_names, created_by, updated_by, created_by_commit_hash, updated_by_commit_hash, created_at, updated_at, deleted_at, deleted_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$13,$14,$14,$15,$15,NULL,NULL) ON CONFLICT (service_id, name) DO UPDATE SET dependency_id=EXCLUDED.dependency_id, dependency_name=EXCLUDED.dependency_name, direction=EXCLUDED.direction, type=EXCLUDED.type, criticality=EXCLUDED.criticality, description=EXCLUDED.description, api_group_name=EXCLUDED.api_group_name, database_name=EXCLUDED.database_name, api_endpoint_names=EXCLUDED.api_endpoint_names, updated_by=EXCLUDED.updated_by, updated_by_commit_hash=EXCLUDED.updated_by_commit_hash, updated_at=EXCLUDED.updated_at, deleted_at=NULL, deleted_by=NULL RETURNING id`, serviceID, dependencyID, dependency.DependencyName, dependency.Direction, orgID, dependency.Name, nullableText(dependency.Type), dependency.Criticality, dependency.Description, dependency.APIGroupName, dependency.DatabaseName, pq.Array(dependency.APIEndpointNames), actorID, commitHash, now).Scan(&id)
 		if err != nil {
 			return fmt.Errorf("postgres: SyncServiceDependencies upsert: %w", err)
 		}
@@ -51,48 +55,36 @@ func (d *DB) SyncServiceDependencies(ctx context.Context, orgID, serviceID, acto
 }
 
 func (d *DB) ListServiceDependencies(ctx context.Context, orgID, serviceID, direction, criticality string) ([]catalog.ServiceDependencyEdge, error) {
-	if direction == "all" {
-		upstream, err := d.ListServiceDependencies(ctx, orgID, serviceID, "upstream", criticality)
-		if err != nil {
-			return nil, err
-		}
-		downstream, err := d.ListServiceDependencies(ctx, orgID, serviceID, "downstream", criticality)
-		if err != nil {
-			return nil, err
-		}
-		return append(upstream, downstream...), nil
-	}
 	where := `d.org_id=$1 AND d.deleted_at IS NULL`
 	args := []any{orgID}
 	if serviceID != "" {
-		if direction == "downstream" {
-			where += ` AND p.id=$2`
-			args = append(args, serviceID)
-		} else {
-			where += ` AND d.source_service_id=$2`
-			args = append(args, serviceID)
-		}
+		where += fmt.Sprintf(" AND d.service_id=$%d", len(args)+1)
+		args = append(args, serviceID)
+	}
+	if direction != "" && direction != "all" {
+		where += fmt.Sprintf(" AND d.direction=$%d", len(args)+1)
+		args = append(args, direction)
 	}
 	if criticality != "" {
 		where += fmt.Sprintf(" AND d.criticality=$%d", len(args)+1)
 		args = append(args, criticality)
 	}
-	q := `SELECT d.id, d.source_service_id, d.org_id, d.name, d.provider_service_name, COALESCE(d.type,''), d.criticality, d.description, d.api_group_name, d.database_name, d.created_by, d.updated_by, d.created_by_commit_hash, d.updated_by_commit_hash, d.created_at, d.updated_at, d.deleted_at, d.deleted_by, d.api_endpoint_names, CASE WHEN c.id IS NULL THEN NULL ELSE json_build_object('id', c.id, 'name', c.name, 'description', c.description, 'status', c.status, 'tier', c.tier, 'category', c.category, 'language', c.language, 'gitRepoUrl', c.git_repo_url, 'updatedAt', c.updated_at, 'metadata', c.metadata) END, CASE WHEN p.id IS NULL THEN NULL ELSE json_build_object('id', p.id, 'name', p.name, 'description', p.description, 'status', p.status, 'tier', p.tier, 'category', p.category, 'language', p.language, 'gitRepoUrl', p.git_repo_url, 'updatedAt', p.updated_at, 'metadata', p.metadata) END FROM service_dependencies d LEFT JOIN services c ON c.id=d.source_service_id AND c.deleted_at IS NULL LEFT JOIN services p ON p.org_id=d.org_id AND p.name=d.provider_service_name AND p.status='active' AND p.deleted_at IS NULL WHERE ` + where + ` ORDER BY d.name`
+	q := `SELECT d.id, d.service_id, d.dependency_id, d.dependency_name, d.direction, d.org_id, d.name, COALESCE(d.type,''), d.criticality, d.description, d.api_group_name, d.database_name, d.created_by, d.updated_by, d.created_by_commit_hash, d.updated_by_commit_hash, d.created_at, d.updated_at, d.deleted_at, d.deleted_by, d.api_endpoint_names, CASE WHEN s.id IS NULL THEN NULL ELSE json_build_object('id', s.id, 'name', s.name, 'description', s.description, 'status', s.status, 'tier', s.tier, 'category', s.category, 'language', s.language, 'gitRepoUrl', s.git_repo_url, 'updatedAt', s.updated_at, 'metadata', s.metadata) END, CASE WHEN dp.id IS NULL THEN NULL ELSE json_build_object('id', dp.id, 'name', dp.name, 'description', dp.description, 'status', dp.status, 'tier', dp.tier, 'category', dp.category, 'language', dp.language, 'gitRepoUrl', dp.git_repo_url, 'updatedAt', dp.updated_at, 'metadata', dp.metadata) END FROM service_dependencies d LEFT JOIN services s ON s.id=d.service_id AND s.deleted_at IS NULL LEFT JOIN services dp ON dp.id=d.dependency_id AND dp.status='active' AND dp.deleted_at IS NULL WHERE ` + where + ` ORDER BY d.name`
 	rows, err := d.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListServiceDependencies: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	return scanDependencyEdges(rows, direction)
+	return scanDependencyEdges(rows)
 }
 
-func scanDependencyEdges(rows *sql.Rows, direction string) ([]catalog.ServiceDependencyEdge, error) {
+func scanDependencyEdges(rows *sql.Rows) ([]catalog.ServiceDependencyEdge, error) {
 	result := []catalog.ServiceDependencyEdge{}
 	for rows.Next() {
 		var edge catalog.ServiceDependencyEdge
 		var endpointNames pq.StringArray
-		var consumer, provider []byte
-		err := rows.Scan(&edge.ID, &edge.SourceServiceID, &edge.OrgID, &edge.Name, &edge.ProviderServiceName, &edge.Type, &edge.Criticality, &edge.Description, &edge.APIGroupName, &edge.DatabaseName, &edge.CreatedBy, &edge.UpdatedBy, &edge.CreatedByCommitHash, &edge.UpdatedByCommitHash, &edge.CreatedAt, &edge.UpdatedAt, &edge.DeletedAt, &edge.DeletedBy, &endpointNames, &consumer, &provider)
+		var service, dependency []byte
+		err := rows.Scan(&edge.ID, &edge.ServiceID, &edge.DependencyID, &edge.DependencyName, &edge.Direction, &edge.OrgID, &edge.Name, &edge.Type, &edge.Criticality, &edge.Description, &edge.APIGroupName, &edge.DatabaseName, &edge.CreatedBy, &edge.UpdatedBy, &edge.CreatedByCommitHash, &edge.UpdatedByCommitHash, &edge.CreatedAt, &edge.UpdatedAt, &edge.DeletedAt, &edge.DeletedBy, &endpointNames, &service, &dependency)
 		if err != nil {
 			return nil, err
 		}
@@ -100,19 +92,18 @@ func scanDependencyEdges(rows *sql.Rows, direction string) ([]catalog.ServiceDep
 		if edge.APIEndpointNames == nil {
 			edge.APIEndpointNames = []string{}
 		}
-		if len(consumer) > 0 {
-			edge.Consumer = &catalog.Service{}
-			if err := json.Unmarshal(consumer, edge.Consumer); err != nil {
+		if len(service) > 0 {
+			edge.Service = &catalog.Service{}
+			if err := json.Unmarshal(service, edge.Service); err != nil {
 				return nil, err
 			}
 		}
-		if len(provider) > 0 {
-			edge.Provider = &catalog.Service{}
-			if err := json.Unmarshal(provider, edge.Provider); err != nil {
+		if len(dependency) > 0 {
+			edge.Dependency = &catalog.Service{}
+			if err := json.Unmarshal(dependency, edge.Dependency); err != nil {
 				return nil, err
 			}
 		}
-		edge.Direction = direction
 		result = append(result, edge)
 	}
 	return result, rows.Err()
@@ -122,15 +113,15 @@ func (d *DB) DependencyGraph(ctx context.Context, orgID, serviceID string) ([]ca
 	if serviceID == "" {
 		return d.allDependencyEdges(ctx, orgID)
 	}
-	upstream, err := d.dependencyGraph(ctx, orgID, serviceID, "upstream", 0)
+	up, err := d.dependencyGraph(ctx, orgID, serviceID, "upstream", 0)
 	if err != nil {
 		return nil, err
 	}
-	downstream, err := d.dependencyGraph(ctx, orgID, serviceID, "downstream", 0)
+	down, err := d.dependencyGraph(ctx, orgID, serviceID, "downstream", 0)
 	if err != nil {
 		return nil, err
 	}
-	return dedupeEdges(upstream, downstream), nil
+	return dedupeEdges(up, down), nil
 }
 
 func dedupeEdges(a, b []catalog.ServiceDependencyEdge) []catalog.ServiceDependencyEdge {
@@ -156,13 +147,15 @@ func (d *DB) dependencyGraph(ctx context.Context, orgID, serviceID, direction st
 	if maxDepth <= 0 {
 		maxDepth = 10
 	}
-	cte := `WITH RECURSIVE walk(service_id, depth, path) AS (SELECT $2::uuid, 0, ARRAY[$2::uuid] UNION ALL SELECT `
-	if direction == "downstream" {
-		cte += `d.source_service_id, w.depth+1, w.path || d.source_service_id FROM walk w JOIN services p ON p.id=w.service_id JOIN service_dependencies d ON d.org_id=$1 AND d.provider_service_name=p.name AND d.deleted_at IS NULL WHERE w.depth < $3 AND NOT d.source_service_id = ANY(w.path)`
+	var ownSide, otherSide string
+	if direction == "upstream" {
+		ownSide, otherSide = "downstream", "upstream"
+	} else if direction == "downstream" {
+		ownSide, otherSide = "upstream", "downstream"
 	} else {
-		cte += `p.id, w.depth+1, w.path || p.id FROM walk w JOIN service_dependencies d ON d.source_service_id=w.service_id AND d.org_id=$1 AND d.deleted_at IS NULL JOIN services p ON p.org_id=d.org_id AND p.name=d.provider_service_name AND p.status='active' AND p.deleted_at IS NULL WHERE w.depth < $3 AND NOT p.id = ANY(w.path)`
+		return nil, fmt.Errorf("postgres: dependency graph walk: direction must be upstream or downstream, got %q", direction)
 	}
-	cte += `) SELECT DISTINCT service_id FROM walk`
+	cte := `WITH RECURSIVE walk(service_id, depth, path) AS (SELECT $2::uuid, 0, ARRAY[$2::uuid] UNION ALL SELECT next.id, w.depth+1, w.path || next.id FROM walk w JOIN service_dependencies d ON d.org_id=$1 AND d.deleted_at IS NULL AND ((d.service_id=w.service_id AND d.direction='` + ownSide + `') OR (d.dependency_id=w.service_id AND d.direction='` + otherSide + `')) JOIN services next ON next.id=CASE WHEN d.service_id=w.service_id THEN d.dependency_id ELSE d.service_id END AND next.org_id=$1 AND next.status='active' AND next.deleted_at IS NULL WHERE w.depth < $3 AND NOT next.id = ANY(w.path)) SELECT DISTINCT service_id FROM walk`
 	rows, err := d.db.QueryContext(ctx, cte, orgID, serviceID, maxDepth)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: dependency graph walk: %w", err)
@@ -189,11 +182,11 @@ func (d *DB) dependencyGraph(ctx context.Context, orgID, serviceID, direction st
 	}
 	edges := []catalog.ServiceDependencyEdge{}
 	for _, edge := range all {
-		providerID := "ghost:" + edge.ProviderServiceName
-		if edge.Provider != nil {
-			providerID = edge.Provider.ID
+		dependencyID := "ghost:" + edge.DependencyName
+		if edge.Dependency != nil {
+			dependencyID = edge.Dependency.ID
 		}
-		if !allowed[edge.SourceServiceID] || (edge.Provider != nil && !allowed[providerID]) {
+		if !allowed[edge.ServiceID] || (edge.Dependency != nil && !allowed[dependencyID]) {
 			continue
 		}
 		edges = append(edges, edge)
@@ -202,5 +195,5 @@ func (d *DB) dependencyGraph(ctx context.Context, orgID, serviceID, direction st
 }
 
 func (d *DB) allDependencyEdges(ctx context.Context, orgID string) ([]catalog.ServiceDependencyEdge, error) {
-	return d.ListServiceDependencies(ctx, orgID, "", "upstream", "")
+	return d.ListServiceDependencies(ctx, orgID, "", "all", "")
 }

@@ -1,12 +1,3 @@
-// Package screenshot runs an in-process worker that regenerates diagram preview
-// thumbnails by rendering the SPA's headless screenshot route via go-rod.
-//
-// Docker images ship Chromium via UIGRAPH_CHROMIUM_PATH. When unset, go-rod
-// downloads and caches a browser binary on first use.
-//
-// Auth: the worker mints a short-lived service-account token (scope diagrams:read)
-// per job and injects it as the X-API-Key header on the headless browser, so no
-// static render key needs to be provisioned or configured.
 package screenshot
 
 import (
@@ -52,9 +43,6 @@ type objectStore interface {
 	Upload(ctx context.Context, key, contentType string, r io.Reader, size int64) error
 }
 
-// saStore lets the worker mint its own short-lived render credential in-process
-// under the org's built-in System Service account, so no static service-account
-// API key has to be provisioned and configured.
 type saStore interface {
 	GetSystemServiceAccount(ctx context.Context, orgID string) (*identity.ServiceAccount, error)
 	CreateServiceAccount(ctx context.Context, sa identity.ServiceAccount) error
@@ -62,7 +50,6 @@ type saStore interface {
 	RevokeToken(ctx context.Context, tokenID string) error
 }
 
-// Worker consumes screenshot jobs and writes diagram preview assets.
 type Worker struct {
 	queue        *queue.Queue
 	store        store
@@ -76,15 +63,10 @@ type Worker struct {
 	saCache map[string]string
 }
 
-// New constructs a Worker. frontendURL is the SPA base (e.g. http://localhost:3000).
-// chromiumPath may be empty to let go-rod download and cache the browser binary on
-// first use. The worker mints its own diagrams:read render token per job.
 func New(q *queue.Queue, s store, sa saStore, st objectStore, c cache.Client, frontendURL, chromiumPath string) *Worker {
 	return &Worker{queue: q, store: s, sa: sa, storage: st, cache: c, frontendURL: frontendURL, chromiumPath: chromiumPath, saCache: map[string]string{}}
 }
 
-// Run consumes jobs until ctx is cancelled. It owns a single browser launched
-// once and reused across jobs.
 func (w *Worker) Run(ctx context.Context) {
 	bin := w.chromiumPath
 	if bin == "" {
@@ -100,7 +82,11 @@ func (w *Worker) Run(ctx context.Context) {
 		Set("no-sandbox").
 		Set("disable-gpu").
 		Set("hide-scrollbars").
+		Set("disable-web-security").
+		Set("disable-site-isolation-trials").
+		Set("disable-features", "IsolateOrigins,site-per-process").
 		Set("window-size", fmt.Sprintf("%d,%d", viewportW, viewportH))
+
 	controlURL, err := l.Launch()
 	if err != nil {
 		slog.ErrorContext(ctx, "screenshot worker: browser launch failed", "err", err)

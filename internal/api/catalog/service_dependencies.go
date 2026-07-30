@@ -26,6 +26,7 @@ func (h *Handler) SyncDependencies(w http.ResponseWriter, r *http.Request) {
 		Dependencies []struct {
 			Name             string   `json:"name"`
 			Service          string   `json:"service"`
+			Direction        string   `json:"direction"`
 			Type             string   `json:"type"`
 			Criticality      string   `json:"criticality"`
 			Description      string   `json:"description"`
@@ -51,6 +52,10 @@ func (h *Handler) SyncDependencies(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		names[input.Name] = true
+		if input.Direction != "upstream" && input.Direction != "downstream" {
+			httputil.BadRequest(w, "dependency direction is required and must be upstream or downstream")
+			return
+		}
 		if input.Type != "" && input.Type != "http" && input.Type != "graphql" && input.Type != "grpc" && input.Type != "database" {
 			httputil.BadRequest(w, "dependency type must be http, graphql, grpc, or database")
 			return
@@ -71,7 +76,7 @@ func (h *Handler) SyncDependencies(w http.ResponseWriter, r *http.Request) {
 			}
 			endpointNames[endpointName] = true
 		}
-		dependencies = append(dependencies, catalog.ServiceDependency{Name: input.Name, ProviderServiceName: input.Service, Type: input.Type, Criticality: input.Criticality, Description: input.Description, APIGroupName: input.APIGroupName, APIEndpointNames: input.APIEndpointNames, DatabaseName: input.DatabaseName})
+		dependencies = append(dependencies, catalog.ServiceDependency{Name: input.Name, DependencyName: input.Service, Direction: input.Direction, Type: input.Type, Criticality: input.Criticality, Description: input.Description, APIGroupName: input.APIGroupName, APIEndpointNames: input.APIEndpointNames, DatabaseName: input.DatabaseName})
 	}
 	if err := h.store.SyncServiceDependencies(r.Context(), r.PathValue("orgID"), serviceID, p.UserID, body.CommitHash, dependencies); err != nil {
 		if errors.Is(err, storepkg.ErrInvalidDependency) {
