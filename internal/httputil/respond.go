@@ -50,6 +50,10 @@ func NotImplemented(w http.ResponseWriter) {
 	JSON(w, http.StatusNotImplemented, apiError("not_implemented", "not yet implemented"))
 }
 
+func ServiceUnavailable(w http.ResponseWriter, msg string) {
+	JSON(w, http.StatusServiceUnavailable, apiError("service_unavailable", msg))
+}
+
 func Decode(r *http.Request, dst any) error {
 	return json.NewDecoder(r.Body).Decode(dst)
 }

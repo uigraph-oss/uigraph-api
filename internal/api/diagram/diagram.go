@@ -622,13 +622,16 @@ func (h *Handler) enqueueScreenshot(ctx context.Context, orgID, diagramID string
 	if h.queue == nil {
 		return
 	}
-	if err := h.queue.EnqueueScreenshot(ctx, queue.ScreenshotJob{OrgID: orgID, DiagramID: diagramID}); err != nil {
+	if err := h.enqueueScreenshotErr(ctx, orgID, diagramID); err != nil {
 		slog.WarnContext(ctx, "enqueue screenshot job failed", "diagramId", diagramID, "err", err)
-		return
 	}
-	if err := h.store.SetDiagramPreviewStatus(ctx, diagramID, diagrampkg.PreviewStatusPending); err != nil {
-		slog.WarnContext(ctx, "set diagram preview status pending failed", "diagramId", diagramID, "err", err)
+}
+
+func (h *Handler) enqueueScreenshotErr(ctx context.Context, orgID, diagramID string) error {
+	if err := h.queue.EnqueueScreenshot(ctx, queue.ScreenshotJob{OrgID: orgID, DiagramID: diagramID}); err != nil {
+		return err
 	}
+	return h.store.SetDiagramPreviewStatus(ctx, diagramID, diagrampkg.PreviewStatusPending)
 }
 
 // PrepareThumbnailUpload
@@ -742,6 +745,54 @@ func (h *Handler) ConfirmThumbnailUpload(w http.ResponseWriter, r *http.Request)
 	}
 
 	httputil.JSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// GenerateThumbnail
+// @Summary  GenerateThumbnail
+// @Tags     diagrams
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    diagramID  path  string  true  "diagramID"
+// @Success  202  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Failure  503  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/diagrams/{diagramID}/thumbnail/generate [post]
+func (h *Handler) GenerateThumbnail(w http.ResponseWriter, r *http.Request) {
+	orgID := r.PathValue("orgID")
+	diagramID := r.PathValue("diagramID")
+	_, ok := authmw.PrincipalFromCtx(r.Context())
+	if !ok {
+		httputil.Unauthorized(w)
+		return
+	}
+
+	dg, err := h.store.GetDiagram(r.Context(), diagramID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if dg == nil || dg.DeletedAt != nil {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+	if dg.OrgID != orgID {
+		httputil.Error(w, r, storepkg.ErrNotFound)
+		return
+	}
+
+	if h.queue == nil {
+		httputil.ServiceUnavailable(w, "thumbnail generation is not available")
+		return
+	}
+	if err := h.enqueueScreenshotErr(r.Context(), orgID, diagramID); err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+
+	httputil.JSON(w, http.StatusAccepted, map[string]any{"status": diagrampkg.PreviewStatusPending})
 }
 
 func sha256Hex(s string) string {
