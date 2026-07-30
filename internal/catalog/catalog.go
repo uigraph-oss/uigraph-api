@@ -53,10 +53,12 @@ type ServiceStats struct {
 
 type ServiceDependency struct {
 	ID                  string     `json:"id"`
-	SourceServiceID     string     `json:"sourceServiceId"`
+	ServiceID           string     `json:"serviceId"`
+	DependencyID        *string    `json:"dependencyId,omitempty"`
+	DependencyName      string     `json:"dependencyName"`
+	Direction           string     `json:"direction"`
 	OrgID               string     `json:"orgId"`
 	Name                string     `json:"name"`
-	ProviderServiceName string     `json:"providerName"`
 	Type                string     `json:"type"`
 	Criticality         string     `json:"criticality"`
 	Description         string     `json:"description"`
@@ -75,9 +77,8 @@ type ServiceDependency struct {
 
 type ServiceDependencyEdge struct {
 	ServiceDependency
-	Consumer  *Service `json:"consumer,omitempty"`
-	Provider  *Service `json:"provider,omitempty"`
-	Direction string   `json:"direction"`
+	Service    *Service `json:"service,omitempty"`
+	Dependency *Service `json:"dependency,omitempty"`
 }
 
 // ── API Group ─────────────────────────────────────────────────────────────────
