@@ -127,21 +127,22 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Name            string          `json:"name"`
-		Description     string          `json:"description"`
-		Status          string          `json:"status"`
-		Tier            string          `json:"tier"`
-		Category        string          `json:"category"`
-		Language        string          `json:"language"`
-		FolderID        *string         `json:"folderId"`
-		TeamID          *string         `json:"teamId"`
-		TeamName        string          `json:"teamName"`
-		GitRepoURL      *string         `json:"gitRepoUrl"`
-		JiraProjectURL  *string         `json:"jiraProjectUrl"`
-		SlackChannelURL *string         `json:"slackChannelUrl"`
-		Labels          []string        `json:"labels"`
-		Metadata        json.RawMessage `json:"metadata"`
-		CommitHash      *string         `json:"commitHash"`
+		Name            string               `json:"name"`
+		Description     string               `json:"description"`
+		Status          string               `json:"status"`
+		Tier            string               `json:"tier"`
+		Category        string               `json:"category"`
+		Language        string               `json:"language"`
+		FolderID        *string              `json:"folderId"`
+		TeamID          *string              `json:"teamId"`
+		TeamName        string               `json:"teamName"`
+		GitRepoURL      *string              `json:"gitRepoUrl"`
+		JiraProjectURL  *string              `json:"jiraProjectUrl"`
+		SlackChannelURL *string              `json:"slackChannelUrl"`
+		Labels          []string             `json:"labels"`
+		Metadata        json.RawMessage      `json:"metadata"`
+		DocLinks        []catalogpkg.DocLink `json:"docLinks"`
+		CommitHash      *string              `json:"commitHash"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -186,6 +187,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		SlackChannelURL:     body.SlackChannelURL,
 		Labels:              body.Labels,
 		Metadata:            body.Metadata,
+		DocLinks:            body.DocLinks,
 		CreatedBy:           p.UserID,
 		CreatedByCommitHash: body.CommitHash,
 		CreatedAt:           now,
@@ -261,22 +263,23 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Name            *string         `json:"name"`
-		Description     *string         `json:"description"`
-		Status          *string         `json:"status"`
-		Tier            *string         `json:"tier"`
-		Category        *string         `json:"category"`
-		Language        *string         `json:"language"`
-		FolderID        *string         `json:"folderId"`
-		TeamID          *string         `json:"teamId"`
-		TeamName        *string         `json:"teamName"`
-		GitRepoURL      *string         `json:"gitRepoUrl"`
-		JiraProjectURL  *string         `json:"jiraProjectUrl"`
-		SlackChannelURL *string         `json:"slackChannelUrl"`
-		LastCommitSha   *string         `json:"lastCommitSha"`
-		Labels          []string        `json:"labels"`
-		Metadata        json.RawMessage `json:"metadata"`
-		CommitHash      *string         `json:"commitHash"`
+		Name            *string              `json:"name"`
+		Description     *string              `json:"description"`
+		Status          *string              `json:"status"`
+		Tier            *string              `json:"tier"`
+		Category        *string              `json:"category"`
+		Language        *string              `json:"language"`
+		FolderID        *string              `json:"folderId"`
+		TeamID          *string              `json:"teamId"`
+		TeamName        *string              `json:"teamName"`
+		GitRepoURL      *string              `json:"gitRepoUrl"`
+		JiraProjectURL  *string              `json:"jiraProjectUrl"`
+		SlackChannelURL *string              `json:"slackChannelUrl"`
+		LastCommitSha   *string              `json:"lastCommitSha"`
+		Labels          []string             `json:"labels"`
+		Metadata        json.RawMessage      `json:"metadata"`
+		DocLinks        []catalogpkg.DocLink `json:"docLinks"`
+		CommitHash      *string              `json:"commitHash"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -333,6 +336,9 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Metadata != nil {
 		svc.Metadata = body.Metadata
+	}
+	if body.DocLinks != nil {
+		svc.DocLinks = body.DocLinks
 	}
 	svc.UpdatedBy = &p.UserID
 	svc.UpdatedByCommitHash = body.CommitHash

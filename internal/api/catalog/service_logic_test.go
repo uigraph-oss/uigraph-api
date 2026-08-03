@@ -246,6 +246,89 @@ func TestParseGrpcSpecEndpoints_invalidProtoReturnsError(t *testing.T) {
 	}
 }
 
+// ── preserveEndpointSLAs / endpointSLAKey ───────────────────────────────────
+
+func sla(p95 float64) *catalogpkg.EndpointSLA {
+	return &catalogpkg.EndpointSLA{
+		Thresholds: []catalogpkg.LoadTestThreshold{
+			{ID: "t1", Metric: "p95LatencyMs", Comparator: "<", Value: p95},
+		},
+	}
+}
+
+func TestPreserveEndpointSLAs_carriesForwardByOperationID(t *testing.T) {
+	existing := []catalogpkg.APIEndpoint{
+		{OperationID: "getUser", Method: "GET", Path: "/v1/users/{id}", SLA: sla(300)},
+	}
+	fresh := []catalogpkg.APIEndpoint{
+		// Freshly parsed from spec: same operation id, brand new UUID, no SLA yet.
+		{OperationID: "getUser", Method: "GET", Path: "/v1/users/{id}"},
+	}
+
+	preserveEndpointSLAs(existing, fresh)
+
+	if fresh[0].SLA == nil {
+		t.Fatal("expected SLA to be carried forward")
+	}
+	if fresh[0].SLA.Thresholds[0].Value != 300 {
+		t.Fatalf("expected preserved threshold value 300, got %v", fresh[0].SLA.Thresholds[0].Value)
+	}
+}
+
+func TestPreserveEndpointSLAs_fallsBackToMethodAndPathWhenOperationIDEmpty(t *testing.T) {
+	existing := []catalogpkg.APIEndpoint{
+		{OperationID: "", Method: "post", Path: "/v1/orders", SLA: sla(500)},
+	}
+	fresh := []catalogpkg.APIEndpoint{
+		{OperationID: "", Method: "POST", Path: "/v1/orders"},
+	}
+
+	preserveEndpointSLAs(existing, fresh)
+
+	if fresh[0].SLA == nil {
+		t.Fatal("expected SLA to be carried forward via method+path match, case-insensitive on method")
+	}
+}
+
+func TestPreserveEndpointSLAs_noMatchLeavesFreshSLANil(t *testing.T) {
+	existing := []catalogpkg.APIEndpoint{
+		{OperationID: "getUser", Method: "GET", Path: "/v1/users/{id}", SLA: sla(300)},
+	}
+	fresh := []catalogpkg.APIEndpoint{
+		// Renamed/removed-and-readded operation: no longer matches.
+		{OperationID: "getUserById", Method: "GET", Path: "/v1/users/{id}"},
+	}
+
+	preserveEndpointSLAs(existing, fresh)
+
+	if fresh[0].SLA != nil {
+		t.Fatalf("expected no SLA carried forward for a non-matching endpoint, got %+v", fresh[0].SLA)
+	}
+}
+
+func TestPreserveEndpointSLAs_existingEndpointWithoutSLAIsIgnored(t *testing.T) {
+	existing := []catalogpkg.APIEndpoint{
+		{OperationID: "getUser", Method: "GET", Path: "/v1/users/{id}", SLA: nil},
+	}
+	fresh := []catalogpkg.APIEndpoint{
+		{OperationID: "getUser", Method: "GET", Path: "/v1/users/{id}"},
+	}
+
+	preserveEndpointSLAs(existing, fresh)
+
+	if fresh[0].SLA != nil {
+		t.Fatalf("expected fresh.SLA to stay nil when existing had none, got %+v", fresh[0].SLA)
+	}
+}
+
+func TestEndpointSLAKey_prefersOperationIDOverMethodPath(t *testing.T) {
+	a := endpointSLAKey(catalogpkg.APIEndpoint{OperationID: "op1", Method: "GET", Path: "/a"})
+	b := endpointSLAKey(catalogpkg.APIEndpoint{OperationID: "op1", Method: "POST", Path: "/b"})
+	if a != b {
+		t.Fatalf("expected same key when operation id matches regardless of method/path, got %q vs %q", a, b)
+	}
+}
+
 // ── parseSpecEndpoints / $ref resolution ─────────────────────────────────────
 
 const testOpenAPISpecWithRef = `{

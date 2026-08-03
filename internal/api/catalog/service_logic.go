@@ -133,6 +133,11 @@ func (h *Handler) publishAPIGroupVersion(ctx context.Context, p publishParams) (
 	for i := range in.NewEndpoints {
 		in.NewEndpoints[i].CreatedByCommitHash = p.commitHash
 	}
+	if in.ReplaceEndpoints {
+		if existing, err := h.store.ListAPIEndpoints(ctx, g.ID); err == nil {
+			preserveEndpointSLAs(existing, in.NewEndpoints)
+		}
+	}
 	in.Group = *g
 	v, err := h.store.PublishAPIGroupVersion(ctx, in)
 	if err != nil {
@@ -140,6 +145,33 @@ func (h *Handler) publishAPIGroupVersion(ctx context.Context, p publishParams) (
 	}
 	g.Version = *v.Label
 	return v, nil
+}
+
+// preserveEndpointSLAs carries a manually-set SLA forward from an existing
+// endpoint onto its freshly re-synced replacement, matched by operation id
+// (falling back to method+path when operation id is empty). SLAs are
+// user-authored, not spec-derived, so a spec re-sync must not silently drop
+// them just because publishAPIGroupVersion replaces working-copy endpoints
+// wholesale.
+func preserveEndpointSLAs(existing, fresh []catalogpkg.APIEndpoint) {
+	byKey := make(map[string]*catalogpkg.EndpointSLA, len(existing))
+	for i := range existing {
+		if existing[i].SLA != nil {
+			byKey[endpointSLAKey(existing[i])] = existing[i].SLA
+		}
+	}
+	for i := range fresh {
+		if sla, ok := byKey[endpointSLAKey(fresh[i])]; ok {
+			fresh[i].SLA = sla
+		}
+	}
+}
+
+func endpointSLAKey(e catalogpkg.APIEndpoint) string {
+	if e.OperationID != "" {
+		return "op:" + e.OperationID
+	}
+	return "mp:" + strings.ToUpper(e.Method) + " " + e.Path
 }
 
 func specHash(s string) string {
