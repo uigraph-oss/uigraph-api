@@ -85,6 +85,19 @@ func (p *Provider) Models() []Model {
 	return out
 }
 
+// Lookup returns the price entry for modelID and whether it is known. Callers
+// that must not silently misprice an unknown model use this instead of PriceFor.
+func (p *Provider) Lookup(modelID string) (Model, bool) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	for _, m := range p.models {
+		if m.ModelID == modelID {
+			return m, true
+		}
+	}
+	return Model{}, false
+}
+
 func (p *Provider) PriceFor(modelID string) Model {
 	p.mu.RLock()
 	defer p.mu.RUnlock()

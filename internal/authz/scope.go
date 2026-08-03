@@ -55,6 +55,9 @@ const (
 	ScopeBillingRead  Scope = "billing:read"
 	ScopeBillingWrite Scope = "billing:write"
 
+	ScopeAgentsRead  Scope = "agents:read"
+	ScopeAgentsWrite Scope = "agents:write"
+
 	ScopeOrgUpdate Scope = "org:update"
 	ScopeOrgDelete Scope = "org:delete"
 )
@@ -73,6 +76,7 @@ var AllScopes = []Scope{
 	ScopeServiceAccountsCreateToken, ScopeServiceAccountsRevokeToken,
 	ScopeMLStudioRead, ScopeMLStudioWrite,
 	ScopeBillingRead, ScopeBillingWrite,
+	ScopeAgentsRead, ScopeAgentsWrite,
 	ScopeOrgUpdate, ScopeOrgDelete,
 }
 
@@ -82,17 +86,17 @@ var AllScopes = []Scope{
 var RoleScopes = map[Role][]Scope{
 	RoleViewer: {
 		ScopeDiagramsRead, ScopeDocsRead, ScopeMapsRead, ScopeServicesRead, ScopeChatRead, ScopeFoldersRead,
-		ScopeMembersRead, ScopeTeamsRead, ScopeServiceAccountsRead, ScopeMLStudioRead, ScopeBillingRead,
+		ScopeMembersRead, ScopeTeamsRead, ScopeServiceAccountsRead, ScopeMLStudioRead, ScopeBillingRead, ScopeAgentsRead,
 	},
 	RoleEditor: {
 		ScopeDiagramsRead, ScopeDocsRead, ScopeMapsRead, ScopeServicesRead, ScopeChatRead, ScopeFoldersRead,
-		ScopeMembersRead, ScopeTeamsRead, ScopeServiceAccountsRead, ScopeMLStudioRead, ScopeBillingRead,
+		ScopeMembersRead, ScopeTeamsRead, ScopeServiceAccountsRead, ScopeMLStudioRead, ScopeBillingRead, ScopeAgentsRead,
 		ScopeDiagramsWrite, ScopeDocsWrite, ScopeMapsWrite, ScopeServicesWrite, ScopeChatWrite, ScopeFoldersWrite,
-		ScopeMLStudioWrite, ScopeBillingWrite,
+		ScopeMLStudioWrite, ScopeBillingWrite, ScopeAgentsWrite,
 	},
 	RoleAdmin: {
 		"diagrams:*", "docs:*", "maps:*", "services:*", "chat:*", "folders:*",
-		"members:*", "teams:*", "serviceaccounts:*", "mlstudio:*", "billing:*", "org:*",
+		"members:*", "teams:*", "serviceaccounts:*", "mlstudio:*", "billing:*", "agents:*", "org:*",
 	},
 }
 

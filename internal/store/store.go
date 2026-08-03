@@ -3,6 +3,7 @@ package store
 import (
 	"errors"
 
+	"github.com/uigraph/app/internal/agentsession"
 	"github.com/uigraph/app/internal/authz"
 	"github.com/uigraph/app/internal/billing"
 	"github.com/uigraph/app/internal/catalog"
@@ -49,4 +50,5 @@ type Store interface {
 	mcpusage.Store
 	mlstudio.Store
 	billing.Store
+	agentsession.Store
 }

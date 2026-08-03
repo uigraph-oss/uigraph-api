@@ -8,6 +8,7 @@ import (
 
 	"github.com/uigraph/app/internal/api/actor"
 	"github.com/uigraph/app/internal/api/admin"
+	agentsessionapi "github.com/uigraph/app/internal/api/agentsession"
 	docsapi "github.com/uigraph/app/internal/api/apidocs"
 	assetapi "github.com/uigraph/app/internal/api/asset"
 	"github.com/uigraph/app/internal/api/auth"
@@ -229,6 +230,8 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 
 	pricing := modelpricing.New()
 	mcpusageapi.Register(mux, s, pricing, scopeFn)
+
+	agentsessionapi.Register(mux, s, pricing, scopeFn)
 
 	mlstudioapi.Register(mux, s, st, scopeFn)
 
