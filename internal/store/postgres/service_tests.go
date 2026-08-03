@@ -17,8 +17,8 @@ import (
 func (d *DB) CreateTestPack(ctx context.Context, p catalog.TestPack) error {
 	const q = `
 		INSERT INTO test_packs
-			(id, service_id, org_id, name, type, created_by, updated_by, created_by_commit_hash, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`
+			(id, service_id, org_id, name, type, load_config, baseline_run_id, created_by, updated_by, created_by_commit_hash, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`
 	now := time.Now().UTC()
 	if p.CreatedAt.IsZero() {
 		p.CreatedAt = now
@@ -26,8 +26,9 @@ func (d *DB) CreateTestPack(ctx context.Context, p catalog.TestPack) error {
 	if p.UpdatedAt.IsZero() {
 		p.UpdatedAt = now
 	}
+	loadConfigJSON, _ := json.Marshal(p.LoadConfig)
 	_, err := d.db.ExecContext(ctx, q,
-		p.ID, p.ServiceID, p.OrgID, p.Name, p.Type,
+		p.ID, p.ServiceID, p.OrgID, p.Name, p.Type, nullableJSON(loadConfigJSON), p.BaselineRunID,
 		p.CreatedBy, p.UpdatedBy, p.CreatedByCommitHash, p.CreatedAt, p.UpdatedAt,
 	)
 	return wrapErr("CreateTestPack", err)
@@ -35,7 +36,7 @@ func (d *DB) CreateTestPack(ctx context.Context, p catalog.TestPack) error {
 
 func (d *DB) GetTestPack(ctx context.Context, id string) (*catalog.TestPack, error) {
 	const q = `
-		SELECT id, service_id, org_id, name, type,
+		SELECT id, service_id, org_id, name, type, load_config, baseline_run_id,
 		       created_by, updated_by, created_by_commit_hash, updated_by_commit_hash, deleted_by, created_at, updated_at, deleted_at
 		FROM test_packs WHERE id=$1`
 	p, err := scanTestPack(d.db.QueryRowContext(ctx, q, id))
@@ -50,7 +51,7 @@ func (d *DB) GetTestPack(ctx context.Context, id string) (*catalog.TestPack, err
 
 func (d *DB) ListTestPacks(ctx context.Context, serviceID string) ([]catalog.TestPack, error) {
 	const q = `
-		SELECT id, service_id, org_id, name, type,
+		SELECT id, service_id, org_id, name, type, load_config, baseline_run_id,
 		       created_by, updated_by, created_by_commit_hash, updated_by_commit_hash, deleted_by, created_at, updated_at, deleted_at
 		FROM test_packs
 		WHERE service_id=$1 AND deleted_at IS NULL
@@ -74,9 +75,13 @@ func (d *DB) ListTestPacks(ctx context.Context, serviceID string) ([]catalog.Tes
 func (d *DB) UpdateTestPack(ctx context.Context, p catalog.TestPack) error {
 	const q = `
 		UPDATE test_packs
-		SET name=$1, type=$2, updated_by=$3, updated_by_commit_hash=$4, updated_at=$5
-		WHERE id=$6 AND deleted_at IS NULL`
-	_, err := d.db.ExecContext(ctx, q, p.Name, p.Type, p.UpdatedBy, p.UpdatedByCommitHash, time.Now().UTC(), p.ID)
+		SET name=$1, type=$2, load_config=$3, baseline_run_id=$4, updated_by=$5, updated_by_commit_hash=$6, updated_at=$7
+		WHERE id=$8 AND deleted_at IS NULL`
+	loadConfigJSON, _ := json.Marshal(p.LoadConfig)
+	_, err := d.db.ExecContext(ctx, q,
+		p.Name, p.Type, nullableJSON(loadConfigJSON), p.BaselineRunID,
+		p.UpdatedBy, p.UpdatedByCommitHash, time.Now().UTC(), p.ID,
+	)
 	return wrapErr("UpdateTestPack", err)
 }
 
@@ -88,11 +93,16 @@ func (d *DB) SoftDeleteTestPack(ctx context.Context, id, deletedBy string) error
 
 func scanTestPack(row interface{ Scan(...any) error }) (catalog.TestPack, error) {
 	var p catalog.TestPack
+	var loadConfig []byte
 	err := row.Scan(
-		&p.ID, &p.ServiceID, &p.OrgID, &p.Name, &p.Type,
+		&p.ID, &p.ServiceID, &p.OrgID, &p.Name, &p.Type, &loadConfig, &p.BaselineRunID,
 		&p.CreatedBy, &p.UpdatedBy, &p.CreatedByCommitHash, &p.UpdatedByCommitHash, &p.DeletedBy, &p.CreatedAt, &p.UpdatedAt, &p.DeletedAt,
 	)
-	return p, err
+	if err != nil {
+		return p, err
+	}
+	p.LoadConfig = decodeJSONPtr[catalog.LoadPackConfig](loadConfig)
+	return p, nil
 }
 
 // ── Test cases ────────────────────────────────────────────────────────────────
@@ -104,12 +114,12 @@ func (d *DB) CreateTestCase(ctx context.Context, tc catalog.TestCase) error {
 			 labels, linked_ticket, estimated_duration_mins, test_owner, linked_map_node_id,
 			 is_critical, evidence_required, manual_payload, api_payload, graphql_payload,
 			 database_payload, grpc_payload, status, version, baseline_run_result_id, dependencies,
-			 created_by, updated_by, created_by_commit_hash, created_at, updated_at)
+			 screenshot_urls, created_by, updated_by, created_by_commit_hash, created_at, updated_at)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,
 		        $10,$11,$12,$13,$14,
 		        $15,$16,$17,$18,$19,
 		        $20,$21,$22,$23,$24,$25,
-		        $26,$27,$28,$29,$30)`
+		        $26,$27,$28,$29,$30,$31)`
 	now := time.Now().UTC()
 	if tc.CreatedAt.IsZero() {
 		tc.CreatedAt = now
@@ -131,6 +141,10 @@ func (d *DB) CreateTestCase(ctx context.Context, tc catalog.TestCase) error {
 	if deps == nil {
 		deps = []string{}
 	}
+	screenshotURLs := tc.ScreenshotURLs
+	if screenshotURLs == nil {
+		screenshotURLs = []string{}
+	}
 	manualJSON, _ := json.Marshal(tc.Manual)
 	apiJSON, _ := json.Marshal(tc.API)
 	graphqlJSON, _ := json.Marshal(tc.GraphQL)
@@ -141,7 +155,7 @@ func (d *DB) CreateTestCase(ctx context.Context, tc catalog.TestCase) error {
 		pq.Array(labels), tc.LinkedTicket, tc.EstimatedDurationMins, tc.TestOwner, tc.LinkedMapNodeID,
 		tc.IsCritical, tc.EvidenceRequired, nullableJSON(manualJSON), nullableJSON(apiJSON), nullableJSON(graphqlJSON),
 		nullableJSON(dbJSON), nullableJSON(grpcJSON), tc.Status, tc.Version, tc.BaselineRunResultID, pq.Array(deps),
-		tc.CreatedBy, tc.UpdatedBy, tc.CreatedByCommitHash, tc.CreatedAt, tc.UpdatedAt,
+		pq.Array(screenshotURLs), tc.CreatedBy, tc.UpdatedBy, tc.CreatedByCommitHash, tc.CreatedAt, tc.UpdatedAt,
 	)
 	return wrapErr("CreateTestCase", err)
 }
@@ -152,6 +166,7 @@ func (d *DB) GetTestCase(ctx context.Context, id string) (*catalog.TestCase, err
 		       labels, linked_ticket, estimated_duration_mins, test_owner, linked_map_node_id,
 		       is_critical, evidence_required, manual_payload, api_payload, graphql_payload,
 		       database_payload, grpc_payload, status, version, baseline_run_result_id, dependencies,
+		       screenshot_urls,
 		       created_by, updated_by, created_by_commit_hash, updated_by_commit_hash, deleted_by, created_at, updated_at, deleted_at
 		FROM test_cases WHERE id=$1`
 	tc, err := scanTestCase(d.db.QueryRowContext(ctx, q, id))
@@ -170,6 +185,7 @@ func (d *DB) ListTestCases(ctx context.Context, serviceID string, testPackID *st
 		       labels, linked_ticket, estimated_duration_mins, test_owner, linked_map_node_id,
 		       is_critical, evidence_required, manual_payload, api_payload, graphql_payload,
 		       database_payload, grpc_payload, status, version, baseline_run_result_id, dependencies,
+		       screenshot_urls,
 		       created_by, updated_by, created_by_commit_hash, updated_by_commit_hash, deleted_by, created_at, updated_at, deleted_at
 		FROM test_cases
 		WHERE service_id=$1 AND deleted_at IS NULL`
@@ -202,8 +218,8 @@ func (d *DB) UpdateTestCase(ctx context.Context, tc catalog.TestCase) error {
 		    labels=$7, linked_ticket=$8, estimated_duration_mins=$9, test_owner=$10, linked_map_node_id=$11,
 		    is_critical=$12, evidence_required=$13, manual_payload=$14, api_payload=$15, graphql_payload=$16,
 		    database_payload=$17, grpc_payload=$18, status=$19, version=$20, baseline_run_result_id=$21, dependencies=$22,
-		    updated_by=$23, updated_by_commit_hash=$24, updated_at=$25
-		WHERE id=$26 AND deleted_at IS NULL`
+		    screenshot_urls=$23, updated_by=$24, updated_by_commit_hash=$25, updated_at=$26
+		WHERE id=$27 AND deleted_at IS NULL`
 	manualJSON, _ := json.Marshal(tc.Manual)
 	apiJSON, _ := json.Marshal(tc.API)
 	graphqlJSON, _ := json.Marshal(tc.GraphQL)
@@ -217,12 +233,16 @@ func (d *DB) UpdateTestCase(ctx context.Context, tc catalog.TestCase) error {
 	if deps == nil {
 		deps = []string{}
 	}
+	screenshotURLs := tc.ScreenshotURLs
+	if screenshotURLs == nil {
+		screenshotURLs = []string{}
+	}
 	_, err := d.db.ExecContext(ctx, q,
 		tc.TestPackID, tc.Title, tc.Order, tc.Type, tc.Description, tc.Priority,
 		pq.Array(labels), tc.LinkedTicket, tc.EstimatedDurationMins, tc.TestOwner, tc.LinkedMapNodeID,
 		tc.IsCritical, tc.EvidenceRequired, nullableJSON(manualJSON), nullableJSON(apiJSON), nullableJSON(graphqlJSON),
 		nullableJSON(dbJSON), nullableJSON(grpcJSON), tc.Status, tc.Version, tc.BaselineRunResultID, pq.Array(deps),
-		tc.UpdatedBy, tc.UpdatedByCommitHash, time.Now().UTC(), tc.ID,
+		pq.Array(screenshotURLs), tc.UpdatedBy, tc.UpdatedByCommitHash, time.Now().UTC(), tc.ID,
 	)
 	return wrapErr("UpdateTestCase", err)
 }
@@ -237,12 +257,14 @@ func scanTestCase(row interface{ Scan(...any) error }) (catalog.TestCase, error)
 	var tc catalog.TestCase
 	var labels pq.StringArray
 	var deps pq.StringArray
+	var screenshotURLs pq.StringArray
 	var manualPayload, apiPayload, gqlPayload, dbPayload, grpcPayload []byte
 	err := row.Scan(
 		&tc.ID, &tc.TestPackID, &tc.ServiceID, &tc.OrgID, &tc.Title, &tc.Order, &tc.Type, &tc.Description, &tc.Priority,
 		&labels, &tc.LinkedTicket, &tc.EstimatedDurationMins, &tc.TestOwner, &tc.LinkedMapNodeID,
 		&tc.IsCritical, &tc.EvidenceRequired, &manualPayload, &apiPayload, &gqlPayload,
 		&dbPayload, &grpcPayload, &tc.Status, &tc.Version, &tc.BaselineRunResultID, &deps,
+		&screenshotURLs,
 		&tc.CreatedBy, &tc.UpdatedBy, &tc.CreatedByCommitHash, &tc.UpdatedByCommitHash, &tc.DeletedBy, &tc.CreatedAt, &tc.UpdatedAt, &tc.DeletedAt,
 	)
 	if err != nil {
@@ -250,6 +272,7 @@ func scanTestCase(row interface{ Scan(...any) error }) (catalog.TestCase, error)
 	}
 	tc.Labels = []string(labels)
 	tc.Dependencies = []string(deps)
+	tc.ScreenshotURLs = []string(screenshotURLs)
 	tc.Manual = decodeJSONPtr[catalog.ManualTestCase](manualPayload)
 	tc.API = decodeJSONPtr[catalog.APITestCase](apiPayload)
 	tc.GraphQL = decodeJSONPtr[catalog.GraphQLTestCase](gqlPayload)
@@ -264,8 +287,8 @@ func (d *DB) CreateTestRun(ctx context.Context, tr catalog.TestRun) error {
 	const q = `
 		INSERT INTO test_runs
 			(id, test_pack_id, service_id, org_id, environment, release_label, started_at, completed_at,
-			 status, started_by, executed_by, executed_at, overall_status, created_by, updated_by, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`
+			 status, started_by, executed_by, executed_at, overall_status, load_metrics, created_by, updated_by, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`
 	now := time.Now().UTC()
 	if tr.CreatedAt.IsZero() {
 		tr.CreatedAt = now
@@ -279,9 +302,10 @@ func (d *DB) CreateTestRun(ctx context.Context, tr catalog.TestRun) error {
 	if tr.Status == "" {
 		tr.Status = "running"
 	}
+	loadMetricsJSON, _ := json.Marshal(tr.LoadMetrics)
 	_, err := d.db.ExecContext(ctx, q,
 		tr.ID, tr.TestPackID, tr.ServiceID, tr.OrgID, tr.Environment, tr.ReleaseLabel, tr.StartedAt, tr.CompletedAt,
-		tr.Status, tr.StartedBy, tr.ExecutedBy, tr.ExecutedAt, tr.OverallStatus, tr.CreatedBy, tr.UpdatedBy, tr.CreatedAt, tr.UpdatedAt,
+		tr.Status, tr.StartedBy, tr.ExecutedBy, tr.ExecutedAt, tr.OverallStatus, nullableJSON(loadMetricsJSON), tr.CreatedBy, tr.UpdatedBy, tr.CreatedAt, tr.UpdatedAt,
 	)
 	return wrapErr("CreateTestRun", err)
 }
@@ -289,7 +313,7 @@ func (d *DB) CreateTestRun(ctx context.Context, tr catalog.TestRun) error {
 func (d *DB) GetTestRun(ctx context.Context, id string) (*catalog.TestRun, error) {
 	const q = `
 		SELECT id, test_pack_id, service_id, org_id, environment, release_label, started_at, completed_at,
-		       status, started_by, executed_by, executed_at, overall_status, created_by, updated_by, created_at, updated_at, deleted_at
+		       status, started_by, executed_by, executed_at, overall_status, load_metrics, created_by, updated_by, created_at, updated_at, deleted_at
 		FROM test_runs WHERE id=$1`
 	tr, err := scanTestRun(d.db.QueryRowContext(ctx, q, id))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -304,7 +328,7 @@ func (d *DB) GetTestRun(ctx context.Context, id string) (*catalog.TestRun, error
 func (d *DB) ListTestRuns(ctx context.Context, serviceID string, testPackID *string) ([]catalog.TestRun, error) {
 	q := `
 		SELECT id, test_pack_id, service_id, org_id, environment, release_label, started_at, completed_at,
-		       status, started_by, executed_by, executed_at, overall_status, created_by, updated_by, created_at, updated_at, deleted_at
+		       status, started_by, executed_by, executed_at, overall_status, load_metrics, created_by, updated_by, created_at, updated_at, deleted_at
 		FROM test_runs
 		WHERE service_id=$1 AND deleted_at IS NULL`
 	args := []any{serviceID}
@@ -393,23 +417,29 @@ func (d *DB) UpdateTestRun(ctx context.Context, tr catalog.TestRun) error {
 	const q = `
 		UPDATE test_runs
 		SET environment=$1, release_label=$2, started_at=$3, completed_at=$4, status=$5,
-		    started_by=$6, overall_status=$7, updated_by=$8, updated_at=$9
-		WHERE id=$10 AND deleted_at IS NULL`
+		    started_by=$6, overall_status=$7, load_metrics=$8, updated_by=$9, updated_at=$10
+		WHERE id=$11 AND deleted_at IS NULL`
+	loadMetricsJSON, _ := json.Marshal(tr.LoadMetrics)
 	_, err := d.db.ExecContext(ctx, q,
 		tr.Environment, tr.ReleaseLabel, tr.StartedAt, tr.CompletedAt, tr.Status,
-		tr.StartedBy, tr.OverallStatus, tr.UpdatedBy, time.Now().UTC(), tr.ID,
+		tr.StartedBy, tr.OverallStatus, nullableJSON(loadMetricsJSON), tr.UpdatedBy, time.Now().UTC(), tr.ID,
 	)
 	return wrapErr("UpdateTestRun", err)
 }
 
 func scanTestRun(row interface{ Scan(...any) error }) (catalog.TestRun, error) {
 	var tr catalog.TestRun
+	var loadMetrics []byte
 	err := row.Scan(
 		&tr.ID, &tr.TestPackID, &tr.ServiceID, &tr.OrgID, &tr.Environment, &tr.ReleaseLabel, &tr.StartedAt, &tr.CompletedAt,
-		&tr.Status, &tr.StartedBy, &tr.ExecutedBy, &tr.ExecutedAt, &tr.OverallStatus,
+		&tr.Status, &tr.StartedBy, &tr.ExecutedBy, &tr.ExecutedAt, &tr.OverallStatus, &loadMetrics,
 		&tr.CreatedBy, &tr.UpdatedBy, &tr.CreatedAt, &tr.UpdatedAt, &tr.DeletedAt,
 	)
-	return tr, err
+	if err != nil {
+		return tr, err
+	}
+	tr.LoadMetrics = decodeJSONPtr[catalog.LoadTestMetrics](loadMetrics)
+	return tr, nil
 }
 
 // ── Test run results ──────────────────────────────────────────────────────────

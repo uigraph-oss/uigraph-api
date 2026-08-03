@@ -63,9 +63,10 @@ func (h *Handler) CreateTestPack(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Name       string  `json:"name"`
-		Type       string  `json:"type"`
-		CommitHash *string `json:"commitHash"`
+		Name       string                     `json:"name"`
+		Type       string                     `json:"type"`
+		LoadConfig *catalogpkg.LoadPackConfig `json:"loadConfig"`
+		CommitHash *string                    `json:"commitHash"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -85,6 +86,7 @@ func (h *Handler) CreateTestPack(w http.ResponseWriter, r *http.Request) {
 		OrgID:               orgID,
 		Name:                body.Name,
 		Type:                body.Type,
+		LoadConfig:          body.LoadConfig,
 		CreatedBy:           p.UserID,
 		UpdatedBy:           &p.UserID,
 		CreatedByCommitHash: body.CommitHash,
@@ -133,9 +135,11 @@ func (h *Handler) UpdateTestPack(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Name       *string `json:"name"`
-		Type       *string `json:"type"`
-		CommitHash *string `json:"commitHash"`
+		Name          *string                    `json:"name"`
+		Type          *string                    `json:"type"`
+		LoadConfig    *catalogpkg.LoadPackConfig `json:"loadConfig"`
+		BaselineRunID *string                    `json:"baselineRunId"`
+		CommitHash    *string                    `json:"commitHash"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -146,6 +150,12 @@ func (h *Handler) UpdateTestPack(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Type != nil {
 		pack.Type = *body.Type
+	}
+	if body.LoadConfig != nil {
+		pack.LoadConfig = body.LoadConfig
+	}
+	if body.BaselineRunID != nil {
+		pack.BaselineRunID = body.BaselineRunID
 	}
 	pack.UpdatedBy = &p.UserID
 	pack.UpdatedByCommitHash = body.CommitHash
@@ -371,6 +381,9 @@ func (h *Handler) UpdateTestCase(w http.ResponseWriter, r *http.Request) {
 	}
 	tc.IsCritical = body.IsCritical
 	tc.EvidenceRequired = body.EvidenceRequired
+	if body.ScreenshotURLs != nil {
+		tc.ScreenshotURLs = body.ScreenshotURLs
+	}
 	if body.Manual != nil {
 		tc.Manual = body.Manual
 	}
@@ -649,9 +662,10 @@ func (h *Handler) UpdateTestRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		OverallStatus *string `json:"overallStatus"`
-		CompletedAt   *string `json:"completedAt"`
-		Status        *string `json:"status"`
+		OverallStatus *string                     `json:"overallStatus"`
+		CompletedAt   *string                     `json:"completedAt"`
+		Status        *string                     `json:"status"`
+		LoadMetrics   *catalogpkg.LoadTestMetrics `json:"loadMetrics"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -667,6 +681,9 @@ func (h *Handler) UpdateTestRun(w http.ResponseWriter, r *http.Request) {
 		if ts, err := time.Parse(time.RFC3339, *body.CompletedAt); err == nil {
 			tr.CompletedAt = &ts
 		}
+	}
+	if body.LoadMetrics != nil {
+		tr.LoadMetrics = body.LoadMetrics
 	}
 	tr.UpdatedBy = &p.UserID
 	if err := h.store.UpdateTestRun(r.Context(), *tr); err != nil {

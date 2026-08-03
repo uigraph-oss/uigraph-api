@@ -41,8 +41,8 @@ func (d *DB) CreateService(ctx context.Context, s catalog.Service) error {
 			(id, org_id, folder_id, team_id, name, description,
 			 status, tier, category, language,
 			 git_repo_url, jira_project_url, slack_channel_url, last_commit_sha,
-			 labels, metadata, created_by, created_by_commit_hash, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`
+			 labels, metadata, doc_links, created_by, created_by_commit_hash, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`
 	now := time.Now().UTC()
 	if s.CreatedAt.IsZero() {
 		s.CreatedAt = now
@@ -58,6 +58,7 @@ func (d *DB) CreateService(ctx context.Context, s catalog.Service) error {
 	if labels == nil {
 		labels = []string{}
 	}
+	docLinksJSON, _ := json.Marshal(s.DocLinks)
 	tx, err := d.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("postgres: CreateService begin: %w", err)
@@ -70,7 +71,7 @@ func (d *DB) CreateService(ctx context.Context, s catalog.Service) error {
 		s.Name, s.Description,
 		s.Status, s.Tier, s.Category, s.Language,
 		s.GitRepoURL, s.JiraProjectURL, s.SlackChannelURL, s.LastCommitSha,
-		pq.Array(labels), meta,
+		pq.Array(labels), meta, nullableJSON(docLinksJSON),
 		s.CreatedBy, s.CreatedByCommitHash, s.CreatedAt, s.UpdatedAt,
 	)
 	if err != nil {
@@ -97,7 +98,7 @@ func (d *DB) GetService(ctx context.Context, id string) (*catalog.Service, error
 		SELECT id, org_id, folder_id, team_id, name, description,
 		       status, tier, category, language,
 		       git_repo_url, jira_project_url, slack_channel_url, last_commit_sha,
-		       labels, metadata, created_by, updated_by,
+		       labels, metadata, doc_links, created_by, updated_by,
 		       created_by_commit_hash, updated_by_commit_hash,
 		       created_at, updated_at, deleted_at, deleted_by
 		FROM services WHERE id = $1`
@@ -146,7 +147,7 @@ func (d *DB) ListServices(ctx context.Context, orgID string, p catalog.ListParam
 		SELECT id, org_id, folder_id, team_id, name, description,
 		       status, tier, category, language,
 		       git_repo_url, jira_project_url, slack_channel_url, last_commit_sha,
-		       labels, metadata, created_by, updated_by,
+		       labels, metadata, doc_links, created_by, updated_by,
 		       created_by_commit_hash, updated_by_commit_hash,
 		       created_at, updated_at, deleted_at, deleted_by
 		FROM services` + where + fmt.Sprintf(" ORDER BY %s %s", col, dir)
@@ -474,9 +475,9 @@ func (d *DB) UpdateService(ctx context.Context, s catalog.Service) error {
 		UPDATE services
 		SET name=$1, description=$2, status=$3, tier=$4, category=$5, language=$6,
 		    git_repo_url=$7, jira_project_url=$8, slack_channel_url=$9, last_commit_sha=$10,
-		    labels=$11, metadata=$12, folder_id=$13, team_id=$14,
-		    updated_by=$15, updated_by_commit_hash=$16, updated_at=$17
-		WHERE id=$18 AND deleted_at IS NULL`
+		    labels=$11, metadata=$12, doc_links=$13, folder_id=$14, team_id=$15,
+		    updated_by=$16, updated_by_commit_hash=$17, updated_at=$18
+		WHERE id=$19 AND deleted_at IS NULL`
 	meta := s.Metadata
 	if meta == nil {
 		meta = json.RawMessage("{}")
@@ -485,11 +486,12 @@ func (d *DB) UpdateService(ctx context.Context, s catalog.Service) error {
 	if labels == nil {
 		labels = []string{}
 	}
+	docLinksJSON, _ := json.Marshal(s.DocLinks)
 	_, err := d.db.ExecContext(
 		ctx, q,
 		s.Name, s.Description, s.Status, s.Tier, s.Category, s.Language,
 		s.GitRepoURL, s.JiraProjectURL, s.SlackChannelURL, s.LastCommitSha,
-		pq.Array(labels), meta, s.FolderID, s.TeamID,
+		pq.Array(labels), meta, nullableJSON(docLinksJSON), s.FolderID, s.TeamID,
 		s.UpdatedBy, s.UpdatedByCommitHash, time.Now().UTC(), s.ID,
 	)
 	if err != nil {
@@ -511,12 +513,13 @@ func scanService(row interface{ Scan(...any) error }) (catalog.Service, error) {
 	var s catalog.Service
 	var labels pq.StringArray
 	var meta []byte
+	var docLinks []byte
 	err := row.Scan(
 		&s.ID, &s.OrgID, &s.FolderID, &s.TeamID,
 		&s.Name, &s.Description,
 		&s.Status, &s.Tier, &s.Category, &s.Language,
 		&s.GitRepoURL, &s.JiraProjectURL, &s.SlackChannelURL, &s.LastCommitSha,
-		&labels, &meta,
+		&labels, &meta, &docLinks,
 		&s.CreatedBy, &s.UpdatedBy,
 		&s.CreatedByCommitHash, &s.UpdatedByCommitHash,
 		&s.CreatedAt, &s.UpdatedAt, &s.DeletedAt, &s.DeletedBy,
@@ -529,6 +532,9 @@ func scanService(row interface{ Scan(...any) error }) (catalog.Service, error) {
 		s.Labels = []string{}
 	}
 	s.Metadata = meta
+	if len(docLinks) > 0 {
+		_ = json.Unmarshal(docLinks, &s.DocLinks)
+	}
 	return s, nil
 }
 
@@ -706,9 +712,9 @@ func (d *DB) CreateAPIEndpoint(ctx context.Context, e catalog.APIEndpoint) error
 			(id, api_group_id, api_group_version_id, service_id, org_id,
 			 operation_id, method, path, summary, description,
 			 tags, token_count, parameters, request_body, responses,
-			 example_requests, example_responses, ord,
+			 example_requests, example_responses, ord, sla,
 			 created_by, created_by_commit_hash, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`
 	now := time.Now().UTC()
 	if e.CreatedAt.IsZero() {
 		e.CreatedAt = now
@@ -740,11 +746,12 @@ func (d *DB) CreateAPIEndpoint(ctx context.Context, e catalog.APIEndpoint) error
 	if exampleResps == nil {
 		exampleResps = json.RawMessage("[]")
 	}
+	slaJSON, _ := json.Marshal(e.SLA)
 	_, err := d.db.ExecContext(
 		ctx, q,
 		e.ID, e.APIGroupID, e.APIGroupVersionID, e.ServiceID, e.OrgID,
 		e.OperationID, e.Method, e.Path, e.Summary, e.Description,
-		pq.Array(tags), e.TokenCount, params, reqBody, resps, exampleReqs, exampleResps, e.Order,
+		pq.Array(tags), e.TokenCount, params, reqBody, resps, exampleReqs, exampleResps, e.Order, nullableJSON(slaJSON),
 		e.CreatedBy, e.CreatedByCommitHash, e.CreatedAt, e.UpdatedAt,
 	)
 	return wrapErr("CreateAPIEndpoint", err)
@@ -755,7 +762,7 @@ func (d *DB) GetAPIEndpoint(ctx context.Context, id string) (*catalog.APIEndpoin
 		SELECT id, api_group_id, api_group_version_id, service_id, org_id,
 		       operation_id, method, path, summary, description,
 		       tags, token_count, parameters, request_body, responses,
-		       example_requests, example_responses, ord,
+		       example_requests, example_responses, ord, sla,
 		       created_by, updated_by, created_by_commit_hash, updated_by_commit_hash,
 		       created_at, updated_at, deleted_at, deleted_by
 		FROM api_endpoints WHERE id = $1`
@@ -774,7 +781,7 @@ func (d *DB) ListAPIEndpoints(ctx context.Context, apiGroupID string) ([]catalog
 		SELECT id, api_group_id, api_group_version_id, service_id, org_id,
 		       operation_id, method, path, summary, description,
 		       tags, token_count, parameters, request_body, responses,
-		       example_requests, example_responses, ord,
+		       example_requests, example_responses, ord, sla,
 		       created_by, updated_by, created_by_commit_hash, updated_by_commit_hash,
 		       created_at, updated_at, deleted_at, deleted_by
 		FROM api_endpoints
@@ -801,18 +808,19 @@ func (d *DB) UpdateAPIEndpoint(ctx context.Context, e catalog.APIEndpoint) error
 		UPDATE api_endpoints
 		SET operation_id=$1, method=$2, path=$3, summary=$4, description=$5,
 		    tags=$6, token_count=$7, parameters=$8, request_body=$9, responses=$10,
-		    example_requests=$11, example_responses=$12, ord=$13,
-		    updated_by=$14, updated_by_commit_hash=$15, updated_at=$16
-		WHERE id=$17 AND deleted_at IS NULL`
+		    example_requests=$11, example_responses=$12, ord=$13, sla=$14,
+		    updated_by=$15, updated_by_commit_hash=$16, updated_at=$17
+		WHERE id=$18 AND deleted_at IS NULL`
 	tags := e.Tags
 	if tags == nil {
 		tags = []string{}
 	}
+	slaJSON, _ := json.Marshal(e.SLA)
 	_, err := d.db.ExecContext(
 		ctx, q,
 		e.OperationID, e.Method, e.Path, e.Summary, e.Description,
 		pq.Array(tags), e.TokenCount, e.Parameters, e.RequestBody, e.Responses,
-		e.ExampleRequests, e.ExampleResponses, e.Order,
+		e.ExampleRequests, e.ExampleResponses, e.Order, nullableJSON(slaJSON),
 		e.UpdatedBy, e.UpdatedByCommitHash, time.Now().UTC(), e.ID,
 	)
 	return wrapErr("UpdateAPIEndpoint", err)
@@ -837,13 +845,13 @@ func (d *DB) CopyEndpointsForVersion(ctx context.Context, apiGroupID, versionID,
 			(id, api_group_id, api_group_version_id, service_id, org_id,
 			 operation_id, method, path, summary, description,
 			 tags, token_count, parameters, request_body, responses,
-			 example_requests, example_responses, ord,
+			 example_requests, example_responses, ord, sla,
 			 created_by, updated_by, created_at, updated_at,
 			 created_by_commit_hash, updated_by_commit_hash)
 		SELECT gen_random_uuid(), api_group_id, $2, service_id, org_id,
 		       operation_id, method, path, summary, description,
 		       tags, token_count, parameters, request_body, responses,
-		       example_requests, example_responses, ord,
+		       example_requests, example_responses, ord, sla,
 		       created_by, $3, created_at, NOW(),
 		       created_by_commit_hash, updated_by_commit_hash
 		FROM api_endpoints
@@ -857,7 +865,7 @@ func (d *DB) ListAPIEndpointsForVersion(ctx context.Context, apiGroupID, version
 		SELECT id, api_group_id, api_group_version_id, service_id, org_id,
 		       operation_id, method, path, summary, description,
 		       tags, token_count, parameters, request_body, responses,
-		       example_requests, example_responses, ord,
+		       example_requests, example_responses, ord, sla,
 		       created_by, updated_by, created_by_commit_hash, updated_by_commit_hash,
 		       created_at, updated_at, deleted_at, deleted_by
 		FROM api_endpoints
@@ -942,13 +950,13 @@ func (d *DB) PublishAPIGroupVersion(ctx context.Context, in catalog.PublishAPIGr
 			(id, api_group_id, api_group_version_id, service_id, org_id,
 			 operation_id, method, path, summary, description,
 			 tags, token_count, parameters, request_body, responses,
-			 example_requests, example_responses, ord,
+			 example_requests, example_responses, ord, sla,
 			 created_by, updated_by, created_at, updated_at,
 			 created_by_commit_hash, updated_by_commit_hash)
 		 SELECT gen_random_uuid(), api_group_id, $2, service_id, org_id,
 		        operation_id, method, path, summary, description,
 		        tags, token_count, parameters, request_body, responses,
-		        example_requests, example_responses, ord,
+		        example_requests, example_responses, ord, sla,
 		        created_by, $3, created_at, NOW(),
 		        created_by_commit_hash, updated_by_commit_hash
 		 FROM api_endpoints
@@ -1008,18 +1016,19 @@ func insertAPIEndpointTx(ctx context.Context, tx *sql.Tx, e catalog.APIEndpoint)
 	if exampleResps == nil {
 		exampleResps = json.RawMessage("[]")
 	}
+	slaJSON, _ := json.Marshal(e.SLA)
 	_, err := tx.ExecContext(
 		ctx,
 		`INSERT INTO api_endpoints
 			(id, api_group_id, api_group_version_id, service_id, org_id,
 			 operation_id, method, path, summary, description,
 			 tags, token_count, parameters, request_body, responses,
-			 example_requests, example_responses, ord,
+			 example_requests, example_responses, ord, sla,
 			 created_by, created_by_commit_hash, created_at, updated_at)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`,
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`,
 		e.ID, e.APIGroupID, e.APIGroupVersionID, e.ServiceID, e.OrgID,
 		e.OperationID, e.Method, e.Path, e.Summary, e.Description,
-		pq.Array(tags), e.TokenCount, params, reqBody, resps, exampleReqs, exampleResps, e.Order,
+		pq.Array(tags), e.TokenCount, params, reqBody, resps, exampleReqs, exampleResps, e.Order, nullableJSON(slaJSON),
 		e.CreatedBy, e.CreatedByCommitHash, e.CreatedAt, e.UpdatedAt,
 	)
 	return err
@@ -1028,11 +1037,11 @@ func insertAPIEndpointTx(ctx context.Context, tx *sql.Tx, e catalog.APIEndpoint)
 func scanAPIEndpoint(row interface{ Scan(...any) error }) (catalog.APIEndpoint, error) {
 	var e catalog.APIEndpoint
 	var tags pq.StringArray
-	var params, reqBody, resps, exampleReqs, exampleResps []byte
+	var params, reqBody, resps, exampleReqs, exampleResps, sla []byte
 	err := row.Scan(
 		&e.ID, &e.APIGroupID, &e.APIGroupVersionID, &e.ServiceID, &e.OrgID,
 		&e.OperationID, &e.Method, &e.Path, &e.Summary, &e.Description,
-		&tags, &e.TokenCount, &params, &reqBody, &resps, &exampleReqs, &exampleResps, &e.Order,
+		&tags, &e.TokenCount, &params, &reqBody, &resps, &exampleReqs, &exampleResps, &e.Order, &sla,
 		&e.CreatedBy, &e.UpdatedBy,
 		&e.CreatedByCommitHash, &e.UpdatedByCommitHash,
 		&e.CreatedAt, &e.UpdatedAt, &e.DeletedAt, &e.DeletedBy,
@@ -1049,6 +1058,7 @@ func scanAPIEndpoint(row interface{ Scan(...any) error }) (catalog.APIEndpoint, 
 	e.Responses = resps
 	e.ExampleRequests = exampleReqs
 	e.ExampleResponses = exampleResps
+	e.SLA = decodeJSONPtr[catalog.EndpointSLA](sla)
 	return e, nil
 }
 

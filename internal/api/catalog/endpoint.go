@@ -72,18 +72,19 @@ func (h *Handler) CreateAPIEndpoint(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		OperationID      string          `json:"operationId"`
-		Method           string          `json:"method"`
-		Path             string          `json:"path"`
-		Summary          string          `json:"summary"`
-		Description      string          `json:"description"`
-		Tags             []string        `json:"tags"`
-		Parameters       json.RawMessage `json:"parameters"`
-		RequestBody      json.RawMessage `json:"requestBody"`
-		Responses        json.RawMessage `json:"responses"`
-		ExampleRequests  json.RawMessage `json:"exampleRequests"`
-		ExampleResponses json.RawMessage `json:"exampleResponses"`
-		Order            float64         `json:"order"`
+		OperationID      string                  `json:"operationId"`
+		Method           string                  `json:"method"`
+		Path             string                  `json:"path"`
+		Summary          string                  `json:"summary"`
+		Description      string                  `json:"description"`
+		Tags             []string                `json:"tags"`
+		Parameters       json.RawMessage         `json:"parameters"`
+		RequestBody      json.RawMessage         `json:"requestBody"`
+		Responses        json.RawMessage         `json:"responses"`
+		ExampleRequests  json.RawMessage         `json:"exampleRequests"`
+		ExampleResponses json.RawMessage         `json:"exampleResponses"`
+		Order            float64                 `json:"order"`
+		SLA              *catalogpkg.EndpointSLA `json:"sla"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -112,6 +113,7 @@ func (h *Handler) CreateAPIEndpoint(w http.ResponseWriter, r *http.Request) {
 		ExampleRequests:  normalizeStoredJSON(body.ExampleRequests),
 		ExampleResponses: normalizeStoredJSON(body.ExampleResponses),
 		Order:            body.Order,
+		SLA:              body.SLA,
 		CreatedBy:        p.UserID,
 		CreatedAt:        now,
 		UpdatedAt:        now,
@@ -182,18 +184,19 @@ func (h *Handler) UpdateAPIEndpoint(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		OperationID      *string         `json:"operationId"`
-		Method           *string         `json:"method"`
-		Path             *string         `json:"path"`
-		Summary          *string         `json:"summary"`
-		Description      *string         `json:"description"`
-		Tags             []string        `json:"tags"`
-		Parameters       json.RawMessage `json:"parameters"`
-		RequestBody      json.RawMessage `json:"requestBody"`
-		Responses        json.RawMessage `json:"responses"`
-		ExampleRequests  json.RawMessage `json:"exampleRequests"`
-		ExampleResponses json.RawMessage `json:"exampleResponses"`
-		Order            *float64        `json:"order"`
+		OperationID      *string                 `json:"operationId"`
+		Method           *string                 `json:"method"`
+		Path             *string                 `json:"path"`
+		Summary          *string                 `json:"summary"`
+		Description      *string                 `json:"description"`
+		Tags             []string                `json:"tags"`
+		Parameters       json.RawMessage         `json:"parameters"`
+		RequestBody      json.RawMessage         `json:"requestBody"`
+		Responses        json.RawMessage         `json:"responses"`
+		ExampleRequests  json.RawMessage         `json:"exampleRequests"`
+		ExampleResponses json.RawMessage         `json:"exampleResponses"`
+		Order            *float64                `json:"order"`
+		SLA              *catalogpkg.EndpointSLA `json:"sla"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httputil.BadRequest(w, "invalid request body")
@@ -234,6 +237,9 @@ func (h *Handler) UpdateAPIEndpoint(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Order != nil {
 		e.Order = *body.Order
+	}
+	if body.SLA != nil {
+		e.SLA = body.SLA
 	}
 	e.UpdatedBy = &p.UserID
 	e.UpdatedByCommitHash = nil
