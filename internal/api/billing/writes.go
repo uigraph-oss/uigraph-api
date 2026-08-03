@@ -8,37 +8,6 @@ import (
 	"github.com/uigraph/app/internal/httputil"
 )
 
-type createConnectionRequest struct {
-	Provider    billing.Provider `json:"provider"`
-	DisplayName string           `json:"displayName"`
-
-	RoleARN    string `json:"roleArn,omitempty"`
-	ExternalID string `json:"externalId,omitempty"`
-
-	ServiceAccountJSON string `json:"serviceAccountJson,omitempty"`
-	BillingDataset     string `json:"billingDataset,omitempty"`
-
-	TenantID       string `json:"tenantId,omitempty"`
-	ClientID       string `json:"clientId,omitempty"`
-	ClientSecret   string `json:"clientSecret,omitempty"`
-	SubscriptionID string `json:"subscriptionId,omitempty"`
-}
-
-func (req createConnectionRequest) toInput() billing.ConnectionInput {
-	return billing.ConnectionInput{
-		Provider:           req.Provider,
-		DisplayName:        req.DisplayName,
-		RoleARN:            req.RoleARN,
-		ExternalID:         req.ExternalID,
-		ServiceAccountJSON: req.ServiceAccountJSON,
-		BillingDataset:     req.BillingDataset,
-		TenantID:           req.TenantID,
-		ClientID:           req.ClientID,
-		ClientSecret:       req.ClientSecret,
-		SubscriptionID:     req.SubscriptionID,
-	}
-}
-
 // CreateConnection stores a new cloud billing connection. The credential
 // payload is encrypted before it ever reaches the store — decrypted only
 // in-process for TestConnection / the sync worker.
@@ -48,12 +17,11 @@ func (h *Handler) CreateConnection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req createConnectionRequest
-	if err := httputil.Decode(r, &req); err != nil {
+	var in billing.ConnectionInput
+	if err := httputil.Decode(r, &in); err != nil {
 		httputil.BadRequest(w, "invalid request body")
 		return
 	}
-	in := req.toInput()
 	if err := in.Validate(); err != nil {
 		writeErr(w, r, err)
 		return
