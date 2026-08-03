@@ -11,6 +11,7 @@ import (
 	docsapi "github.com/uigraph/app/internal/api/apidocs"
 	assetapi "github.com/uigraph/app/internal/api/asset"
 	"github.com/uigraph/app/internal/api/auth"
+	billingapi "github.com/uigraph/app/internal/api/billing"
 	catalogapi "github.com/uigraph/app/internal/api/catalog"
 	chatapi "github.com/uigraph/app/internal/api/chat"
 	commentapi "github.com/uigraph/app/internal/api/comment"
@@ -24,6 +25,8 @@ import (
 	mlstudioapi "github.com/uigraph/app/internal/api/mlstudio"
 	"github.com/uigraph/app/internal/asset"
 	"github.com/uigraph/app/internal/authz"
+	"github.com/uigraph/app/internal/billing"
+	awsbilling "github.com/uigraph/app/internal/billing/providers/aws"
 	"github.com/uigraph/app/internal/cache"
 	"github.com/uigraph/app/internal/config"
 	"github.com/uigraph/app/internal/crypto"
@@ -228,6 +231,13 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	mcpusageapi.Register(mux, s, pricing, scopeFn)
 
 	mlstudioapi.Register(mux, s, st, scopeFn)
+
+	if cipher, err := crypto.NewCipher(cfg.SecretKey); err == nil {
+		adapters := map[billing.Provider]billing.ProviderAdapter{
+			billing.ProviderAWS: awsbilling.New(),
+		}
+		billingapi.Register(mux, s, cipher, adapters, scopeFn)
+	}
 
 	return authmw.CORS(mux)
 }
