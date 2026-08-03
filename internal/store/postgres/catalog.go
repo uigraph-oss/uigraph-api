@@ -59,7 +59,13 @@ func (d *DB) CreateService(ctx context.Context, s catalog.Service) error {
 		labels = []string{}
 	}
 	docLinksJSON, _ := json.Marshal(s.DocLinks)
-	_, err := d.db.ExecContext(
+	tx, err := d.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("postgres: CreateService begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	_, err = tx.ExecContext(
 		ctx, q,
 		s.ID, s.OrgID, s.FolderID, s.TeamID,
 		s.Name, s.Description,
@@ -73,6 +79,16 @@ func (d *DB) CreateService(ctx context.Context, s catalog.Service) error {
 			return fmt.Errorf("%w: %s", store.ErrServiceNameExists, s.Name)
 		}
 		return fmt.Errorf("postgres: CreateService: %w", err)
+	}
+
+	if s.Status == "active" {
+		if _, err := tx.ExecContext(ctx, `UPDATE service_dependencies SET dependency_id=$1, updated_at=$2 WHERE org_id=$3 AND dependency_name=$4 AND dependency_id IS NULL AND service_id<>$1 AND deleted_at IS NULL`, s.ID, s.UpdatedAt, s.OrgID, s.Name); err != nil {
+			return fmt.Errorf("postgres: CreateService adopt dependencies: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("postgres: CreateService commit: %w", err)
 	}
 	return nil
 }

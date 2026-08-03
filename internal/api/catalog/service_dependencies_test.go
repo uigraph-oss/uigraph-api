@@ -302,7 +302,7 @@ func TestSyncDependencies_success(t *testing.T) {
 	}
 	h := New(s, nil, nil, nil)
 
-	body := `{"dependencies":[{"name":"payments","service":"Stripe","type":"http","criticality":"hard","apiGroupName":"v1"}]}`
+	body := `{"dependencies":[{"name":"payments","service":"Stripe","direction":"downstream","type":"http","criticality":"hard","apiGroupName":"v1"}]}`
 	r := withDepAuth(depRequest(http.MethodPost, "/api/v1/orgs/org-1/services/svc-1/dependencies/sync", []byte(body)))
 	r.SetPathValue("serviceID", "svc-1")
 	w := httptest.NewRecorder()
@@ -330,7 +330,7 @@ func TestSyncDependencies_missingName_returns400(t *testing.T) {
 	}
 	h := New(s, nil, nil, nil)
 
-	body := `{"dependencies":[{"service":"Stripe","type":"http","criticality":"hard"}]}`
+	body := `{"dependencies":[{"service":"Stripe","direction":"downstream","type":"http","criticality":"hard"}]}`
 	r := withDepAuth(depRequest(http.MethodPost, "/api/v1/orgs/org-1/services/svc-1/dependencies/sync", []byte(body)))
 	r.SetPathValue("serviceID", "svc-1")
 	w := httptest.NewRecorder()
@@ -349,7 +349,7 @@ func TestSyncDependencies_duplicateName_returns400(t *testing.T) {
 	}
 	h := New(s, nil, nil, nil)
 
-	body := `{"dependencies":[{"name":"dup","service":"S1","type":"http","criticality":"hard","apiGroupName":"v1"},{"name":"dup","service":"S2","type":"database","criticality":"soft"}]}`
+	body := `{"dependencies":[{"name":"dup","service":"S1","direction":"downstream","type":"http","criticality":"hard","apiGroupName":"v1"},{"name":"dup","service":"S2","direction":"upstream","type":"database","criticality":"soft"}]}`
 	r := withDepAuth(depRequest(http.MethodPost, "/api/v1/orgs/org-1/services/svc-1/dependencies/sync", []byte(body)))
 	r.SetPathValue("serviceID", "svc-1")
 	w := httptest.NewRecorder()
@@ -368,7 +368,7 @@ func TestSyncDependencies_invalidType_returns400(t *testing.T) {
 	}
 	h := New(s, nil, nil, nil)
 
-	body := `{"dependencies":[{"name":"x","service":"Y","type":"rest","criticality":"hard"}]}`
+	body := `{"dependencies":[{"name":"x","service":"Y","direction":"downstream","type":"rest","criticality":"hard"}]}`
 	r := withDepAuth(depRequest(http.MethodPost, "/api/v1/orgs/org-1/services/svc-1/dependencies/sync", []byte(body)))
 	r.SetPathValue("serviceID", "svc-1")
 	w := httptest.NewRecorder()
@@ -388,7 +388,7 @@ func TestListDependencies_returnsEdges(t *testing.T) {
 		},
 		listDepsFn: func(_ context.Context, orgID, serviceID, direction, criticality string) ([]catalogpkg.ServiceDependencyEdge, error) {
 			return []catalogpkg.ServiceDependencyEdge{
-				{ServiceDependency: catalogpkg.ServiceDependency{Name: "payments", Type: "http"}, Direction: "upstream"},
+				{ServiceDependency: catalogpkg.ServiceDependency{Name: "payments", Type: "http", Direction: "downstream"}},
 			}, nil
 		},
 	}
@@ -410,6 +410,80 @@ func TestListDependencies_returnsEdges(t *testing.T) {
 	}
 	if len(resp.Edges) != 1 || resp.Edges[0].Name != "payments" {
 		t.Fatalf("unexpected edges: %+v", resp.Edges)
+	}
+	if resp.Edges[0].Direction != "downstream" {
+		t.Fatalf("expected stored direction down, got %q", resp.Edges[0].Direction)
+	}
+}
+
+func TestSyncDependencies_missingDirection_returns400(t *testing.T) {
+	s := &fakeDependencyStore{
+		getSvcFn: func(_ context.Context, id string) (*catalogpkg.Service, error) {
+			return &catalogpkg.Service{ID: id, OrgID: "org-1"}, nil
+		},
+	}
+	h := New(s, nil, nil, nil)
+
+	body := `{"dependencies":[{"name":"x","service":"Y","type":"http","criticality":"hard"}]}`
+	r := withDepAuth(depRequest(http.MethodPost, "/api/v1/orgs/org-1/services/svc-1/dependencies/sync", []byte(body)))
+	r.SetPathValue("serviceID", "svc-1")
+	w := httptest.NewRecorder()
+	h.SyncDependencies(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestSyncDependencies_invalidDirection_returns400(t *testing.T) {
+	s := &fakeDependencyStore{
+		getSvcFn: func(_ context.Context, id string) (*catalogpkg.Service, error) {
+			return &catalogpkg.Service{ID: id, OrgID: "org-1"}, nil
+		},
+	}
+	h := New(s, nil, nil, nil)
+
+	body := `{"dependencies":[{"name":"x","service":"Y","direction":"sideways","type":"http","criticality":"hard"}]}`
+	r := withDepAuth(depRequest(http.MethodPost, "/api/v1/orgs/org-1/services/svc-1/dependencies/sync", []byte(body)))
+	r.SetPathValue("serviceID", "svc-1")
+	w := httptest.NewRecorder()
+	h.SyncDependencies(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestSyncDependencies_directionReachesStore(t *testing.T) {
+	var captured []catalogpkg.ServiceDependency
+	s := &fakeDependencyStore{
+		getSvcFn: func(_ context.Context, id string) (*catalogpkg.Service, error) {
+			return &catalogpkg.Service{ID: id, OrgID: "org-1"}, nil
+		},
+		syncDepsFn: func(_ context.Context, orgID, serviceID, actorID string, commitHash *string, deps []catalogpkg.ServiceDependency) error {
+			captured = deps
+			return nil
+		},
+	}
+	h := New(s, nil, nil, nil)
+
+	body := `{"dependencies":[{"name":"calls-payments","service":"Payments","direction":"downstream","criticality":"hard"},{"name":"called-by-storefront","service":"Storefront","direction":"upstream","criticality":"soft"}]}`
+	r := withDepAuth(depRequest(http.MethodPost, "/api/v1/orgs/org-1/services/svc-1/dependencies/sync", []byte(body)))
+	r.SetPathValue("serviceID", "svc-1")
+	w := httptest.NewRecorder()
+	h.SyncDependencies(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if len(captured) != 2 {
+		t.Fatalf("expected 2 dependencies, got %d", len(captured))
+	}
+	if captured[0].Direction != "downstream" || captured[0].DependencyName != "Payments" {
+		t.Fatalf("unexpected first dependency: %+v", captured[0])
+	}
+	if captured[1].Direction != "upstream" || captured[1].DependencyName != "Storefront" {
+		t.Fatalf("unexpected second dependency: %+v", captured[1])
 	}
 }
 
@@ -526,7 +600,7 @@ func TestGetImpact_returnsGraph(t *testing.T) {
 		},
 		impactFn: func(_ context.Context, orgID, serviceID, direction string, maxDepth int) ([]catalogpkg.ServiceDependencyEdge, error) {
 			return []catalogpkg.ServiceDependencyEdge{
-				{ServiceDependency: catalogpkg.ServiceDependency{Name: "dep", Type: "http"}, Direction: "downstream"},
+				{ServiceDependency: catalogpkg.ServiceDependency{Name: "dep", Type: "http", Direction: "upstream"}},
 			}, nil
 		},
 	}
