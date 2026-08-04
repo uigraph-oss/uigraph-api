@@ -13,7 +13,7 @@ CREATE TABLE cloud_connections (
     provider          TEXT        NOT NULL CHECK (provider IN ('aws', 'azure', 'gcp')),
     display_name      TEXT        NOT NULL,
     auth_payload      TEXT        NOT NULL,
-    status            TEXT        NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'connected', 'error')),
+    status            TEXT        NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'connected', 'syncing', 'error')),
     status_message     TEXT        NOT NULL DEFAULT '',
     last_verified_at   TIMESTAMPTZ,
     created_by        UUID        NOT NULL,
