@@ -24,6 +24,7 @@ import (
 	mapspkg "github.com/uigraph/app/internal/api/maps"
 	mcpusageapi "github.com/uigraph/app/internal/api/mcpusage"
 	mlstudioapi "github.com/uigraph/app/internal/api/mlstudio"
+	timelineapi "github.com/uigraph/app/internal/api/timeline"
 	"github.com/uigraph/app/internal/asset"
 	"github.com/uigraph/app/internal/authz"
 	"github.com/uigraph/app/internal/billing"
@@ -241,6 +242,8 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 		}
 		billingapi.Register(mux, s, cipher, adapters, scopeFn)
 	}
+
+	timelineapi.Register(mux, s, scopeFn)
 
 	return authmw.CORS(mux)
 }
