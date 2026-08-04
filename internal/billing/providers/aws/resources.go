@@ -19,10 +19,11 @@ type awsResource struct {
 	ceServiceName string
 }
 
-// discoverResources lists every resource carrying at least one tag, via the
-// Resource Groups Tagging API (paginated). This is exact — unlike cost
-// allocation below, resource identity and tags come directly from AWS.
-func discoverResources(ctx context.Context, client *resourcegroupstaggingapi.Client) ([]awsResource, error) {
+// discoverResourcesInRegion lists every resource carrying at least one tag
+// in the region client is bound to, via the Resource Groups Tagging API
+// (paginated). This is exact — unlike cost allocation below, resource
+// identity and tags come directly from AWS.
+func discoverResourcesInRegion(ctx context.Context, client *resourcegroupstaggingapi.Client) ([]awsResource, error) {
 	var out []awsResource
 	var token *string
 

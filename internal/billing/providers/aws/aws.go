@@ -14,7 +14,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/costexplorer"
 	cetypes "github.com/aws/aws-sdk-go-v2/service/costexplorer/types"
-	"github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
 	"github.com/uigraph/app/internal/billing"
@@ -26,16 +25,18 @@ type Adapter struct{}
 
 func New() *Adapter { return &Adapter{} }
 
-// clients assumes the customer's role (RoleARN + ExternalID from `in`) and
-// returns Cost Explorer + Resource Groups Tagging clients scoped to it.
-func (a *Adapter) clients(ctx context.Context, in billing.ConnectionInput) (*costexplorer.Client, *resourcegroupstaggingapi.Client, error) {
+// assumedConfig assumes the customer's role (RoleARN + ExternalID from
+// `in`) and returns an aws.Config scoped to it, with no region set — each
+// service client below pins its own region explicitly, since Cost Explorer
+// and Resource Groups Tagging have different regional requirements.
+func (a *Adapter) assumedConfig(ctx context.Context, in billing.ConnectionInput) (awssdk.Config, error) {
 	if in.RoleARN == "" || in.ExternalID == "" {
-		return nil, nil, billing.ErrInvalidCredential
+		return awssdk.Config{}, billing.ErrInvalidCredential
 	}
 
 	base, err := awsconfig.LoadDefaultConfig(ctx)
 	if err != nil {
-		return nil, nil, fmt.Errorf("aws: load base config: %w", err)
+		return awssdk.Config{}, fmt.Errorf("aws: load base config: %w", err)
 	}
 
 	stsClient := sts.NewFromConfig(base)
@@ -45,17 +46,27 @@ func (a *Adapter) clients(ctx context.Context, in billing.ConnectionInput) (*cos
 	})
 	assumed := base.Copy()
 	assumed.Credentials = awssdk.NewCredentialsCache(provider)
+	return assumed, nil
+}
 
-	return costexplorer.NewFromConfig(assumed), resourcegroupstaggingapi.NewFromConfig(assumed), nil
+// costExplorerClient pins the Cost Explorer endpoint to us-east-1
+// regardless of the caller's ambient region — Cost Explorer is an
+// account-wide (not region-scoped) service, and us-east-1 is the one
+// region guaranteed to serve it.
+func costExplorerClient(cfg awssdk.Config) *costexplorer.Client {
+	return costexplorer.NewFromConfig(cfg, func(o *costexplorer.Options) {
+		o.Region = "us-east-1"
+	})
 }
 
 // TestConnection verifies the role can be assumed and can read cost data,
 // without persisting anything.
 func (a *Adapter) TestConnection(ctx context.Context, in billing.ConnectionInput) error {
-	ce, _, err := a.clients(ctx, in)
+	cfg, err := a.assumedConfig(ctx, in)
 	if err != nil {
 		return err
 	}
+	ce := costExplorerClient(cfg)
 
 	end := time.Now().UTC()
 	start := end.AddDate(0, 0, -1)
@@ -73,24 +84,25 @@ func (a *Adapter) TestConnection(ctx context.Context, in billing.ConnectionInput
 	return nil
 }
 
-// Sync discovers tagged resources and their cost over the last
-// syncWindowDays. Resource Groups Tagging gives exact resource inventory
-// and tags; Cost Explorer's public API has no true per-resource cost
-// grouping, so daily/monthly cost is allocated evenly across resources that
-// share the same AWS service (see allocateCosts) — an approximation, not
-// exact resource-level billing.
+// Sync discovers tagged resources across every AWS region (infrastructure
+// isn't confined to whatever region happens to be configured) and their
+// cost over the last syncWindowDays. Resource Groups Tagging gives exact
+// resource inventory and tags; Cost Explorer's public API has no true
+// per-resource cost grouping, so daily/monthly cost is allocated evenly
+// across resources that share the same AWS service (see allocateCosts) —
+// an approximation, not exact resource-level billing.
 func (a *Adapter) Sync(ctx context.Context, in billing.ConnectionInput) (billing.SyncResult, error) {
-	ce, tagging, err := a.clients(ctx, in)
+	cfg, err := a.assumedConfig(ctx, in)
 	if err != nil {
 		return billing.SyncResult{}, err
 	}
 
-	resources, err := discoverResources(ctx, tagging)
+	resources, err := discoverResourcesAllRegions(ctx, cfg)
 	if err != nil {
 		return billing.SyncResult{}, err
 	}
 
-	dailyServiceCosts, err := fetchDailyCostsByService(ctx, ce, syncWindowDays)
+	dailyServiceCosts, err := fetchDailyCostsByService(ctx, costExplorerClient(cfg), syncWindowDays)
 	if err != nil {
 		return billing.SyncResult{}, err
 	}
