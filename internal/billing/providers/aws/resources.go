@@ -84,6 +84,13 @@ func toResource(m rgtypes.ResourceTagMapping) (awsResource, bool) {
 	}
 	service, region := parts[2], parts[3]
 	resourceID := parts[5]
+	// A handful of services (S3, IAM, CloudFront, Route 53) are account-wide
+	// rather than region-scoped, and their ARNs simply omit the region
+	// segment — not a parsing gap, so label them explicitly rather than
+	// leaving the field blank.
+	if region == "" {
+		region = "global"
+	}
 
 	info, ok := arnServiceInfo(service, resourceID)
 	if !ok {
