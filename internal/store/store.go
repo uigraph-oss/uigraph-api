@@ -17,6 +17,7 @@ import (
 	"github.com/uigraph/app/internal/mcpusage"
 	"github.com/uigraph/app/internal/mlstudio"
 	"github.com/uigraph/app/internal/org"
+	"github.com/uigraph/app/internal/timeline"
 	"github.com/uigraph/app/internal/uimap"
 )
 
@@ -51,4 +52,5 @@ type Store interface {
 	mlstudio.Store
 	billing.Store
 	agentsession.Store
+	timeline.Store
 }
