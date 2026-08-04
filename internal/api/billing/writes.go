@@ -1,7 +1,9 @@
 package billing
 
 import (
+	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 
 	"github.com/uigraph/app/internal/billing"
@@ -85,8 +87,12 @@ func (h *Handler) TestConnection(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
-// TriggerSync runs a synchronous, on-demand sync for one connection — the
-// same path the scheduled background worker calls on an interval.
+// TriggerSync kicks off an on-demand sync for one connection and returns
+// immediately — the same underlying path the scheduled background worker
+// calls on an interval, just detached from the request so a slow
+// multi-region scan can't hit the client's HTTP timeout. Progress is
+// visible via the connection's status (flips to "syncing", then
+// "connected"/"error") rather than the response body.
 func (h *Handler) TriggerSync(w http.ResponseWriter, r *http.Request) {
 	_, orgID, ok := h.authorizeOrg(w, r)
 	if !ok {
@@ -102,12 +108,18 @@ func (h *Handler) TriggerSync(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, err)
 		return
 	}
-	resourceCount, err := billing.RunSync(r.Context(), h.store, h.cipher, adapter, orgID, conn, encrypted)
-	if err != nil {
-		writeErr(w, r, err)
-		return
-	}
-	httputil.JSON(w, http.StatusOK, map[string]any{"resourceCount": resourceCount})
+
+	go func() {
+		// context.Background(), not r.Context(): this goroutine must
+		// outlive the request, which returns immediately below.
+		// RunSync applies its own bounded timeout.
+		ctx := context.Background()
+		if _, err := billing.RunSync(ctx, h.store, h.cipher, adapter, orgID, conn, encrypted); err != nil {
+			slog.ErrorContext(ctx, "billing sync-now failed", "connectionId", conn.ID, "provider", conn.Provider, "err", err)
+		}
+	}()
+
+	httputil.JSON(w, http.StatusAccepted, map[string]any{"started": true})
 }
 
 func (h *Handler) loadDecryptedConnection(r *http.Request, orgID string) (*billing.Connection, billing.ConnectionInput, error) {

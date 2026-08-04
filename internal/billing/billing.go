@@ -22,6 +22,7 @@ type ConnectionStatus string
 const (
 	ConnectionStatusPending   ConnectionStatus = "pending"
 	ConnectionStatusConnected ConnectionStatus = "connected"
+	ConnectionStatusSyncing   ConnectionStatus = "syncing"
 	ConnectionStatusError     ConnectionStatus = "error"
 )
 
