@@ -129,3 +129,22 @@ func (h *Handler) GetTrend(w http.ResponseWriter, r *http.Request) {
 	}
 	httputil.JSON(w, http.StatusOK, map[string]any{"trend": trend})
 }
+
+func (h *Handler) GetResourceDailyCosts(w http.ResponseWriter, r *http.Request) {
+	_, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	resourceID := r.PathValue("resourceID")
+	if _, err := h.store.GetResource(r.Context(), orgID, resourceID); err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	days := parseTrendDays(r.URL.Query().Get("days"))
+	costs, err := h.store.ListDailyCostsForResource(r.Context(), orgID, resourceID, days)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{"dailyCosts": costs})
+}

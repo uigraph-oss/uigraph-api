@@ -177,6 +177,12 @@ type TrendPoint struct {
 	GCPUSD   float64 `json:"gcpUsd"`
 }
 
+// ResourceDailyCost is one day of cost history for a single resource.
+type ResourceDailyCost struct {
+	Date    string  `json:"date"`
+	CostUSD float64 `json:"costUsd"`
+}
+
 // Summary is the top-line KPI row for a service's cost dashboard.
 type Summary struct {
 	TotalMonthlyCostUSD float64 `json:"totalMonthlyCostUsd"`

@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/uigraph/app/internal/billing"
+	"github.com/uigraph/app/internal/store"
 )
 
 func (d *DB) CreateCloudConnection(ctx context.Context, orgID, actorID string, provider billing.Provider, displayName, encryptedPayload string) (*billing.Connection, error) {
@@ -351,6 +352,59 @@ func (d *DB) ListTrendForService(ctx context.Context, orgID, serviceID string, d
 		out = append(out, *byDate[date])
 	}
 	return out, nil
+}
+
+func (d *DB) GetResource(ctx context.Context, orgID, resourceID string) (*billing.Resource, error) {
+	const q = `
+		SELECT id, org_id, cloud_connection_id, external_resource_id, name,
+		       resource_type, provider, region, environment, status,
+		       monthly_cost_usd, tags, last_synced_at
+		FROM cost_resources
+		WHERE org_id = $1 AND id = $2`
+	var r billing.Resource
+	var provider, status string
+	var tagsJSON []byte
+	err := d.db.QueryRowContext(ctx, q, orgID, resourceID).Scan(&r.ID, &r.OrgID, &r.CloudConnectionID, &r.ExternalResourceID, &r.Name,
+		&r.ResourceType, &provider, &r.Region, &r.Environment, &status,
+		&r.MonthlyCostUSD, &tagsJSON, &r.LastSyncedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, store.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("postgres: GetResource: %w", err)
+	}
+	r.Provider = billing.Provider(provider)
+	r.Status = billing.ResourceStatus(status)
+	if len(tagsJSON) > 0 {
+		if err := json.Unmarshal(tagsJSON, &r.Tags); err != nil {
+			return nil, fmt.Errorf("postgres: GetResource unmarshal tags: %w", err)
+		}
+	}
+	return &r, nil
+}
+
+func (d *DB) ListDailyCostsForResource(ctx context.Context, orgID, resourceID string, days int) ([]billing.ResourceDailyCost, error) {
+	const q = `
+		SELECT usage_date, cost_usd
+		FROM cost_usage_daily
+		WHERE org_id = $1 AND resource_id = $2
+		  AND usage_date >= (CURRENT_DATE - $3::int)
+		ORDER BY usage_date ASC`
+	rows, err := d.db.QueryContext(ctx, q, orgID, resourceID, days)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: ListDailyCostsForResource: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []billing.ResourceDailyCost
+	for rows.Next() {
+		var c billing.ResourceDailyCost
+		if err := rows.Scan(&c.Date, &c.CostUSD); err != nil {
+			return nil, fmt.Errorf("postgres: ListDailyCostsForResource scan: %w", err)
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }
 
 func (d *DB) CreateSyncRun(ctx context.Context, connectionID string) (*billing.SyncRun, error) {

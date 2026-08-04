@@ -37,6 +37,7 @@ func Register(
 	h := New(s, cipher, adapters)
 	const connBase = "/api/v1/orgs/{orgID}/billing/connections"
 	const costBase = "/api/v1/orgs/{orgID}/services/{serviceID}/costs"
+	const resourceBase = "/api/v1/orgs/{orgID}/billing/resources"
 
 	requireScope("billing:write", "POST", connBase, h.CreateConnection)
 	requireScope("billing:read", "GET", connBase, h.ListConnections)
@@ -51,6 +52,10 @@ func Register(
 	requireScope("billing:read", "GET", costBase+"/tag-rules", h.ListTagRules)
 	requireScope("billing:write", "POST", costBase+"/tag-rules", h.CreateTagRule)
 	requireScope("billing:write", "DELETE", costBase+"/tag-rules/{ruleID}", h.DeleteTagRule)
+
+	// Not nested under a service — a resource is matched to services by
+	// tag at query time, it isn't itself service-scoped.
+	requireScope("billing:read", "GET", resourceBase+"/{resourceID}/daily-costs", h.GetResourceDailyCosts)
 }
 
 func (h *Handler) authorizeOrg(w http.ResponseWriter, r *http.Request) (identity.Principal, string, bool) {

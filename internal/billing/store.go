@@ -26,6 +26,10 @@ type Store interface {
 	UpsertCostUsageDaily(ctx context.Context, orgID, resourceID string, usageDate string, costUSD float64) error
 	ListResourcesForService(ctx context.Context, orgID, serviceID string) ([]Resource, error)
 	ListTrendForService(ctx context.Context, orgID, serviceID string, days int) ([]TrendPoint, error)
+	// GetResource is org-scoped so a resource ID from one org can't be used
+	// to read another org's cost data.
+	GetResource(ctx context.Context, orgID, resourceID string) (*Resource, error)
+	ListDailyCostsForResource(ctx context.Context, orgID, resourceID string, days int) ([]ResourceDailyCost, error)
 
 	CreateSyncRun(ctx context.Context, connectionID string) (*SyncRun, error)
 	FinishSyncRun(ctx context.Context, runID string, status string, resourceCount int, errMsg string) error
