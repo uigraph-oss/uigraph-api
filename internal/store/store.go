@@ -5,6 +5,7 @@ import (
 
 	"github.com/uigraph/app/internal/agentsession"
 	"github.com/uigraph/app/internal/authz"
+	"github.com/uigraph/app/internal/billing"
 	"github.com/uigraph/app/internal/catalog"
 	"github.com/uigraph/app/internal/chat"
 	"github.com/uigraph/app/internal/comment"
@@ -48,5 +49,6 @@ type Store interface {
 	comment.Store
 	mcpusage.Store
 	mlstudio.Store
+	billing.Store
 	agentsession.Store
 }

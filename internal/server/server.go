@@ -10,9 +10,13 @@ import (
 	authmw "github.com/uigraph/app/internal/middleware"
 
 	"github.com/uigraph/app/internal/api"
+	"github.com/uigraph/app/internal/billing"
+	awsbilling "github.com/uigraph/app/internal/billing/providers/aws"
+	billingsync "github.com/uigraph/app/internal/billing/sync"
 	"github.com/uigraph/app/internal/bootstrap"
 	"github.com/uigraph/app/internal/cache"
 	"github.com/uigraph/app/internal/config"
+	"github.com/uigraph/app/internal/crypto"
 	"github.com/uigraph/app/internal/migrate"
 	"github.com/uigraph/app/internal/queue"
 	"github.com/uigraph/app/internal/screenshot"
@@ -96,6 +100,15 @@ func Run(ctx context.Context, cfg *config.Config) error {
 		go worker.Run(ctx)
 	} else {
 		slog.InfoContext(ctx, "screenshot worker disabled — requires REDIS_URL and one of UIGRAPH_INTERNAL_FRONTEND_URL / UIGRAPH_FRONTEND_URL")
+	}
+
+	if cipher, err := crypto.NewCipher(cfg.SecretKey); err == nil {
+		adapters := map[billing.Provider]billing.ProviderAdapter{
+			billing.ProviderAWS: awsbilling.New(),
+		}
+		go billingsync.New(db, cipher, adapters).Run(ctx)
+	} else {
+		slog.WarnContext(ctx, "billing sync worker disabled — requires UIGRAPH_SECRET_KEY", "err", err)
 	}
 
 	bearer := authmw.NewSessionVerifier(db, db)
