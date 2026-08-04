@@ -21,14 +21,20 @@ import (
 
 const syncWindowDays = 30
 
+// defaultRegion is used only when AWS_REGION isn't configured at all — STS
+// and Cost Explorer both need some region to resolve their endpoint, even
+// though neither is meaningfully region-scoped. Resource discovery ignores
+// this entirely and scans every region regardless (see
+// discoverResourcesAllRegions).
+const defaultRegion = "us-east-1"
+
 type Adapter struct{}
 
 func New() *Adapter { return &Adapter{} }
 
 // assumedConfig assumes the customer's role (RoleARN + ExternalID from
-// `in`) and returns an aws.Config scoped to it, with no region set — each
-// service client below pins its own region explicitly, since Cost Explorer
-// and Resource Groups Tagging have different regional requirements.
+// `in`) and returns an aws.Config scoped to it, with its region resolved
+// from AWS_REGION (falling back to defaultRegion if unset).
 func (a *Adapter) assumedConfig(ctx context.Context, in billing.ConnectionInput) (awssdk.Config, error) {
 	if in.RoleARN == "" || in.ExternalID == "" {
 		return awssdk.Config{}, billing.ErrInvalidCredential
@@ -38,25 +44,26 @@ func (a *Adapter) assumedConfig(ctx context.Context, in billing.ConnectionInput)
 	if err != nil {
 		return awssdk.Config{}, fmt.Errorf("aws: load base config: %w", err)
 	}
+	region := base.Region
+	if region == "" {
+		region = defaultRegion
+	}
 
-	stsClient := sts.NewFromConfig(base)
+	stsClient := sts.NewFromConfig(base, func(o *sts.Options) {
+		o.Region = region
+	})
 	provider := stscreds.NewAssumeRoleProvider(stsClient, in.RoleARN, func(o *stscreds.AssumeRoleOptions) {
 		o.ExternalID = awssdk.String(in.ExternalID)
 		o.RoleSessionName = "uigraph-billing-sync"
 	})
 	assumed := base.Copy()
+	assumed.Region = region
 	assumed.Credentials = awssdk.NewCredentialsCache(provider)
 	return assumed, nil
 }
 
-// costExplorerClient pins the Cost Explorer endpoint to us-east-1
-// regardless of the caller's ambient region — Cost Explorer is an
-// account-wide (not region-scoped) service, and us-east-1 is the one
-// region guaranteed to serve it.
 func costExplorerClient(cfg awssdk.Config) *costexplorer.Client {
-	return costexplorer.NewFromConfig(cfg, func(o *costexplorer.Options) {
-		o.Region = "us-east-1"
-	})
+	return costexplorer.NewFromConfig(cfg)
 }
 
 // TestConnection verifies the role can be assumed and can read cost data,
