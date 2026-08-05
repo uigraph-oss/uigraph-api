@@ -23,11 +23,14 @@ const (
 	KindTool = "tool"
 )
 
-const TypeArtifacts = "artifacts"
+const (
+	TypeArtifacts = "artifacts"
+	TypeImpact    = "impact"
+)
 
 // Types is the catalog of agent types that may open a session. A new agent type
 // adds a value here; anything else is rejected at the API boundary.
-var Types = []string{TypeArtifacts}
+var Types = []string{TypeArtifacts, TypeImpact}
 
 func ValidType(t string) bool {
 	for _, known := range Types {
