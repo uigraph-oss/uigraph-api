@@ -2,6 +2,8 @@
 package asset
 
 import (
+	"errors"
+	"io"
 	"net/http"
 	"strings"
 
@@ -12,6 +14,14 @@ import (
 )
 
 const maxAssetIDs = 200
+
+// createUploadRequest is optional: with no body (or no contentHash) the asset
+// gets a fresh random ID. Supplying the sha256 of the content to be uploaded
+// makes the ID deterministic, so a re-upload of identical bytes replaces the
+// object rather than orphaning it — used by the CLI's test-case screenshot sync.
+type createUploadRequest struct {
+	ContentHash string `json:"contentHash"`
+}
 
 // Handler wraps asset.Resolver for HTTP.
 type Handler struct {
@@ -49,7 +59,26 @@ func Register(
 // @Failure  500  {object}  httputil.errorBody
 // @Router   /orgs/{orgID}/assets [post]
 func (h *Handler) CreateUpload(w http.ResponseWriter, r *http.Request) {
-	assetID := storage.NewFileAssetID()
+	var req createUploadRequest
+	switch err := httputil.Decode(r, &req); {
+	case errors.Is(err, io.EOF):
+		req.ContentHash = ""
+	case err != nil:
+		httputil.BadRequest(w, "invalid request body")
+		return
+	}
+
+	var assetID string
+	switch {
+	case req.ContentHash == "":
+		assetID = storage.NewFileAssetID()
+	case storage.IsSHA256Hex(req.ContentHash):
+		assetID = storage.FileAssetIDFromHash(req.ContentHash)
+	default:
+		httputil.BadRequest(w, "contentHash must be a 64-character lowercase sha256 hex string")
+		return
+	}
+
 	url, err := h.storage.PresignPutURL(r.Context(), storage.AssetKey(assetID))
 	if err != nil {
 		httputil.Error(w, r, err)

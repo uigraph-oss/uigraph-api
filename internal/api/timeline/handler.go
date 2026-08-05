@@ -31,6 +31,7 @@ func Register(
 
 	requireScope("timeline:read", "GET", base, h.List)
 	requireScope("timeline:write", "POST", base, h.Create)
+	requireScope("timeline:write", "POST", base+"/sync", h.Sync)
 	requireScope("timeline:write", "PUT", base+"/{eventID}", h.Update)
 	requireScope("timeline:write", "DELETE", base+"/{eventID}", h.Delete)
 }
@@ -81,6 +82,8 @@ type eventRequest struct {
 	AttachmentAssetID  *string        `json:"attachmentAssetId,omitempty"`
 	AttachmentFileName *string        `json:"attachmentFileName,omitempty"`
 	AttachmentFileType *string        `json:"attachmentFileType,omitempty"`
+	// SourceRef is read by Sync only; Create and Update ignore it.
+	SourceRef string `json:"sourceRef,omitempty"`
 }
 
 func (req eventRequest) toInput() timeline.Input {
@@ -110,6 +113,7 @@ func (req eventRequest) toInput() timeline.Input {
 		AttachmentAssetID:  req.AttachmentAssetID,
 		AttachmentFileName: req.AttachmentFileName,
 		AttachmentFileType: req.AttachmentFileType,
+		SourceRef:          req.SourceRef,
 	}
 }
 
@@ -169,6 +173,48 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httputil.JSON(w, http.StatusCreated, event)
+}
+
+// Sync
+// @Summary  Upsert a repo-scanned timeline event by sourceRef
+// @Tags     timeline
+// @Security BearerAuth
+// @Param    orgID      path  string  true  "orgID"
+// @Param    serviceID  path  string  true  "serviceID"
+// @Param    body  body  object  true  "request body"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  400  {object}  httputil.errorBody
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Router   /orgs/{orgID}/services/{serviceID}/timeline/sync [post]
+func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
+	p, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	var reqBody struct {
+		eventRequest
+		CommitHash *string `json:"commitHash"`
+	}
+	if err := httputil.Decode(r, &reqBody); err != nil {
+		httputil.BadRequest(w, "invalid request body")
+		return
+	}
+	in := reqBody.eventRequest.toInput()
+	if in.SourceRef == "" {
+		httputil.BadRequest(w, "sourceRef is required")
+		return
+	}
+	if err := in.Validate(); err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	event, created, err := h.store.UpsertEventBySourceRef(r.Context(), orgID, r.PathValue("serviceID"), p.UserID, reqBody.CommitHash, in)
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{"event": event, "created": created})
 }
 
 // Update

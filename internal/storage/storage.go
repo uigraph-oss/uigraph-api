@@ -92,6 +92,32 @@ func NewFileAssetID() string {
 	return "file_" + uuid.NewString()
 }
 
+// FileAssetIDFromHash derives a deterministic file asset ID from the sha256 hex
+// of the content it will hold. Callers that re-upload byte-identical content
+// (the CLI on every CI run) then overwrite the same object instead of minting a
+// fresh ID and orphaning the previous one.
+func FileAssetIDFromHash(contentHash string) string {
+	return "file_" + contentHash
+}
+
+// IsSHA256Hex reports whether s is a 64-character lowercase hex string, the
+// form FileAssetIDFromHash expects.
+func IsSHA256Hex(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	for _, r := range s {
+		if r >= '0' && r <= '9' {
+			continue
+		}
+		if r >= 'a' && r <= 'f' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
 func DiagramThumbnailAssetID(diagramID string) string {
 	return "diagram_" + diagramID
 }

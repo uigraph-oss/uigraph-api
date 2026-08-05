@@ -496,6 +496,11 @@ func str(m M, key string) string {
 	return ""
 }
 
+func obj(m M, key string) M {
+	v, _ := m[key].(map[string]any)
+	return v
+}
+
 func list(m M, key string) []M {
 	raw, _ := m[key].([]any)
 	out := make([]M, len(raw))

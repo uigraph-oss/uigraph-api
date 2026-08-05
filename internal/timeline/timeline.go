@@ -61,6 +61,10 @@ type Event struct {
 	Origin            Origin  `json:"origin"`
 	Touches           []Touch `json:"touches"`
 
+	// SourceRef is the CLI repo-scan's stable key for the file or tag this
+	// event came from, and is nil for manually-created events.
+	SourceRef *string `json:"sourceRef,omitempty"`
+
 	AttachmentAssetID  *string `json:"attachmentAssetId,omitempty"`
 	AttachmentFileName *string `json:"attachmentFileName,omitempty"`
 	AttachmentFileType *string `json:"attachmentFileType,omitempty"`
@@ -88,6 +92,9 @@ type Input struct {
 	AttachmentAssetID  *string
 	AttachmentFileName *string
 	AttachmentFileType *string
+
+	// SourceRef is required by the sync endpoint and ignored by create/update.
+	SourceRef string
 }
 
 // Validate reports whether in carries the required fields for its Type.

@@ -1,7 +1,7 @@
 -- Timeline events per service: releases, decisions (ADRs), and incident
 -- postmortems. This migration only supports manually-created events
--- (origin = 'manual'); origin = 'auto' is reserved for a future CLI
--- repo-scan sync and is not written by anything yet. touches is a JSONB
+-- (origin = 'manual'); origin = 'auto' is written by the CLI repo-scan sync
+-- added in 0066_timeline_event_source_ref.sql. touches is a JSONB
 -- array of {id, label, kind} — free-text node/service references, not
 -- foreign keys, since there's no generic node/service registry to link
 -- against yet (mirrors the cost_resources.tags JSONB idiom).
