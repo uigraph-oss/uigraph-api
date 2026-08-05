@@ -10,10 +10,13 @@ import (
 	"github.com/uigraph/app/internal/timeline"
 )
 
+// timelineEventColumns is the shared RETURNING/SELECT list for every query in
+// this file. scanTimelineEvent reads it positionally — change one and you must
+// change the other.
 const timelineEventColumns = `
 	id, org_id, service_id, type, title, summary, event_date,
 	version, adr_number, decision_status, source_label, source_url,
-	is_agent_summarized, origin, touches,
+	is_agent_summarized, origin, touches, source_ref,
 	attachment_asset_id, attachment_file_name, attachment_file_type,
 	created_by, updated_by, created_at, updated_at`
 
@@ -47,6 +50,66 @@ func (d *DB) CreateEvent(ctx context.Context, orgID, serviceID, actorID string, 
 		return nil, fmt.Errorf("postgres: CreateEvent: %w", err)
 	}
 	return e, nil
+}
+
+// UpsertEventBySourceRef writes origin = 'auto': every event that carries a
+// source_ref came from the CLI repo-scan, never from a person in the UI.
+func (d *DB) UpsertEventBySourceRef(ctx context.Context, orgID, serviceID, actorID string, commitHash *string, in timeline.Input) (*timeline.Event, bool, error) {
+	touchesJSON, err := json.Marshal(in.Touches)
+	if err != nil {
+		return nil, false, fmt.Errorf("postgres: UpsertEventBySourceRef marshal touches: %w", err)
+	}
+
+	const q = `
+		INSERT INTO timeline_events (
+			org_id, service_id, type, title, summary, event_date,
+			version, adr_number, decision_status, source_label, source_url,
+			is_agent_summarized, origin, touches, source_ref,
+			attachment_asset_id, attachment_file_name, attachment_file_type,
+			created_by, created_by_commit_hash
+		) VALUES (
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'auto', $13, $14, $15, $16, $17, $18, $19
+		)
+		ON CONFLICT (service_id, source_ref) WHERE source_ref IS NOT NULL
+		DO UPDATE SET
+			type = EXCLUDED.type,
+			title = EXCLUDED.title,
+			summary = EXCLUDED.summary,
+			event_date = EXCLUDED.event_date,
+			version = EXCLUDED.version,
+			adr_number = EXCLUDED.adr_number,
+			decision_status = EXCLUDED.decision_status,
+			source_label = EXCLUDED.source_label,
+			source_url = EXCLUDED.source_url,
+			is_agent_summarized = EXCLUDED.is_agent_summarized,
+			touches = EXCLUDED.touches,
+			attachment_asset_id = EXCLUDED.attachment_asset_id,
+			attachment_file_name = EXCLUDED.attachment_file_name,
+			attachment_file_type = EXCLUDED.attachment_file_type,
+			origin = 'auto',
+			updated_by = EXCLUDED.created_by,
+			updated_by_commit_hash = EXCLUDED.created_by_commit_hash,
+			updated_at = NOW()
+		RETURNING id, (xmax = 0) AS was_inserted`
+
+	var eventID string
+	var created bool
+	err = d.db.QueryRowContext(ctx, q,
+		orgID, serviceID, string(in.Type), in.Title, in.Summary, in.EventDate,
+		in.Version, in.ADRNumber, decisionStatusPtr(in.DecisionStatus), in.SourceLabel, in.SourceURL,
+		in.IsAgentSummarized, touchesJSON, in.SourceRef,
+		in.AttachmentAssetID, in.AttachmentFileName, in.AttachmentFileType,
+		actorID, commitHash,
+	).Scan(&eventID, &created)
+	if err != nil {
+		return nil, false, fmt.Errorf("postgres: UpsertEventBySourceRef: %w", err)
+	}
+
+	e, err := d.GetEvent(ctx, orgID, serviceID, eventID)
+	if err != nil {
+		return nil, false, err
+	}
+	return e, created, nil
 }
 
 func (d *DB) UpdateEvent(ctx context.Context, orgID, serviceID, eventID, actorID string, in timeline.Input) (*timeline.Event, error) {
@@ -148,7 +211,7 @@ func scanTimelineEvent(row rowScanner) (*timeline.Event, error) {
 	err := row.Scan(
 		&e.ID, &e.OrgID, &e.ServiceID, &eventType, &e.Title, &e.Summary, &e.EventDate,
 		&e.Version, &e.ADRNumber, &decisionStatus, &e.SourceLabel, &e.SourceURL,
-		&e.IsAgentSummarized, &origin, &touchesJSON,
+		&e.IsAgentSummarized, &origin, &touchesJSON, &e.SourceRef,
 		&e.AttachmentAssetID, &e.AttachmentFileName, &e.AttachmentFileType,
 		&e.CreatedBy, &e.UpdatedBy, &e.CreatedAt, &e.UpdatedAt,
 	)

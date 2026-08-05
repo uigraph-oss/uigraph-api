@@ -107,6 +107,98 @@ func TestTimelineEvents_DecisionAndIncident(t *testing.T) {
 	}
 }
 
+func TestTimelineEvents_SyncBySourceRef(t *testing.T) {
+	serviceID := createTestService(t)
+	base := "/api/v1/orgs/" + orgID + "/services/" + serviceID + "/timeline"
+	eventDate := time.Now().UTC().Format(time.RFC3339)
+
+	manual := mustDo(t, "POST", base, adminToken, M{
+		"type":      "incident",
+		"title":     "Hand-written incident",
+		"eventDate": eventDate,
+	})
+	manualID := str(manual, "id")
+
+	first := mustDo(t, "POST", base+"/sync", adminToken, M{
+		"sourceRef":      "adr:docs/adr/0007-use-postgres.md",
+		"type":           "decision",
+		"title":          "Use Postgres",
+		"summary":        "Chose Postgres over DynamoDB.",
+		"eventDate":      eventDate,
+		"adrNumber":      "0007",
+		"decisionStatus": "proposed",
+		"commitHash":     "abc123",
+	})
+	if first["created"] != true {
+		t.Fatalf("want created=true on first sync, got %v", first["created"])
+	}
+	firstEvent := obj(first, "event")
+	syncedID := str(firstEvent, "id")
+	if firstEvent["origin"] != "auto" {
+		t.Fatalf("want origin=auto, got %v", firstEvent["origin"])
+	}
+	if firstEvent["sourceRef"] != "adr:docs/adr/0007-use-postgres.md" {
+		t.Fatalf("want sourceRef echoed back, got %v", firstEvent["sourceRef"])
+	}
+
+	// same sourceRef, changed title: updates in place rather than duplicating
+	second := mustDo(t, "POST", base+"/sync", adminToken, M{
+		"sourceRef":      "adr:docs/adr/0007-use-postgres.md",
+		"type":           "decision",
+		"title":          "Use Postgres for the primary store",
+		"eventDate":      eventDate,
+		"decisionStatus": "accepted",
+	})
+	if second["created"] != false {
+		t.Fatalf("want created=false on re-sync, got %v", second["created"])
+	}
+	secondEvent := obj(second, "event")
+	if str(secondEvent, "id") != syncedID {
+		t.Fatalf("re-sync should reuse the same row: %v vs %v", str(secondEvent, "id"), syncedID)
+	}
+	if secondEvent["title"] != "Use Postgres for the primary store" {
+		t.Fatalf("want updated title, got %v", secondEvent["title"])
+	}
+	if secondEvent["decisionStatus"] != "accepted" {
+		t.Fatalf("want updated decisionStatus, got %v", secondEvent["decisionStatus"])
+	}
+
+	// a different sourceRef is a different event
+	third := mustDo(t, "POST", base+"/sync", adminToken, M{
+		"sourceRef": "incident:docs/postmortems/2026-01-04-checkout.md",
+		"type":      "incident",
+		"title":     "Checkout outage",
+		"eventDate": eventDate,
+	})
+	if third["created"] != true {
+		t.Fatalf("want created=true for a new sourceRef, got %v", third["created"])
+	}
+
+	events := list(mustDo(t, "GET", base, adminToken, nil), "events")
+	if len(events) != 3 {
+		t.Fatalf("want 3 events (1 manual + 2 synced), got %d", len(events))
+	}
+	for _, e := range events {
+		if str(e, "id") == manualID && e["origin"] != "manual" {
+			t.Fatalf("sync must not touch the manual event, origin is now %v", e["origin"])
+		}
+	}
+}
+
+func TestTimelineEvents_SyncRequiresSourceRef(t *testing.T) {
+	serviceID := createTestService(t)
+	base := "/api/v1/orgs/" + orgID + "/services/" + serviceID + "/timeline"
+
+	r := do("POST", base+"/sync", adminToken, M{
+		"type":      "decision",
+		"title":     "No source ref",
+		"eventDate": time.Now().UTC().Format(time.RFC3339),
+	})
+	if r.StatusCode != http.StatusBadRequest {
+		t.Fatalf("want 400 for missing sourceRef, got %d", r.StatusCode)
+	}
+}
+
 func TestTimelineEvents_RequiresTitle(t *testing.T) {
 	serviceID := createTestService(t)
 	base := "/api/v1/orgs/" + orgID + "/services/" + serviceID + "/timeline"
