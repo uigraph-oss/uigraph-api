@@ -5,9 +5,11 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
@@ -23,10 +25,9 @@ type s3Client struct {
 
 // newS3Client builds a Client backed by AWS S3 using the AWS SDK v2.
 func newS3Client(cfg Config) (Client, error) {
-	creds := credentials.NewStaticCredentialsProvider(cfg.AccessKey, cfg.SecretKey, "")
-	awsCfg := aws.Config{
-		Region:      cfg.Region,
-		Credentials: creds,
+	awsCfg, err := s3Credentials(cfg)
+	if err != nil {
+		return nil, err
 	}
 
 	opts := []func(*s3.Options){
@@ -43,6 +44,25 @@ func newS3Client(cfg Config) (Client, error) {
 		bucket:  cfg.Bucket,
 		region:  cfg.Region,
 	}, nil
+}
+
+// s3Credentials prefers the pod's IAM role whenever one is available:
+// AWS_ROLE_ARN is what EKS injects when the ServiceAccount carries the
+// eks.amazonaws.com/role-arn annotation, and LoadDefaultConfig resolves it
+// (via AWS_WEB_IDENTITY_TOKEN_FILE) along with every other standard AWS
+// credential source. A pod can end up with both a role and static keys
+// configured (e.g. the keys are also needed by a service that can't use
+// IRSA) — the role wins in that case, since it's scoped and rotates
+// automatically. Static keys are only used as the fallback, for endpoints
+// IRSA can't reach at all (e.g. a non-AWS S3-compatible service).
+func s3Credentials(cfg Config) (aws.Config, error) {
+	if os.Getenv("AWS_ROLE_ARN") == "" && cfg.AccessKey != "" && cfg.SecretKey != "" {
+		return aws.Config{
+			Region:      cfg.Region,
+			Credentials: credentials.NewStaticCredentialsProvider(cfg.AccessKey, cfg.SecretKey, ""),
+		}, nil
+	}
+	return awsconfig.LoadDefaultConfig(context.Background(), awsconfig.WithRegion(cfg.Region))
 }
 
 func (c *s3Client) EnsureBucket(ctx context.Context) error {
