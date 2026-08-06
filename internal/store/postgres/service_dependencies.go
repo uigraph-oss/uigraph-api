@@ -148,11 +148,12 @@ func (d *DB) dependencyGraph(ctx context.Context, orgID, serviceID, direction st
 		maxDepth = 10
 	}
 	var ownSide, otherSide string
-	if direction == "upstream" {
+	switch direction {
+	case "upstream":
 		ownSide, otherSide = "downstream", "upstream"
-	} else if direction == "downstream" {
+	case "downstream":
 		ownSide, otherSide = "upstream", "downstream"
-	} else {
+	default:
 		return nil, fmt.Errorf("postgres: dependency graph walk: direction must be upstream or downstream, got %q", direction)
 	}
 	cte := `WITH RECURSIVE walk(service_id, depth, path) AS (SELECT $2::uuid, 0, ARRAY[$2::uuid] UNION ALL SELECT next.id, w.depth+1, w.path || next.id FROM walk w JOIN service_dependencies d ON d.org_id=$1 AND d.deleted_at IS NULL AND ((d.service_id=w.service_id AND d.direction='` + ownSide + `') OR (d.dependency_id=w.service_id AND d.direction='` + otherSide + `')) JOIN services next ON next.id=CASE WHEN d.service_id=w.service_id THEN d.dependency_id ELSE d.service_id END AND next.org_id=$1 AND next.status='active' AND next.deleted_at IS NULL WHERE w.depth < $3 AND NOT next.id = ANY(w.path)) SELECT DISTINCT service_id FROM walk`

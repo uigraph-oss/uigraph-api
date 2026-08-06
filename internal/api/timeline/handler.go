@@ -200,7 +200,7 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 		httputil.BadRequest(w, "invalid request body")
 		return
 	}
-	in := reqBody.eventRequest.toInput()
+	in := reqBody.toInput()
 	if in.SourceRef == "" {
 		httputil.BadRequest(w, "sourceRef is required")
 		return
