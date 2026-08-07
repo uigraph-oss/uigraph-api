@@ -75,8 +75,9 @@ type updateOrgRequest struct {
 
 // ── Handlers ─────────────────────────────────────────────────────────────────
 
-// List returns all orgs visible to the caller.
-// GET /api/v1/orgs
+// List returns every org on the instance. Server-admin only — see ListMine
+// for the member-scoped equivalent used by regular org routes.
+// GET /api/v1/server/orgs
 // @Summary  List
 // @Tags     orgs
 // @Security BearerAuth
@@ -85,7 +86,6 @@ type updateOrgRequest struct {
 // @Failure  403  {object}  httputil.errorBody
 // @Failure  404  {object}  httputil.errorBody
 // @Failure  500  {object}  httputil.errorBody
-// @Router   /orgs [get]
 // @Router   /server/orgs [get]
 func (h *OrgHandler) List(w http.ResponseWriter, r *http.Request) {
 	orgs, err := h.store.ListOrgs(r.Context())
@@ -96,6 +96,48 @@ func (h *OrgHandler) List(w http.ResponseWriter, r *http.Request) {
 	out := make([]orgResponse, len(orgs))
 	for i, o := range orgs {
 		out[i] = h.orgToResponse(r, o)
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{"orgs": out})
+}
+
+// ListMine returns only the orgs the caller is actually a member of (or, for
+// a service account, the single org it's bound to). Unlike List, this is
+// safe to expose to any authenticated principal.
+// GET /api/v1/orgs
+// @Summary  ListMine
+// @Tags     orgs
+// @Security BearerAuth
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs [get]
+func (h *OrgHandler) ListMine(w http.ResponseWriter, r *http.Request) {
+	p, ok := authmw.PrincipalFromCtx(r.Context())
+	if !ok {
+		httputil.Unauthorized(w)
+		return
+	}
+	if p.Kind == identity.PrincipalServiceAccount {
+		o, err := h.store.GetOrg(r.Context(), p.OrgID)
+		if err != nil {
+			httputil.Error(w, r, err)
+			return
+		}
+		out := []orgResponse{}
+		if o != nil {
+			out = append(out, h.orgToResponse(r, *o))
+		}
+		httputil.JSON(w, http.StatusOK, map[string]any{"orgs": out})
+		return
+	}
+	views, err := h.members.ListOrgsForUser(r.Context(), p.UserID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	out := make([]orgResponse, len(views))
+	for i, v := range views {
+		out[i] = h.orgToResponse(r, v.Org)
 	}
 	httputil.JSON(w, http.StatusOK, map[string]any{"orgs": out})
 }
@@ -163,8 +205,9 @@ func allScopeStrings() []string {
 	return scopes
 }
 
-// Get returns a single org by ID.
-// GET /api/v1/orgs/{orgID}
+// Get returns a single org by ID. Server-admin only — see GetMine for the
+// membership-checked equivalent used by regular org routes.
+// GET /api/v1/server/orgs/{orgID}
 // @Summary  Get
 // @Tags     orgs
 // @Security BearerAuth
@@ -174,10 +217,58 @@ func allScopeStrings() []string {
 // @Failure  403  {object}  httputil.errorBody
 // @Failure  404  {object}  httputil.errorBody
 // @Failure  500  {object}  httputil.errorBody
-// @Router   /orgs/{orgID} [get]
 // @Router   /server/orgs/{orgID} [get]
 func (h *OrgHandler) Get(w http.ResponseWriter, r *http.Request) {
 	orgID := r.PathValue("orgID")
+	o, err := h.store.GetOrg(r.Context(), orgID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if o == nil {
+		httputil.Error(w, r, store.ErrNotFound)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, h.orgToResponse(r, *o))
+}
+
+// GetMine returns a single org by ID, but only if the caller is actually a
+// member of it (or, for a service account, it's the org it's bound to) —
+// unlike Get, this is safe to expose to any authenticated principal.
+// GET /api/v1/orgs/{orgID}
+// @Summary  GetMine
+// @Tags     orgs
+// @Security BearerAuth
+// @Param    orgID  path  string  true  "orgID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /orgs/{orgID} [get]
+func (h *OrgHandler) GetMine(w http.ResponseWriter, r *http.Request) {
+	p, ok := authmw.PrincipalFromCtx(r.Context())
+	if !ok {
+		httputil.Unauthorized(w)
+		return
+	}
+	orgID := r.PathValue("orgID")
+	if p.Kind == identity.PrincipalServiceAccount {
+		if p.OrgID != orgID {
+			httputil.Forbidden(w)
+			return
+		}
+	} else {
+		member, err := h.members.GetMember(r.Context(), p.UserID, orgID)
+		if err != nil {
+			httputil.Error(w, r, err)
+			return
+		}
+		if member == nil {
+			httputil.Error(w, r, store.ErrNotFound)
+			return
+		}
+	}
 	o, err := h.store.GetOrg(r.Context(), orgID)
 	if err != nil {
 		httputil.Error(w, r, err)
