@@ -70,6 +70,14 @@ type Config struct {
 	FigmaClientID     string
 	FigmaClientSecret string
 
+	// Enterprise gates the managed-SaaS integration seam: internal endpoints
+	// used by the separate, private uigraph-enterprise service (signup
+	// provisioning, session introspection, seat-limit checks). Self-hosted
+	// deployments leave this unset and never register or call any of it.
+	Enterprise              bool
+	EnterpriseServiceURL    string
+	EnterpriseInternalToken string
+
 	// Migrations
 	MigrationsDir string // path to SQL files; defaults to embedded
 }
@@ -104,7 +112,12 @@ func Load() (*Config, error) {
 		ChromiumPath:          env("UIGRAPH_CHROMIUM_PATH", ""),
 		FigmaClientID:         env("FIGMA_CLIENT_ID", ""),
 		FigmaClientSecret:     env("FIGMA_CLIENT_SECRET", ""),
-		MigrationsDir:         env("MIGRATIONS_DIR", ""),
+
+		Enterprise:              envBool("UIGRAPH_ENTERPRISE", false),
+		EnterpriseServiceURL:    env("UIGRAPH_ENTERPRISE_SERVICE_URL", ""),
+		EnterpriseInternalToken: env("UIGRAPH_ENTERPRISE_INTERNAL_TOKEN", ""),
+
+		MigrationsDir: env("MIGRATIONS_DIR", ""),
 	}
 
 	if c.PostgresURL == "" {
@@ -112,6 +125,9 @@ func Load() (*Config, error) {
 	}
 	if c.SecretKey == "" {
 		return nil, fmt.Errorf("config: UIGRAPH_SECRET_KEY is required")
+	}
+	if c.Enterprise && c.EnterpriseInternalToken == "" {
+		return nil, fmt.Errorf("config: UIGRAPH_ENTERPRISE_INTERNAL_TOKEN is required when UIGRAPH_ENTERPRISE is true")
 	}
 
 	return c, nil

@@ -57,6 +57,11 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	mux.HandleFunc("GET /api/v1/auth/callback/{provider}", sessionH.OAuthCallback)
 	mux.HandleFunc("POST /api/v1/auth/saml/acs", sessionH.SAMLCallback)
 
+	if cfg.Enterprise {
+		signupH := auth.NewSignupHandler(s, cfg.EnterpriseInternalToken)
+		mux.HandleFunc("POST /internal/v1/accounts", signupH.ProvisionAccount)
+	}
+
 	protected := func(method, pattern string, h http.HandlerFunc) {
 		mux.Handle(method+" "+pattern, mw.Handler(http.HandlerFunc(h)))
 	}
@@ -130,9 +135,9 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	serverAdmin("DELETE", "/api/v1/users/{userID}", userH.Disable)
 
 	orgH := auth.NewOrgHandler(s, s, s, assetResolver)
-	protected("GET", "/api/v1/orgs", orgH.List)
+	protected("GET", "/api/v1/orgs", orgH.ListMine)
 	protected("POST", "/api/v1/orgs", orgH.Create)
-	protected("GET", "/api/v1/orgs/{orgID}", orgH.Get)
+	protected("GET", "/api/v1/orgs/{orgID}", orgH.GetMine)
 	requireScope(authz.ScopeOrgUpdate, "PUT", "/api/v1/orgs/{orgID}", orgH.Update)
 	requireScope(authz.ScopeOrgUpdate, "POST", "/api/v1/orgs/{orgID}/onboarding-complete", orgH.CompleteOnboarding)
 	requireScope(authz.ScopeOrgUpdate, "PUT", "/api/v1/orgs/{orgID}/logo", avatarH.PutOrgLogo)
