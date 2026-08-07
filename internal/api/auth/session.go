@@ -36,18 +36,20 @@ type sessionStore interface {
 }
 
 type SessionHandler struct {
-	store       sessionStore
-	assets      *asset.Resolver // presigns the avatar URL on /auth/me; may be nil
-	publicURL   string          // externally reachable base URL, e.g. https://uigraph.example.com
-	frontendURL string          // SPA base URL; empty falls back to publicURL
+	store        sessionStore
+	assets       *asset.Resolver // presigns the avatar URL on /auth/me; may be nil
+	publicURL    string          // externally reachable base URL, e.g. https://uigraph.example.com
+	frontendURL  string          // SPA base URL; empty falls back to publicURL
+	cookieDomain string          // e.g. ".example.com" to share the session cookie across subdomains; empty = host-only
 }
 
-func NewSessionHandler(s sessionStore, assets *asset.Resolver, publicURL, frontendURL string) *SessionHandler {
+func NewSessionHandler(s sessionStore, assets *asset.Resolver, publicURL, frontendURL, cookieDomain string) *SessionHandler {
 	return &SessionHandler{
-		store:       s,
-		assets:      assets,
-		publicURL:   strings.TrimRight(publicURL, "/"),
-		frontendURL: strings.TrimRight(frontendURL, "/"),
+		store:        s,
+		assets:       assets,
+		publicURL:    strings.TrimRight(publicURL, "/"),
+		frontendURL:  strings.TrimRight(frontendURL, "/"),
+		cookieDomain: cookieDomain,
 	}
 }
 
@@ -684,6 +686,7 @@ func (h *SessionHandler) setSessionCookie(w http.ResponseWriter, token string, e
 		Name:     sessionCookie,
 		Value:    token,
 		Path:     "/",
+		Domain:   h.cookieDomain,
 		Expires:  expires,
 		HttpOnly: true,
 		Secure:   h.secureCookies(),
@@ -696,6 +699,7 @@ func (h *SessionHandler) clearCookie(w http.ResponseWriter, name, path string) {
 		Name:     name,
 		Value:    "",
 		Path:     path,
+		Domain:   h.cookieDomain,
 		MaxAge:   -1,
 		HttpOnly: true,
 		Secure:   h.secureCookies(),
