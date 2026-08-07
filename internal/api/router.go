@@ -21,6 +21,7 @@ import (
 	figmaapi "github.com/uigraph/app/internal/api/figma"
 	"github.com/uigraph/app/internal/api/folder"
 	"github.com/uigraph/app/internal/api/health"
+	"github.com/uigraph/app/internal/api/instanceinfo"
 	mapspkg "github.com/uigraph/app/internal/api/maps"
 	mcpusageapi "github.com/uigraph/app/internal/api/mcpusage"
 	mlstudioapi "github.com/uigraph/app/internal/api/mlstudio"
@@ -48,6 +49,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	healthHandler := &health.Handler{}
 	mux.HandleFunc("GET /healthz", healthHandler.Healthz)
 	mux.HandleFunc("GET /livez", healthHandler.Livez)
+	mux.HandleFunc("GET /api/v1/instance-info", instanceinfo.New(cfg).Get)
 
 	assetResolver := asset.New(st, c)
 	sessionH := auth.NewSessionHandler(s, assetResolver, cfg.PublicURL, cfg.FrontendURL, cfg.CookieDomain)

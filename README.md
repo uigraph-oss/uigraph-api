@@ -2,7 +2,7 @@
 
 [![license](https://img.shields.io/badge/license-BUSL--1.1-blue)](LICENSE)
 
-Go REST API for [UiGraph](https://github.com/uigraph-oss) — the backend that powers authentication, organizations, architecture diagrams, service catalogs, maps, and document management.
+Go REST API for [UIGraph](https://github.com/uigraph-oss) — the backend that powers authentication, organizations, architecture diagrams, service catalogs, maps, and document management.
 
 ## Features
 
