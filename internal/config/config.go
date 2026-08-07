@@ -77,6 +77,11 @@ type Config struct {
 	Enterprise              bool
 	EnterpriseServiceURL    string
 	EnterpriseInternalToken string
+	// EnterpriseBillingURL is the managed billing settings page (served by a
+	// separate frontend, not this binary) — exposed via the public
+	// /api/v1/instance-info endpoint so the frontend knows whether to show a
+	// "Billing" link at all. Empty (self-hosted default) hides it entirely.
+	EnterpriseBillingURL string
 
 	// Migrations
 	MigrationsDir string // path to SQL files; defaults to embedded
@@ -116,6 +121,7 @@ func Load() (*Config, error) {
 		Enterprise:              envBool("UIGRAPH_ENTERPRISE", false),
 		EnterpriseServiceURL:    env("UIGRAPH_ENTERPRISE_SERVICE_URL", ""),
 		EnterpriseInternalToken: env("UIGRAPH_ENTERPRISE_INTERNAL_TOKEN", ""),
+		EnterpriseBillingURL:    env("UIGRAPH_ENTERPRISE_BILLING_URL", ""),
 
 		MigrationsDir: env("MIGRATIONS_DIR", ""),
 	}
