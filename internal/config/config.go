@@ -57,6 +57,13 @@ type Config struct {
 	// OAuth callback. When empty it falls back to PublicURL (same-origin prod).
 	FrontendURL string
 
+	// CookieDomain sets the session cookie's Domain attribute, e.g.
+	// ".example.com" to share it across every subdomain (the app, a
+	// marketing/billing site on a different subdomain, etc). Empty (the
+	// default) makes the cookie host-only, scoped to whichever exact host
+	// issued it — correct for self-hosted's single-shared-URL model.
+	CookieDomain string
+
 	// InternalFrontendURL is the SPA base URL the screenshot worker's headless
 	// browser navigates to from inside the network. When empty it falls back to
 	// FrontendURL. Set this when the browser-facing URL is not reachable from the
@@ -108,6 +115,7 @@ func Load() (*Config, error) {
 		LicenseKey:            env("UIGRAPH_LICENSE_KEY", ""),
 		PublicURL:             env("UIGRAPH_PUBLIC_URL", "http://localhost:8080"),
 		FrontendURL:           env("UIGRAPH_FRONTEND_URL", ""),
+		CookieDomain:          env("UIGRAPH_COOKIE_DOMAIN", ""),
 		InternalFrontendURL:   env("UIGRAPH_INTERNAL_FRONTEND_URL", ""),
 		ChromiumPath:          env("UIGRAPH_CHROMIUM_PATH", ""),
 		FigmaClientID:         env("FIGMA_CLIENT_ID", ""),

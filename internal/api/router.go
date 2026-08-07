@@ -50,7 +50,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	mux.HandleFunc("GET /livez", healthHandler.Livez)
 
 	assetResolver := asset.New(st, c)
-	sessionH := auth.NewSessionHandler(s, assetResolver, cfg.PublicURL, cfg.FrontendURL)
+	sessionH := auth.NewSessionHandler(s, assetResolver, cfg.PublicURL, cfg.FrontendURL, cfg.CookieDomain)
 	mux.HandleFunc("POST /api/v1/auth/login", sessionH.Login)
 	mux.HandleFunc("GET /api/v1/auth/providers", sessionH.ListProviders)
 	mux.HandleFunc("GET /api/v1/auth/login/{provider}", sessionH.InitiateOAuth)
