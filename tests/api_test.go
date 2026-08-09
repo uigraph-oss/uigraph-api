@@ -33,14 +33,13 @@ import (
 
 var (
 	srv            *httptest.Server
-	idp            *httptest.Server // fake OIDC provider for OAuth tests
+	idp            *httptest.Server
 	adminToken     string
-	orgID          string // default org created by bootstrap
-	oidcProviderID string // OIDC provider seeded on orgID; never appears in a URL
+	orgID          string
+	oidcProviderID string
 	testDB         *postgres.DB
 )
 
-// oidcProviderSlug is how the seeded provider is addressed in every URL.
 const oidcProviderSlug = "seeded-oidc"
 
 const (
@@ -113,8 +112,6 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
-	// Claim the SSO user's email domain for the test org so discover-orgs finds
-	// it, and seed an OIDC provider pointed at the fake IdP.
 	if err := db.CreateOrgDomain(ctx, identity.OrgDomain{ID: uuid.NewString(), OrgID: orgID, Domain: ssoUserDomain}); err != nil {
 		fmt.Fprintf(os.Stderr, "FATAL: seed domain: %v\n", err)
 		os.Exit(1)
@@ -220,8 +217,6 @@ func TestLogout(t *testing.T) {
 	}
 }
 
-// ── Org discovery & OIDC ──────────────────────────────────────────────────────
-
 func TestDiscoverOrgs_ByDomain(t *testing.T) {
 	body := mustDo(t, "POST", "/api/v1/auth/discover-orgs", "", M{"email": "someone@" + ssoUserDomain})
 	orgs := list(body, "orgs")
@@ -257,8 +252,6 @@ func TestOrgProviders(t *testing.T) {
 	}
 }
 
-// newLoginState writes a login handshake row directly, standing in for the
-// InitiateLogin redirect that a browser would have followed.
 func newLoginState(t *testing.T) string {
 	t.Helper()
 	state := uuid.NewString()
@@ -320,7 +313,6 @@ func TestOIDC_CallbackProvisionsUserAndSession(t *testing.T) {
 		t.Fatalf("want email %q, got %v", ssoUserEmail, me["email"])
 	}
 
-	// The SSO user is attached to the selected org with the provider's default role.
 	u, err := testDB.GetUserByEmail(context.Background(), ssoUserEmail)
 	if err != nil || u == nil {
 		t.Fatalf("get sso user: %v", err)
@@ -350,7 +342,6 @@ func TestOIDC_CallbackRejectsUnknownState(t *testing.T) {
 	}
 }
 
-// State is single-use: replaying a consumed state must not mint a second session.
 func TestOIDC_CallbackRejectsReplayedState(t *testing.T) {
 	client := &http.Client{
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
@@ -376,9 +367,6 @@ func TestOIDC_CallbackRejectsReplayedState(t *testing.T) {
 	}
 }
 
-// A state issued for one provider must not be redeemable at another's callback,
-// or a login started against a viewer-defaulted provider could be completed
-// against an admin-defaulted one.
 func TestOIDC_CallbackRejectsStateFromAnotherProvider(t *testing.T) {
 	slug := fmt.Sprintf("other-oidc-%d", time.Now().UnixNano())
 	mustDo(t, "POST", "/api/v1/orgs/"+orgID+"/auth/providers", adminToken, M{
@@ -565,8 +553,6 @@ func TestServiceAccounts_CreateAndToken(t *testing.T) {
 	}
 }
 
-// ── Auth provider administration ──────────────────────────────────────────────
-
 func TestAuthProviders_ListMasksSecrets(t *testing.T) {
 	body := mustDo(t, "GET", "/api/v1/orgs/"+orgID+"/auth/providers", adminToken, nil)
 	providers := list(body, "providers")
@@ -596,7 +582,6 @@ func TestAuthProviders_CreateUpdateDelete(t *testing.T) {
 		t.Fatalf("want slug %q, got %v", slug, body)
 	}
 
-	// Sending the mask back must preserve the stored secret rather than blank it.
 	mustDo(t, "PUT", "/api/v1/orgs/"+orgID+"/auth/providers/"+slug, adminToken, M{
 		"slug": slug,
 		"kind": "oidc", "type": "generic", "displayName": name,
@@ -632,9 +617,6 @@ func TestAuthProviders_RejectsIncompleteProvider(t *testing.T) {
 	}
 }
 
-// A malformed slug is rejected outright, never normalised into a valid one: the
-// admin has to register the resulting URL at their IdP, so it must be exactly
-// what they typed.
 func TestAuthProviders_RejectsMalformedSlug(t *testing.T) {
 	for _, slug := range []string{"", "Acme Okta", "ACME", "-okta", "okta-", "acme--okta", "acme_okta"} {
 		r := do("POST", "/api/v1/orgs/"+orgID+"/auth/providers", adminToken, M{
@@ -649,8 +631,6 @@ func TestAuthProviders_RejectsMalformedSlug(t *testing.T) {
 	}
 }
 
-// The slug is baked into the redirect URI and Entity ID registered at the IdP,
-// so an update carrying a different one is an error rather than a silent no-op.
 func TestAuthProviders_RejectsSlugChange(t *testing.T) {
 	slug := fmt.Sprintf("immutable-%d", time.Now().UnixNano())
 	mustDo(t, "POST", "/api/v1/orgs/"+orgID+"/auth/providers", adminToken, M{
@@ -672,8 +652,6 @@ func TestAuthProviders_RejectsSlugChange(t *testing.T) {
 	}
 }
 
-// Two providers in one org cannot share a slug, since the slug is what the login
-// URL resolves on.
 func TestAuthProviders_RejectsDuplicateSlug(t *testing.T) {
 	slug := fmt.Sprintf("duplicate-%d", time.Now().UnixNano())
 	body := M{

@@ -1,11 +1,3 @@
--- ============================================================
--- UIGraph Per-Org Authentication — fixup for v67
---
--- 0067 was applied to some databases before its column set was final,
--- and schema_migrations makes it unrepeatable. This re-asserts the
--- intended shape idempotently: on a database created by the final 0067
--- every statement here is a no-op.
--- ============================================================
 
 CREATE TABLE IF NOT EXISTS org_domains (
     id         UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,

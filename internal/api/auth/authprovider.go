@@ -17,16 +17,12 @@ import (
 	"github.com/uigraph/app/internal/store"
 )
 
-// secretMask is what a stored secret reads as on the way out, and what the UI
-// sends back when the admin did not retype it.
 const secretMask = "***"
 
 type authProviderStore interface {
 	identity.ProviderStore
 }
 
-// AuthProviderHandler is the org-scoped administration API for auth providers,
-// their role mapping rules, and the email domains that discover the org.
 type AuthProviderHandler struct {
 	store     authProviderStore
 	storage   storage.Client
@@ -45,12 +41,10 @@ func NewAuthProviderHandler(s authProviderStore, st storage.Client, assets *asse
 	}
 }
 
-// ── Request types ────────────────────────────────────────────────────────────
-
 type authProviderRequest struct {
-	Slug           string     `json:"slug"` // set on create, immutable after
-	Kind           string     `json:"kind"` // oidc | saml
-	Type           string     `json:"type"` // oidc only: generic | entra | okta
+	Slug           string     `json:"slug"`
+	Kind           string     `json:"kind"`
+	Type           string     `json:"type"`
 	DisplayName    string     `json:"displayName"`
 	Enabled        bool       `json:"enabled"`
 	AllowSignUp    bool       `json:"allowSignUp"`
@@ -62,7 +56,7 @@ type authProviderRequest struct {
 	AuthURL      string `json:"authUrl"`
 	TokenURL     string `json:"tokenUrl"`
 	UserinfoURL  string `json:"userinfoUrl"`
-	APIURL       string `json:"apiUrl"` // entra: tenant ID; okta: domain
+	APIURL       string `json:"apiUrl"`
 	Scopes       string `json:"scopes"`
 	EmailClaim   string `json:"emailClaim"`
 	NameClaim    string `json:"nameClaim"`
@@ -93,10 +87,6 @@ type orgDomainRequest struct {
 	Domain string `json:"domain"`
 }
 
-// ── Provider handlers ────────────────────────────────────────────────────────
-
-// ListProviders returns the org's auth providers with secrets masked.
-// GET /api/v1/orgs/{orgID}/auth/providers
 // @Summary  ListProviders
 // @Tags     authproviders
 // @Security BearerAuth
@@ -119,8 +109,6 @@ func (h *AuthProviderHandler) ListProviders(w http.ResponseWriter, r *http.Reque
 	httputil.JSON(w, http.StatusOK, map[string]any{"providers": out})
 }
 
-// GetProvider returns one provider with secrets masked.
-// GET /api/v1/orgs/{orgID}/auth/providers/{slug}
 // @Summary  GetProvider
 // @Tags     authproviders
 // @Security BearerAuth
@@ -141,8 +129,6 @@ func (h *AuthProviderHandler) GetProvider(w http.ResponseWriter, r *http.Request
 	httputil.JSON(w, http.StatusOK, h.present(r, *p))
 }
 
-// CreateProvider adds a provider to the org.
-// POST /api/v1/orgs/{orgID}/auth/providers
 // @Summary  CreateProvider
 // @Tags     authproviders
 // @Security BearerAuth
@@ -161,9 +147,6 @@ func (h *AuthProviderHandler) CreateProvider(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// The slug is taken exactly as typed. It is never trimmed, lowercased or
-	// otherwise coerced: Validate rejects anything malformed so the admin sees
-	// the URL they asked for or an error, never a silently different one.
 	p := identity.AuthProvider{ID: newID(), Slug: req.Slug, OrgID: r.PathValue("orgID")}
 	if err := h.apply(r, &req, &p); err != nil {
 		httputil.BadRequest(w, err.Error())
@@ -180,8 +163,6 @@ func (h *AuthProviderHandler) CreateProvider(w http.ResponseWriter, r *http.Requ
 	httputil.JSON(w, http.StatusCreated, h.present(r, p))
 }
 
-// UpdateProvider replaces a provider's configuration.
-// PUT /api/v1/orgs/{orgID}/auth/providers/{slug}
 // @Summary  UpdateProvider
 // @Tags     authproviders
 // @Security BearerAuth
@@ -206,9 +187,6 @@ func (h *AuthProviderHandler) UpdateProvider(w http.ResponseWriter, r *http.Requ
 		httputil.BadRequest(w, "invalid JSON")
 		return
 	}
-	// The slug is registered at the IdP inside the redirect URI, ACS URL and
-	// Entity ID, so changing it would break sign-in with no way to tell. A
-	// request carrying a different one is rejected rather than quietly ignored.
 	if req.Slug != p.Slug {
 		httputil.BadRequest(w, "slug cannot be changed after the provider is created")
 		return
@@ -228,8 +206,6 @@ func (h *AuthProviderHandler) UpdateProvider(w http.ResponseWriter, r *http.Requ
 	httputil.JSON(w, http.StatusOK, h.present(r, *p))
 }
 
-// DeleteProvider removes a provider and, by cascade, its role mappings.
-// DELETE /api/v1/orgs/{orgID}/auth/providers/{slug}
 // @Summary  DeleteProvider
 // @Tags     authproviders
 // @Security BearerAuth
@@ -254,8 +230,6 @@ func (h *AuthProviderHandler) DeleteProvider(w http.ResponseWriter, r *http.Requ
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// PrepareProviderIconUpload issues a presigned URL for the provider button icon.
-// POST /api/v1/orgs/{orgID}/auth/providers/{slug}/icon/prepare
 // @Summary  PrepareProviderIconUpload
 // @Tags     authproviders
 // @Security BearerAuth
@@ -282,8 +256,6 @@ func (h *AuthProviderHandler) PrepareProviderIconUpload(w http.ResponseWriter, r
 	httputil.JSON(w, http.StatusOK, map[string]any{"assetId": assetID, "uploadUrl": url})
 }
 
-// PutProviderIcon records that the icon upload finished.
-// PUT /api/v1/orgs/{orgID}/auth/providers/{slug}/icon
 // @Summary  PutProviderIcon
 // @Tags     authproviders
 // @Security BearerAuth
@@ -310,8 +282,6 @@ func (h *AuthProviderHandler) PutProviderIcon(w http.ResponseWriter, r *http.Req
 	httputil.JSON(w, http.StatusOK, map[string]any{"assetId": assetID})
 }
 
-// DeleteProviderIcon clears the provider icon.
-// DELETE /api/v1/orgs/{orgID}/auth/providers/{slug}/icon
 // @Summary  DeleteProviderIcon
 // @Tags     authproviders
 // @Security BearerAuth
@@ -337,9 +307,6 @@ func (h *AuthProviderHandler) DeleteProviderIcon(w http.ResponseWriter, r *http.
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// SAMLMetadata returns the SP metadata document plus the URLs an admin has to
-// enter in their IdP console.
-// GET /api/v1/orgs/{orgID}/auth/providers/{slug}/saml/metadata
 // @Summary  SAMLMetadata
 // @Tags     authproviders
 // @Security BearerAuth
@@ -365,8 +332,6 @@ func (h *AuthProviderHandler) SAMLMetadata(w http.ResponseWriter, r *http.Reques
 	acs := acsURL(h.publicURL, p.OrgID, p.Slug)
 	metadataURL := samlMetadataURL(h.publicURL, p.OrgID, p.Slug)
 
-	// The SP key is only needed to sign requests, never to render metadata, so
-	// this deliberately passes the provider without decrypting it.
 	doc, err := saml.SPMetadata(saml.Provider{
 		IDPEntityID:  p.IDPEntityID,
 		IDPSSOURL:    p.IDPSSOURL,
@@ -388,10 +353,6 @@ func (h *AuthProviderHandler) SAMLMetadata(w http.ResponseWriter, r *http.Reques
 	})
 }
 
-// ── Role mapping handlers ────────────────────────────────────────────────────
-
-// ListRoleMappings returns a provider's rules in priority order.
-// GET /api/v1/orgs/{orgID}/auth/providers/{slug}/role-mappings
 // @Summary  ListRoleMappings
 // @Tags     authproviders
 // @Security BearerAuth
@@ -417,8 +378,6 @@ func (h *AuthProviderHandler) ListRoleMappings(w http.ResponseWriter, r *http.Re
 	httputil.JSON(w, http.StatusOK, map[string]any{"mappings": rules})
 }
 
-// CreateRoleMapping adds a rule to a provider.
-// POST /api/v1/orgs/{orgID}/auth/providers/{slug}/role-mappings
 // @Summary  CreateRoleMapping
 // @Tags     authproviders
 // @Security BearerAuth
@@ -464,8 +423,6 @@ func (h *AuthProviderHandler) CreateRoleMapping(w http.ResponseWriter, r *http.R
 	httputil.JSON(w, http.StatusCreated, rule)
 }
 
-// UpdateRoleMapping replaces a rule.
-// PUT /api/v1/orgs/{orgID}/auth/providers/{slug}/role-mappings/{mappingID}
 // @Summary  UpdateRoleMapping
 // @Tags     authproviders
 // @Security BearerAuth
@@ -512,8 +469,6 @@ func (h *AuthProviderHandler) UpdateRoleMapping(w http.ResponseWriter, r *http.R
 	httputil.JSON(w, http.StatusOK, rule)
 }
 
-// DeleteRoleMapping removes a rule.
-// DELETE /api/v1/orgs/{orgID}/auth/providers/{slug}/role-mappings/{mappingID}
 // @Summary  DeleteRoleMapping
 // @Tags     authproviders
 // @Security BearerAuth
@@ -539,9 +494,6 @@ func (h *AuthProviderHandler) DeleteRoleMapping(w http.ResponseWriter, r *http.R
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// MappingOperators is the operator catalog the rule builder populates from, so
-// the UI never hardcodes a list that can drift from what the engine accepts.
-// GET /api/v1/auth/mapping-operators
 // @Summary  MappingOperators
 // @Tags     authproviders
 // @Security BearerAuth
@@ -560,10 +512,6 @@ func (h *AuthProviderHandler) MappingOperators(w http.ResponseWriter, r *http.Re
 	httputil.JSON(w, http.StatusOK, map[string]any{"operators": out})
 }
 
-// ── Org domain handlers ──────────────────────────────────────────────────────
-
-// ListDomains returns the email domains that discover this org.
-// GET /api/v1/orgs/{orgID}/auth/domains
 // @Summary  ListDomains
 // @Tags     authproviders
 // @Security BearerAuth
@@ -582,10 +530,6 @@ func (h *AuthProviderHandler) ListDomains(w http.ResponseWriter, r *http.Request
 	httputil.JSON(w, http.StatusOK, map[string]any{"domains": domains})
 }
 
-// CreateDomain claims an email domain for the org. Domains are not verified: a
-// domain may be claimed by several orgs, and claiming one grants nothing on its
-// own — the user still has to authenticate through one of the org's providers.
-// POST /api/v1/orgs/{orgID}/auth/domains
 // @Summary  CreateDomain
 // @Tags     authproviders
 // @Security BearerAuth
@@ -619,8 +563,6 @@ func (h *AuthProviderHandler) CreateDomain(w http.ResponseWriter, r *http.Reques
 	httputil.JSON(w, http.StatusCreated, d)
 }
 
-// DeleteDomain releases a claimed domain.
-// DELETE /api/v1/orgs/{orgID}/auth/domains/{domainID}
 // @Summary  DeleteDomain
 // @Tags     authproviders
 // @Security BearerAuth
@@ -641,11 +583,6 @@ func (h *AuthProviderHandler) DeleteDomain(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ── helpers ──────────────────────────────────────────────────────────────────
-
-// load fetches the provider addressed by the request path. The slug is only
-// unique within an org, and the lookup is scoped to the org in the path, so one
-// org cannot reach another's provider by reusing its slug.
 func (h *AuthProviderHandler) load(r *http.Request) (*identity.AuthProvider, error) {
 	p, err := h.store.GetAuthProviderBySlug(r.Context(), r.PathValue("orgID"), r.PathValue("slug"))
 	if err != nil {
@@ -657,9 +594,6 @@ func (h *AuthProviderHandler) load(r *http.Request) (*identity.AuthProvider, err
 	return p, nil
 }
 
-// present prepares a provider for the wire: secrets become a mask that says one
-// is set without revealing it, the icon asset becomes a URL, and the SP entity
-// ID is derived so the admin UI can display it without it being stored.
 func (h *AuthProviderHandler) present(r *http.Request, p identity.AuthProvider) identity.AuthProvider {
 	if p.Kind == identity.KindSAML {
 		p.SPEntityID = samlMetadataURL(h.publicURL, p.OrgID, p.Slug)
@@ -678,9 +612,6 @@ func (h *AuthProviderHandler) present(r *http.Request, p identity.AuthProvider) 
 	return p
 }
 
-// apply folds a request onto a provider, deriving what can be derived and
-// encrypting what has to be encrypted. p carries the existing row on update and
-// only an ID and org on create.
 func (h *AuthProviderHandler) apply(r *http.Request, req *authProviderRequest, p *identity.AuthProvider) error {
 	p.Kind = req.Kind
 	p.DisplayName = strings.TrimSpace(req.DisplayName)
@@ -700,8 +631,6 @@ func (h *AuthProviderHandler) apply(r *http.Request, req *authProviderRequest, p
 }
 
 func (h *AuthProviderHandler) applyOIDC(req *authProviderRequest, p *identity.AuthProvider) error {
-	// Pasted credentials and endpoints routinely carry a trailing space or
-	// newline that the IdP then rejects.
 	p.Type = req.Type
 	if p.Type == "" {
 		p.Type = identity.TypeGeneric
@@ -717,8 +646,6 @@ func (h *AuthProviderHandler) applyOIDC(req *authProviderRequest, p *identity.Au
 	p.SubClaim = req.SubClaim
 	p.GroupsClaim = req.GroupsClaim
 
-	// Entra and Okta describe themselves by a tenant ID or domain; derive their
-	// endpoints so the login path reads them like any generic provider.
 	if p.AuthURL == "" || p.TokenURL == "" || p.UserinfoURL == "" {
 		switch p.Type {
 		case identity.TypeEntra:
@@ -734,8 +661,6 @@ func (h *AuthProviderHandler) applyOIDC(req *authProviderRequest, p *identity.Au
 		}
 	}
 
-	// An omitted or masked secret means "leave it alone", so editing an endpoint
-	// does not wipe the credential.
 	secret := strings.TrimSpace(req.ClientSecret)
 	if secret == "" || secret == secretMask {
 		return nil
@@ -764,9 +689,6 @@ func (h *AuthProviderHandler) applySAML(r *http.Request, req *authProviderReques
 	p.NameAttribute = req.NameAttribute
 	p.GroupsAttribute = req.GroupsAttribute
 
-	// Metadata is resolved here, on save, so the login path never parses XML.
-	// Explicit fields still win: an admin correcting a stale metadata document
-	// should not have their correction overwritten.
 	if p.IDPMetadataURL != "" || p.IDPMetadataXML != "" {
 		md, err := saml.ParseMetadata(r.Context(), p.IDPMetadataURL, p.IDPMetadataXML)
 		if err != nil {
@@ -783,10 +705,6 @@ func (h *AuthProviderHandler) applySAML(r *http.Request, req *authProviderReques
 		}
 	}
 
-	// The keypair is generated once and kept even when signing is off, so that
-	// turning signing on later does not change the certificate the IdP trusts.
-	// Its subject is the SP entity ID, which is our own metadata URL — derived
-	// from the immutable org and slug rather than stored.
 	if p.SPCert == "" || p.SPKey == "" {
 		if h.cipher == nil {
 			return fmt.Errorf("no secret key is configured, secrets cannot be stored")

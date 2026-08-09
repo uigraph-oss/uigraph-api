@@ -1,15 +1,5 @@
 // Package oauth implements a minimal OAuth2 / OIDC authorization-code flow for
 // DB-configured providers (generic OIDC, Microsoft Entra ID, Okta).
-//
-// Identity is read from the OIDC userinfo endpoint and merged with the id_token
-// payload, because group and role claims are frequently present only in the
-// id_token and userinfo alone is not enough to drive role mapping.
-//
-// The id_token's signature is not verified against the provider's JWKS. That is
-// sound in this flow specifically: the token arrives directly from the token
-// endpoint over TLS, in response to a code this server just issued, which is the
-// exception OIDC Core §3.1.3.7 permits. It would *not* be sound for a token
-// received from the browser or any other third party.
 package oauth
 
 import (
@@ -24,7 +14,6 @@ import (
 	"time"
 )
 
-// Provider type identifiers stored in auth_providers.type.
 const (
 	Generic = "generic"
 	Entra   = "entra"
@@ -57,9 +46,6 @@ func OktaEndpoints(domain string) (authURL, tokenURL, userinfoURL string) {
 }
 
 // AuthCodeURL builds the provider authorization URL to redirect the browser to.
-// nonce binds the resulting id_token to this request and is echoed back in the
-// token's nonce claim; pass "" only for plain OAuth2 providers that issue no
-// id_token.
 func (p Provider) AuthCodeURL(redirectURI, state, nonce string) string {
 	q := url.Values{
 		"client_id":     {p.ClientID},
@@ -84,15 +70,11 @@ var httpClient = &http.Client{Timeout: 15 * time.Second}
 // without one (HTTP 403).
 const userAgent = "uigraph"
 
-// Token is the subset of the token endpoint's response this package uses.
-// IDToken is empty for plain OAuth2 providers such as GitHub.
 type Token struct {
 	AccessToken string
 	IDToken     string
 }
 
-// Exchange swaps an authorization code for an access token and, for OIDC
-// providers, an id_token.
 func Exchange(ctx context.Context, p Provider, code, redirectURI string) (Token, error) {
 	form := url.Values{
 		"grant_type":    {"authorization_code"},
@@ -141,9 +123,6 @@ func Exchange(ctx context.Context, p Provider, code, redirectURI string) (Token,
 	return Token{AccessToken: tok.AccessToken, IDToken: tok.IDToken}, nil
 }
 
-// IDTokenClaims decodes a JWT's payload without verifying its signature. See the
-// package doc for why that is acceptable for a token taken straight from the
-// token endpoint, and only there.
 func IDTokenClaims(idToken string) (map[string]any, error) {
 	parts := strings.Split(idToken, ".")
 	if len(parts) != 3 {
@@ -160,12 +139,6 @@ func IDTokenClaims(idToken string) (map[string]any, error) {
 	return claims, nil
 }
 
-// VerifyNonce checks that the id_token echoes the nonce sent on the
-// authorization request, binding the token to that request.
-//
-// A provider that issues no id_token has nothing to bind, so there is nothing to
-// check. A provider that issues one and drops the nonce is rejected: OIDC Core
-// §3.1.3.7 requires it to be echoed whenever it was sent.
 func VerifyNonce(claims map[string]any, want string) error {
 	if want == "" {
 		return fmt.Errorf("oauth: no nonce was issued for this login")
@@ -180,14 +153,6 @@ func VerifyNonce(claims map[string]any, want string) error {
 	return nil
 }
 
-// MergedClaims returns the id_token claims overlaid with the userinfo response.
-//
-// Both are needed: userinfo is authoritative for profile fields and is fetched
-// live, while groups and roles are often only in the id_token. Userinfo wins on
-// the keys it actually returns; id_token-only keys survive.
-//
-// When the provider issues an id_token, its nonce is verified against nonce
-// before any of its claims are used.
 func MergedClaims(ctx context.Context, p Provider, tok Token, nonce string) (map[string]any, error) {
 	merged := map[string]any{}
 

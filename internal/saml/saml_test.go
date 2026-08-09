@@ -71,8 +71,6 @@ func defaults() assertionOpts {
 	}
 }
 
-// signedResponse builds a SAML Response whose Assertion carries a valid
-// enveloped signature from the IdP key, then base64-encodes it for the ACS form.
 func (i idp) signedResponse(t *testing.T, o assertionOpts) string {
 	t.Helper()
 	now := time.Now().UTC()
@@ -123,9 +121,6 @@ func (i idp) signedResponse(t *testing.T, o assertionOpts) string {
 		Certificate: [][]byte{i.cert.Raw},
 	})
 	sigCtx := dsig.NewDefaultSigningContext(store)
-	// Exclusive canonicalization, as every real IdP uses: the assertion is signed
-	// standalone and then embedded in a Response that declares its own prefixes,
-	// so the signature must survive a change of surrounding namespace context.
 	sigCtx.Canonicalizer = dsig.MakeC14N10ExclusiveCanonicalizerWithPrefixList("")
 	signed, err := sigCtx.SignEnveloped(doc.Root())
 	if err != nil {
@@ -373,9 +368,6 @@ func TestNormalizeCerts(t *testing.T) {
 	}
 }
 
-// An IdP mid-rollover publishes several signing certificates and may sign with
-// any of them, so every certificate on the provider has to be trusted, not just
-// the first.
 func TestValidateResponseAcceptsAnyConfiguredCert(t *testing.T) {
 	retiring := newIDP(t)
 	active := newIDP(t)

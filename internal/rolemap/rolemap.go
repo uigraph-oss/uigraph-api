@@ -1,7 +1,3 @@
-// Package rolemap resolves an org role from IdP claims or attributes using an
-// auth provider's ordered mapping rules. OIDC claims and SAML attributes are
-// both normalised to map[string]any before they reach this package, so one
-// engine serves both.
 package rolemap
 
 import (
@@ -13,8 +9,6 @@ import (
 	"github.com/uigraph/app/internal/authz"
 )
 
-// Rule is one mapping condition. Rules belong to a single auth provider and are
-// evaluated in ascending Priority; the first match decides the role.
 type Rule struct {
 	ID             string     `json:"id"`
 	ProviderID     string     `json:"providerId"`
@@ -37,8 +31,6 @@ const (
 	OpRegex       = "regex"
 )
 
-// ValidOperators is the catalog served by the API so the admin rule builder
-// populates its dropdown from the server instead of hardcoding the list.
 var ValidOperators = []string{
 	OpEquals, OpNotEquals,
 	OpContains, OpNotContains,
@@ -56,8 +48,6 @@ func ValidOperator(op string) bool {
 	return false
 }
 
-// TakesValue reports whether an operator reads Rule.AttributeValue. The
-// existence operators do not; every other operator requires a value.
 func TakesValue(op string) bool {
 	if op == OpExists || op == OpNotExists {
 		return false
@@ -65,7 +55,6 @@ func TakesValue(op string) bool {
 	return true
 }
 
-// ValidateRule checks a rule before it is persisted.
 func ValidateRule(r Rule) error {
 	if strings.TrimSpace(r.AttributeKey) == "" {
 		return fmt.Errorf("rolemap: attribute key is required")
@@ -87,11 +76,6 @@ func ValidateRule(r Rule) error {
 	return nil
 }
 
-// Resolve returns the role of the first matching rule in ascending priority
-// order, or defaultRole when no rule matches.
-//
-// An unknown operator is an error rather than a silent non-match, so a
-// malformed rule cannot quietly downgrade a user to the default role.
 func Resolve(rules []Rule, attrs map[string]any, defaultRole authz.Role) (authz.Role, error) {
 	ordered := make([]Rule, len(rules))
 	copy(ordered, rules)
@@ -109,11 +93,6 @@ func Resolve(rules []Rule, attrs map[string]any, defaultRole authz.Role) (authz.
 	return defaultRole, nil
 }
 
-// Match reports whether attrs satisfies r.
-//
-// The negative operators (notEquals, notContains) additionally require the
-// attribute to be present: a claim the IdP never sent does not satisfy them, so
-// a missing claim cannot grant a role by omission.
 func Match(r Rule, attrs map[string]any) (bool, error) {
 	raw := Lookup(attrs, r.AttributeKey)
 	present := raw != nil
@@ -197,17 +176,6 @@ func Match(r Rule, attrs map[string]any) (bool, error) {
 	}
 }
 
-// Lookup resolves an attribute key against the claims.
-//
-// The whole key is tried as a literal name first, and only when no attribute
-// carries that name is it split on "." and traversed as a path into nested
-// maps, so a rule can still address a nested claim such as "user.role". The
-// literal attempt is what makes SAML usable at all: every claim Entra, Okta and
-// ADFS emit is named with a URI such as
-// "http://schemas.microsoft.com/ws/2008/06/identity/claims/groups", and
-// splitting that on its first dot looks for a claim named "http://schemas".
-//
-// Returns nil when the key is neither a literal attribute nor a resolvable path.
 func Lookup(attrs map[string]any, key string) any {
 	if val, ok := attrs[key]; ok {
 		return val
@@ -228,10 +196,6 @@ func Lookup(attrs map[string]any, key string) any {
 	return Lookup(nested, parts[1])
 }
 
-// stringValues flattens a claim into comparable strings. A claim may arrive as
-// a scalar ("role": "admin"), an array ("groups": ["eng", "sre"]) or a
-// non-string scalar ("email_verified": true), and rules compare against all of
-// them uniformly.
 func stringValues(raw any) []string {
 	switch v := raw.(type) {
 	case nil:

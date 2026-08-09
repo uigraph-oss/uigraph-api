@@ -8,9 +8,6 @@ import (
 	"github.com/uigraph/app/internal/store"
 )
 
-// SSOHandler covers the directory-integration features that are still global
-// and still unimplemented: LDAP and SCIM. OIDC and SAML moved to the org-scoped
-// AuthProviderHandler.
 type ssoStore interface {
 	identity.ProviderStore
 }

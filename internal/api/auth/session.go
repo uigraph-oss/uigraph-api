@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -27,14 +26,8 @@ import (
 // sessionCookie is the name of the HttpOnly cookie carrying the session token.
 const sessionCookie = "uigraph_session"
 
-// loginStateTTL bounds how long a started login may take to come back. It is
-// also the window a state row stays replayable in before ConsumeLoginState
-// rejects it as expired.
 const loginStateTTL = 10 * time.Minute
 
-// discoverWindow and discoverLimit rate-limit org discovery. The endpoint is
-// unauthenticated and reveals which orgs claim an email domain, so an address
-// may only be probed a bounded number of times per window.
 const (
 	discoverWindow = 15 * time.Minute
 	discoverLimit  = 20
@@ -54,10 +47,10 @@ type sessionStore interface {
 type SessionHandler struct {
 	store        sessionStore
 	assets       *asset.Resolver // presigns the avatar URL on /auth/me; may be nil
-	cipher       *crypto.Cipher  // decrypts provider client secrets and SP keys; may be nil
-	publicURL    string          // externally reachable base URL, e.g. https://uigraph.example.com
-	frontendURL  string          // SPA base URL; empty falls back to publicURL
-	cookieDomain string          // e.g. ".example.com" to share the session cookie across subdomains; empty = host-only
+	cipher       *crypto.Cipher
+	publicURL    string // externally reachable base URL, e.g. https://uigraph.example.com
+	frontendURL  string // SPA base URL; empty falls back to publicURL
+	cookieDomain string // e.g. ".example.com" to share the session cookie across subdomains; empty = host-only
 }
 
 func NewSessionHandler(s sessionStore, assets *asset.Resolver, cipher *crypto.Cipher, publicURL, frontendURL, cookieDomain string) *SessionHandler {
@@ -129,8 +122,6 @@ type discoverOrgsRequest struct {
 	Email string `json:"email"`
 }
 
-// discoveredOrg is deliberately minimal: this endpoint is unauthenticated, so it
-// exposes only what the org picker has to render.
 type discoveredOrg struct {
 	ID      string `json:"id"`
 	Name    string `json:"name"`
@@ -222,12 +213,6 @@ func (h *SessionHandler) Login(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// DiscoverOrgs returns the organizations an email address may sign in to: those
-// claiming its domain, plus any the address already has a membership in.
-//
-// It is the first step of login and is unauthenticated, so it always answers 200
-// with a possibly empty list — never a 404 that would confirm an address exists.
-// POST /api/v1/auth/discover-orgs
 // @Summary  DiscoverOrgs
 // @Tags     auth
 // @Param    body  body  object  false  "request body"
@@ -276,8 +261,6 @@ func (h *SessionHandler) DiscoverOrgs(w http.ResponseWriter, r *http.Request) {
 		orgs = append(orgs, discoveredOrg{ID: o.ID, Name: o.Name, LogoURL: h.avatarURL(r, o.LogoAssetID)})
 	}
 
-	// A user invited into an org that does not claim their domain still has to be
-	// able to reach it, so memberships are unioned in.
 	u, err := h.store.GetUserByEmail(r.Context(), email)
 	if err != nil {
 		httputil.Error(w, r, err)
@@ -301,9 +284,6 @@ func (h *SessionHandler) DiscoverOrgs(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"orgs": orgs})
 }
 
-// OrgProviders lists the enabled auth providers of one org, which is what the
-// login page renders once an org has been selected. Secrets are never returned.
-// GET /api/v1/auth/orgs/{orgID}/providers
 // @Summary  OrgProviders
 // @Tags     auth
 // @Param    orgID  path  string  true  "orgID"
@@ -331,9 +311,6 @@ func (h *SessionHandler) OrgProviders(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, out)
 }
 
-// InitiateLogin records the login handshake and redirects the browser to the
-// provider, as an OIDC authorization request or a SAML AuthnRequest.
-// GET /api/v1/auth/orgs/{orgID}/login/{slug}
 // @Summary  InitiateLogin
 // @Tags     auth
 // @Param    orgID  path  string  true  "orgID"
@@ -406,10 +383,6 @@ func (h *SessionHandler) InitiateLogin(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, redirect, http.StatusFound)
 }
 
-// OIDCCallback handles the provider redirect: it consumes the login state,
-// exchanges the code, merges the id_token and userinfo claims, and hands off to
-// the shared sign-in step.
-// GET /api/v1/auth/orgs/{orgID}/callback/{slug}?code=...&state=...
 // @Summary  OIDCCallback
 // @Tags     auth
 // @Param    orgID  path  string  true  "orgID"
@@ -456,9 +429,6 @@ func (h *SessionHandler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// SAMLACS is the assertion consumer service: the IdP POSTs the signed response
-// here cross-site, correlated to the pending login by RelayState.
-// POST /api/v1/auth/orgs/{orgID}/saml/{slug}/acs
 // @Summary  SAMLACS
 // @Tags     auth
 // @Param    orgID  path  string  true  "orgID"
@@ -491,8 +461,6 @@ func (h *SessionHandler) SAMLACS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The NameID is the subject and, for the emailAddress format every IdP
-	// console defaults to, also the fallback email when no attribute carries one.
 	email := attrString(id.Attributes, claimOr(prov.EmailAttribute, "email"))
 	if email == "" {
 		email = id.NameID
@@ -506,8 +474,6 @@ func (h *SessionHandler) SAMLACS(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// SAMLMetadata serves the SP metadata document an admin uploads to their IdP.
-// GET /api/v1/auth/orgs/{orgID}/saml/{slug}/metadata
 // @Summary  SAMLMetadata
 // @Tags     auth
 // @Param    orgID  path  string  true  "orgID"
@@ -542,9 +508,6 @@ func (h *SessionHandler) SAMLMetadata(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(out))
 }
 
-// completedAuth is what an OIDC or SAML callback proved about the person at the
-// browser. Attributes holds the raw claims or assertion attributes that the
-// provider's role mapping rules are evaluated against.
 type completedAuth struct {
 	Sub        string
 	Email      string
@@ -552,27 +515,7 @@ type completedAuth struct {
 	Attributes map[string]any
 }
 
-// completeLogin turns a validated authentication into a session. Nothing here
-// runs until the IdP response has been verified, which is what keeps the
-// promise that no user is created or attached before authentication succeeds.
 func (h *SessionHandler) completeLogin(w http.ResponseWriter, r *http.Request, prov *identity.AuthProvider, ls *identity.LoginState, auth completedAuth) {
-	slog.InfoContext(r.Context(), "sso identity",
-		"provider", prov.Slug,
-		"kind", prov.Kind,
-		"sub", auth.Sub,
-		"email", auth.Email,
-		"name", auth.Name,
-		"attributeCount", len(auth.Attributes),
-	)
-	for k, v := range auth.Attributes {
-		slog.InfoContext(r.Context(), "sso attribute",
-			"provider", prov.Slug,
-			"key", k,
-			"value", v,
-			"type", fmt.Sprintf("%T", v),
-		)
-	}
-
 	if auth.Email == "" {
 		httputil.BadRequest(w, "the provider returned no email address")
 		return
@@ -622,29 +565,6 @@ func (h *SessionHandler) completeLogin(w http.ResponseWriter, r *http.Request, p
 		httputil.Error(w, r, err)
 		return
 	}
-	slog.InfoContext(r.Context(), "sso role resolved",
-		"provider", prov.Slug,
-		"email", auth.Email,
-		"ruleCount", len(rules),
-		"defaultRole", prov.DefaultRole,
-		"role", role,
-	)
-	for _, rule := range rules {
-		matched, matchErr := rolemap.Match(rule, auth.Attributes)
-		slog.InfoContext(r.Context(), "sso rule",
-			"provider", prov.Slug,
-			"priority", rule.Priority,
-			"attributeKey", rule.AttributeKey,
-			"operator", rule.Operator,
-			"attributeValue", rule.AttributeValue,
-			"grants", rule.Role,
-			"matched", matched,
-			"matchErr", matchErr,
-		)
-	}
-
-	// The role is re-resolved on every sign-in, so a change at the IdP takes
-	// effect on the next login rather than needing an admin edit here.
 	err = h.store.UpsertMember(r.Context(), org.OrgMember{
 		UserID: u.ID,
 		OrgID:  prov.OrgID,
@@ -936,29 +856,18 @@ func extractBearerToken(r *http.Request) string {
 	return ""
 }
 
-// The three URLs an IdP is configured with. They are built here, from the org
-// and slug, and never stored: the admin API shows the admin the same strings the
-// login path will later assert against, so the two cannot drift apart.
-
-// oidcRedirectURI is the callback URL registered with the provider's IdP.
 func oidcRedirectURI(publicURL, orgID, slug string) string {
 	return publicURL + "/api/v1/auth/orgs/" + orgID + "/callback/" + slug
 }
 
-// acsURL is the assertion consumer service URL the IdP POSTs its response to.
 func acsURL(publicURL, orgID, slug string) string {
 	return publicURL + "/api/v1/auth/orgs/" + orgID + "/saml/" + slug + "/acs"
 }
 
-// samlMetadataURL is where the SP metadata document for a provider is served,
-// and doubles as the SP Entity ID.
 func samlMetadataURL(publicURL, orgID, slug string) string {
 	return publicURL + "/api/v1/auth/orgs/" + orgID + "/saml/" + slug + "/metadata"
 }
 
-// loadProvider fetches the enabled provider addressed by the org and slug in the
-// URL. A disabled provider is reported as missing so turning one off immediately
-// stops it being usable, even by someone holding its login URL.
 func (h *SessionHandler) loadProvider(r *http.Request) (*identity.AuthProvider, error) {
 	prov, err := h.store.GetAuthProviderBySlug(r.Context(), r.PathValue("orgID"), r.PathValue("slug"))
 	if err != nil {
@@ -970,13 +879,6 @@ func (h *SessionHandler) loadProvider(r *http.Request) (*identity.AuthProvider, 
 	return prov, nil
 }
 
-// consumeState redeems the single-use login state behind an OIDC state parameter
-// or a SAML RelayState and loads the provider it was issued for.
-//
-// The state row is the whole CSRF defence: it is created server-side at
-// initiation and deleted on first use, so a replayed callback finds nothing. The
-// provider on the row must also match the one in the URL, otherwise a state
-// issued for a cheap provider could be redeemed against a privileged one.
 func (h *SessionHandler) consumeState(w http.ResponseWriter, r *http.Request, state, kind string) (*identity.AuthProvider, *identity.LoginState, bool) {
 	if state == "" {
 		httputil.BadRequest(w, "missing login state")
@@ -1007,7 +909,6 @@ func (h *SessionHandler) consumeState(w http.ResponseWriter, r *http.Request, st
 	return prov, ls, true
 }
 
-// oauthProvider builds the runtime OIDC provider, decrypting the client secret.
 func (h *SessionHandler) oauthProvider(p *identity.AuthProvider) (oauth.Provider, error) {
 	secret, err := h.decrypt(p.ClientSecret)
 	if err != nil {
@@ -1024,9 +925,6 @@ func (h *SessionHandler) oauthProvider(p *identity.AuthProvider) (oauth.Provider
 	}, nil
 }
 
-// samlProvider builds the runtime SAML provider, decrypting the SP private key.
-// The SP Entity ID is derived from the org and slug rather than read off the
-// row, so it can never disagree with the URL the metadata is served at.
 func (h *SessionHandler) samlProvider(p *identity.AuthProvider) (saml.Provider, error) {
 	key, err := h.decrypt(p.SPKey)
 	if err != nil {
@@ -1044,8 +942,6 @@ func (h *SessionHandler) samlProvider(p *identity.AuthProvider) (saml.Provider, 
 	}, nil
 }
 
-// decrypt unseals a stored provider secret. An empty value stays empty: SAML
-// providers that do not sign their requests have no SP key at all.
 func (h *SessionHandler) decrypt(ciphertext string) (string, error) {
 	if ciphertext == "" {
 		return "", nil
@@ -1056,9 +952,6 @@ func (h *SessionHandler) decrypt(ciphertext string) (string, error) {
 	return h.cipher.Decrypt(ciphertext)
 }
 
-// safeRedirect keeps a post-login redirect on our own origin. Anything that is
-// not a plain absolute path — including the "//host" form a browser reads as a
-// protocol-relative URL — is discarded in favour of the app root.
 func safeRedirect(raw string) string {
 	if strings.HasPrefix(raw, "/") && !strings.HasPrefix(raw, "//") {
 		return raw
@@ -1113,8 +1006,6 @@ func claimString(claims map[string]any, key string) string {
 	return ""
 }
 
-// attrString extracts a SAML attribute, taking the first value when the IdP sent
-// several under one name.
 func attrString(attrs map[string]any, key string) string {
 	switch v := attrs[key].(type) {
 	case string:

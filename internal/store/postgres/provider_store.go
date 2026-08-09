@@ -13,8 +13,6 @@ import (
 	"github.com/uigraph/app/internal/store"
 )
 
-// ── Auth providers ────────────────────────────────────────────────────────────
-
 const authProviderCols = `id, slug, org_id, kind, type, display_name, COALESCE(icon_asset_id,''),
 	enabled, allow_sign_up, allowed_domains, default_role,
 	COALESCE(client_id,''), COALESCE(client_secret,''),
@@ -86,10 +84,6 @@ func (d *DB) CreateAuthProvider(ctx context.Context, p identity.AuthProvider) er
 	return nil
 }
 
-// UpdateAuthProvider is scoped by org_id as well as id so a caller holding only
-// a provider ID cannot write into another org's configuration. slug is
-// deliberately absent from the SET list: it is fixed at creation because the
-// IdP has it registered in a redirect URI or Entity ID.
 func (d *DB) UpdateAuthProvider(ctx context.Context, p identity.AuthProvider) error {
 	const q = `
 		UPDATE auth_providers SET
@@ -151,9 +145,6 @@ func (d *DB) UpdateAuthProvider(ctx context.Context, p identity.AuthProvider) er
 	return nil
 }
 
-// GetAuthProviderBySlug loads a provider by the pair that identifies it in a
-// URL. Both the login path and the admin API carry the org in the path, so
-// neither needs a lookup by ID alone.
 func (d *DB) GetAuthProviderBySlug(ctx context.Context, orgID, slug string) (*identity.AuthProvider, error) {
 	q := "SELECT " + authProviderCols + " FROM auth_providers WHERE org_id = $1 AND slug = $2"
 	p, err := scanAuthProvider(d.db.QueryRowContext(ctx, q, orgID, slug))
@@ -210,8 +201,6 @@ func (d *DB) SetAuthProviderIcon(ctx context.Context, orgID, providerID string, 
 	return nil
 }
 
-// ── Role mappings ─────────────────────────────────────────────────────────────
-
 func (d *DB) CreateRoleMapping(ctx context.Context, m rolemap.Rule) error {
 	const q = `
 		INSERT INTO auth_role_mappings
@@ -254,8 +243,6 @@ func (d *DB) UpdateRoleMapping(ctx context.Context, m rolemap.Rule) error {
 	return nil
 }
 
-// ListRoleMappings returns the provider's rules in evaluation order. rolemap
-// sorts defensively too, so callers need not depend on this ordering.
 func (d *DB) ListRoleMappings(ctx context.Context, providerID string) ([]rolemap.Rule, error) {
 	const q = `
 		SELECT id, provider_id, priority, attribute_key, operator, attribute_value, role
@@ -287,8 +274,6 @@ func (d *DB) DeleteRoleMapping(ctx context.Context, providerID, mappingID string
 	}
 	return nil
 }
-
-// ── Org email domains ─────────────────────────────────────────────────────────
 
 func (d *DB) CreateOrgDomain(ctx context.Context, dom identity.OrgDomain) error {
 	const q = `
@@ -334,10 +319,6 @@ func (d *DB) DeleteOrgDomain(ctx context.Context, orgID, domainID string) error 
 	return nil
 }
 
-// ListOrgsByDomain returns every org claiming the domain. Disabled orgs are
-// excluded: they cannot be signed into, so offering them would be a dead end.
-// Orgs with no enabled auth provider are still returned, since password login
-// remains available on the provider step.
 func (d *DB) ListOrgsByDomain(ctx context.Context, domain string) ([]org.Org, error) {
 	const q = `
 		SELECT o.id, o.name, o.logo_asset_id, o.disabled, o.auto_join, o.onboarding_done,
@@ -364,8 +345,6 @@ func (d *DB) ListOrgsByDomain(ctx context.Context, domain string) ([]org.Org, er
 	return out, rows.Err()
 }
 
-// ── Login handshake state ─────────────────────────────────────────────────────
-
 func (d *DB) CreateLoginState(ctx context.Context, s identity.LoginState) error {
 	const q = `
 		INSERT INTO auth_login_state
@@ -381,9 +360,6 @@ func (d *DB) CreateLoginState(ctx context.Context, s identity.LoginState) error 
 	return nil
 }
 
-// ConsumeLoginState deletes and returns the row in one statement, so a state or
-// RelayState value is usable exactly once even under concurrent callbacks. An
-// expired row is deleted but reported as not found.
 func (d *DB) ConsumeLoginState(ctx context.Context, state string) (*identity.LoginState, error) {
 	const q = `
 		DELETE FROM auth_login_state

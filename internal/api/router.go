@@ -53,9 +53,6 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 
 	assetResolver := asset.New(st, c)
 
-	// authCipher stays nil when no secret key is configured; the auth handlers
-	// then refuse to read or write a provider secret rather than falling back to
-	// plaintext.
 	authCipher, err := crypto.NewCipher(cfg.SecretKey)
 	if err != nil {
 		authCipher = nil
