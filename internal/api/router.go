@@ -52,12 +52,23 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	mux.HandleFunc("GET /api/v1/instance-info", instanceinfo.New(cfg).Get)
 
 	assetResolver := asset.New(st, c)
-	sessionH := auth.NewSessionHandler(s, assetResolver, cfg.PublicURL, cfg.FrontendURL, cfg.CookieDomain)
+
+	// authCipher stays nil when no secret key is configured; the auth handlers
+	// then refuse to read or write a provider secret rather than falling back to
+	// plaintext.
+	authCipher, err := crypto.NewCipher(cfg.SecretKey)
+	if err != nil {
+		authCipher = nil
+	}
+
+	sessionH := auth.NewSessionHandler(s, assetResolver, authCipher, cfg.PublicURL, cfg.FrontendURL, cfg.CookieDomain)
 	mux.HandleFunc("POST /api/v1/auth/login", sessionH.Login)
-	mux.HandleFunc("GET /api/v1/auth/providers", sessionH.ListProviders)
-	mux.HandleFunc("GET /api/v1/auth/login/{provider}", sessionH.InitiateOAuth)
-	mux.HandleFunc("GET /api/v1/auth/callback/{provider}", sessionH.OAuthCallback)
-	mux.HandleFunc("POST /api/v1/auth/saml/acs", sessionH.SAMLCallback)
+	mux.HandleFunc("POST /api/v1/auth/discover-orgs", sessionH.DiscoverOrgs)
+	mux.HandleFunc("GET /api/v1/auth/orgs/{orgID}/providers", sessionH.OrgProviders)
+	mux.HandleFunc("GET /api/v1/auth/orgs/{orgID}/login/{slug}", sessionH.InitiateLogin)
+	mux.HandleFunc("GET /api/v1/auth/orgs/{orgID}/callback/{slug}", sessionH.OIDCCallback)
+	mux.HandleFunc("POST /api/v1/auth/orgs/{orgID}/saml/{slug}/acs", sessionH.SAMLACS)
+	mux.HandleFunc("GET /api/v1/auth/orgs/{orgID}/saml/{slug}/metadata", sessionH.SAMLMetadata)
 
 	if cfg.Enterprise {
 		signupH := auth.NewSignupHandler(s, cfg.EnterpriseInternalToken)
@@ -190,24 +201,32 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	serverAdmin("PUT", "/api/v1/server/orgs/{orgID}/logo", avatarH.PutOrgLogo)
 	serverAdmin("DELETE", "/api/v1/server/orgs/{orgID}/logo", avatarH.DeleteOrgLogo)
 
-	ssoH := auth.NewSSOHandler(s, st, assetResolver)
-	serverAdmin("GET", "/api/v1/sso/oauth", ssoH.ListOAuthProviders)
-	serverAdmin("PUT", "/api/v1/sso/oauth/{provider}", ssoH.UpsertOAuthProvider)
-	serverAdmin("DELETE", "/api/v1/sso/oauth/{provider}", ssoH.DeleteOAuthProvider)
-	serverAdmin("POST", "/api/v1/sso/oauth/{provider}/icon/prepare", ssoH.PrepareOAuthProviderIconUpload)
-	serverAdmin("PUT", "/api/v1/sso/oauth/{provider}/icon", ssoH.PutOAuthProviderIcon)
-	serverAdmin("DELETE", "/api/v1/sso/oauth/{provider}/icon", ssoH.DeleteOAuthProviderIcon)
-	serverAdmin("GET", "/api/v1/sso/role-mappings", ssoH.ListMappings)
-	serverAdmin("POST", "/api/v1/sso/role-mappings", ssoH.CreateMapping)
-	serverAdmin("DELETE", "/api/v1/sso/role-mappings/{mappingID}", ssoH.DeleteMapping)
+	ssoH := auth.NewSSOHandler(s)
 	serverAdmin("GET", "/api/v1/sso/ldap", ssoH.GetLDAP)
 	serverAdmin("PUT", "/api/v1/sso/ldap", ssoH.UpsertLDAP)
 	serverAdmin("DELETE", "/api/v1/sso/ldap", ssoH.DeleteLDAP)
-	serverAdmin("GET", "/api/v1/sso/saml", ssoH.GetSAML)
-	serverAdmin("PUT", "/api/v1/sso/saml", ssoH.UpsertSAML)
 	serverAdmin("GET", "/api/v1/sso/scim", ssoH.GetSCIM)
 	serverAdmin("PUT", "/api/v1/sso/scim", ssoH.UpsertSCIM)
 	serverAdmin("POST", "/api/v1/sso/scim/rotate-token", ssoH.RotateSCIMToken)
+
+	authProviderH := auth.NewAuthProviderHandler(s, st, assetResolver, authCipher, cfg.PublicURL)
+	protected("GET", "/api/v1/auth/mapping-operators", authProviderH.MappingOperators)
+	requireScope(authz.ScopeAuthProvidersRead, "GET", "/api/v1/orgs/{orgID}/auth/providers", authProviderH.ListProviders)
+	requireScope(authz.ScopeAuthProvidersWrite, "POST", "/api/v1/orgs/{orgID}/auth/providers", authProviderH.CreateProvider)
+	requireScope(authz.ScopeAuthProvidersRead, "GET", "/api/v1/orgs/{orgID}/auth/providers/{slug}", authProviderH.GetProvider)
+	requireScope(authz.ScopeAuthProvidersWrite, "PUT", "/api/v1/orgs/{orgID}/auth/providers/{slug}", authProviderH.UpdateProvider)
+	requireScope(authz.ScopeAuthProvidersWrite, "DELETE", "/api/v1/orgs/{orgID}/auth/providers/{slug}", authProviderH.DeleteProvider)
+	requireScope(authz.ScopeAuthProvidersWrite, "POST", "/api/v1/orgs/{orgID}/auth/providers/{slug}/icon/prepare", authProviderH.PrepareProviderIconUpload)
+	requireScope(authz.ScopeAuthProvidersWrite, "PUT", "/api/v1/orgs/{orgID}/auth/providers/{slug}/icon", authProviderH.PutProviderIcon)
+	requireScope(authz.ScopeAuthProvidersWrite, "DELETE", "/api/v1/orgs/{orgID}/auth/providers/{slug}/icon", authProviderH.DeleteProviderIcon)
+	requireScope(authz.ScopeAuthProvidersRead, "GET", "/api/v1/orgs/{orgID}/auth/providers/{slug}/saml/metadata", authProviderH.SAMLMetadata)
+	requireScope(authz.ScopeAuthProvidersRead, "GET", "/api/v1/orgs/{orgID}/auth/providers/{slug}/role-mappings", authProviderH.ListRoleMappings)
+	requireScope(authz.ScopeAuthProvidersWrite, "POST", "/api/v1/orgs/{orgID}/auth/providers/{slug}/role-mappings", authProviderH.CreateRoleMapping)
+	requireScope(authz.ScopeAuthProvidersWrite, "PUT", "/api/v1/orgs/{orgID}/auth/providers/{slug}/role-mappings/{mappingID}", authProviderH.UpdateRoleMapping)
+	requireScope(authz.ScopeAuthProvidersWrite, "DELETE", "/api/v1/orgs/{orgID}/auth/providers/{slug}/role-mappings/{mappingID}", authProviderH.DeleteRoleMapping)
+	requireScope(authz.ScopeAuthProvidersRead, "GET", "/api/v1/orgs/{orgID}/auth/domains", authProviderH.ListDomains)
+	requireScope(authz.ScopeAuthProvidersWrite, "POST", "/api/v1/orgs/{orgID}/auth/domains", authProviderH.CreateDomain)
+	requireScope(authz.ScopeAuthProvidersWrite, "DELETE", "/api/v1/orgs/{orgID}/auth/domains/{domainID}", authProviderH.DeleteDomain)
 
 	folder.Register(mux, s, scopeFn)
 

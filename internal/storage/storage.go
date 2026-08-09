@@ -138,8 +138,8 @@ func OrgLogoAssetID(orgID string) string {
 	return "org_" + orgID
 }
 
-func OAuthProviderIconAssetID(provider string) string {
-	return "oauth_" + provider
+func AuthProviderIconAssetID(providerID string) string {
+	return "authprovider_" + providerID
 }
 
 // ComponentIconKey returns the object key for a native component icon SVG.

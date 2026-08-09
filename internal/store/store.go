@@ -36,6 +36,8 @@ type Store interface {
 	identity.ProviderStore
 	identity.ServiceAccountStore
 	identity.FigmaAuthStore
+	identity.AuthIdentityStore
+	identity.LoginAttemptStore
 	org.UserStore
 	org.OrgStore
 	org.MemberStore

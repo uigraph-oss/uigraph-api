@@ -46,6 +46,10 @@ func Unauthorized(w http.ResponseWriter) {
 	JSON(w, http.StatusUnauthorized, apiError("unauthenticated", "authentication required"))
 }
 
+func TooManyRequests(w http.ResponseWriter, msg string) {
+	JSON(w, http.StatusTooManyRequests, apiError("too_many_requests", msg))
+}
+
 func NotImplemented(w http.ResponseWriter) {
 	JSON(w, http.StatusNotImplemented, apiError("not_implemented", "not yet implemented"))
 }

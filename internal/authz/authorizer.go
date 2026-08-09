@@ -13,10 +13,6 @@ type Authorizer interface {
 	// Returns nil (deny everything) when the user has no membership in orgID.
 	ScopesForUser(ctx context.Context, userID, orgID string) ([]Scope, error)
 
-	// SyncRolesFromClaims upserts the org-level role from IdP token claims.
-	// Called on every SSO login after identity is established.
-	SyncRolesFromClaims(ctx context.Context, userID, orgID string, claims map[string]any) error
-
 	// IsUserServerAdmin checks if the user has the instance-level server_admin role.
 	// This is a separate axis from org scopes and governs only global endpoints.
 	IsUserServerAdmin(ctx context.Context, userID string) (bool, error)
@@ -27,7 +23,6 @@ type Authorizer interface {
 type rbacQuerier interface {
 	GetOrgMember(ctx context.Context, userID, orgID string) (OrgMember, error)
 	UpsertOrgMember(ctx context.Context, userID, orgID string, role Role, source string) error
-	GetSSOMappings(ctx context.Context, orgID string) ([]SSOMapping, error)
 }
 
 type userRoleQuerier interface {
@@ -54,25 +49,6 @@ func (a *authorizer) ScopesForUser(ctx context.Context, userID, orgID string) ([
 		return nil, err
 	}
 	return ScopesForRole(m.Role), nil
-}
-
-func (a *authorizer) SyncRolesFromClaims(ctx context.Context, userID, orgID string, claims map[string]any) error {
-	mappings, err := a.store.GetSSOMappings(ctx, orgID)
-	if err != nil {
-		return err
-	}
-	for _, m := range mappings {
-		if !claimMatches(claims, m.ClaimKey, m.ClaimValue) {
-			continue
-		}
-		if m.Scope != "org" {
-			continue
-		}
-		if err = a.store.UpsertOrgMember(ctx, userID, orgID, m.Role, "sso"); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func (a *authorizer) IsUserServerAdmin(ctx context.Context, userID string) (bool, error) {

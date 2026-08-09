@@ -26,6 +26,22 @@ func (d *DB) AddMember(ctx context.Context, m org.OrgMember) error {
 	return nil
 }
 
+func (d *DB) UpsertMember(ctx context.Context, m org.OrgMember) error {
+	const q = `
+		INSERT INTO org_members (user_id, org_id, role, source, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, NOW(), NOW())
+		ON CONFLICT (user_id, org_id) DO UPDATE SET
+		    role       = EXCLUDED.role,
+		    source     = EXCLUDED.source,
+		    updated_at = NOW()`
+
+	_, err := d.db.ExecContext(ctx, q, m.UserID, m.OrgID, m.Role, m.Source)
+	if err != nil {
+		return fmt.Errorf("postgres: UpsertMember: %w", err)
+	}
+	return nil
+}
+
 func (d *DB) GetMember(ctx context.Context, userID, orgID string) (*org.OrgMember, error) {
 	const q = `
 		SELECT user_id, org_id, role, source, created_at, updated_at

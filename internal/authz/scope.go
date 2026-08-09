@@ -63,6 +63,9 @@ const (
 
 	ScopeOrgUpdate Scope = "org:update"
 	ScopeOrgDelete Scope = "org:delete"
+
+	ScopeAuthProvidersRead  Scope = "authproviders:read"
+	ScopeAuthProvidersWrite Scope = "authproviders:write"
 )
 
 // AllScopes is the catalog of concrete grantable scopes, returned by the discovery endpoint.
@@ -82,6 +85,7 @@ var AllScopes = []Scope{
 	ScopeAgentsRead, ScopeAgentsWrite,
 	ScopeTimelineRead, ScopeTimelineWrite,
 	ScopeOrgUpdate, ScopeOrgDelete,
+	ScopeAuthProvidersRead, ScopeAuthProvidersWrite,
 }
 
 // RoleScopes is the static map from an org role to its explicit scope set.
@@ -102,7 +106,7 @@ var RoleScopes = map[Role][]Scope{
 	},
 	RoleAdmin: {
 		"diagrams:*", "docs:*", "maps:*", "services:*", "chat:*", "folders:*",
-		"members:*", "teams:*", "serviceaccounts:*", "mlstudio:*", "billing:*", "agents:*", "timeline:*", "org:*",
+		"members:*", "teams:*", "serviceaccounts:*", "mlstudio:*", "billing:*", "agents:*", "timeline:*", "org:*", "authproviders:*",
 	},
 }
 

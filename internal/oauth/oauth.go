@@ -1,13 +1,20 @@
 // Package oauth implements a minimal OAuth2 / OIDC authorization-code flow for
 // DB-configured providers (generic OIDC, Microsoft Entra ID, Okta).
 //
-// Token exchange uses the provider token endpoint; user identity is read from
-// the OIDC userinfo endpoint. No id_token JWT/JWKS validation is performed —
-// the access token is exchanged over TLS and immediately used against userinfo.
+// Identity is read from the OIDC userinfo endpoint and merged with the id_token
+// payload, because group and role claims are frequently present only in the
+// id_token and userinfo alone is not enough to drive role mapping.
+//
+// The id_token's signature is not verified against the provider's JWKS. That is
+// sound in this flow specifically: the token arrives directly from the token
+// endpoint over TLS, in response to a code this server just issued, which is the
+// exception OIDC Core §3.1.3.7 permits. It would *not* be sound for a token
+// received from the browser or any other third party.
 package oauth
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,7 +24,7 @@ import (
 	"time"
 )
 
-// Provider type identifiers stored in oauth_provider_config.type.
+// Provider type identifiers stored in auth_providers.type.
 const (
 	Generic = "generic"
 	Entra   = "entra"
@@ -26,14 +33,13 @@ const (
 
 // Provider holds the resolved endpoints and credentials for one OAuth provider.
 type Provider struct {
-	Name           string
-	ClientID       string
-	ClientSecret   string
-	AuthURL        string
-	TokenURL       string
-	UserinfoURL    string
-	Scopes         string
-	AllowedDomains string // comma-separated; empty = unrestricted
+	Name         string
+	ClientID     string
+	ClientSecret string
+	AuthURL      string
+	TokenURL     string
+	UserinfoURL  string
+	Scopes       string
 }
 
 // EntraEndpoints derives the Microsoft Entra ID (Azure AD) authorization, token,
@@ -51,13 +57,19 @@ func OktaEndpoints(domain string) (authURL, tokenURL, userinfoURL string) {
 }
 
 // AuthCodeURL builds the provider authorization URL to redirect the browser to.
-func (p Provider) AuthCodeURL(redirectURI, state string) string {
+// nonce binds the resulting id_token to this request and is echoed back in the
+// token's nonce claim; pass "" only for plain OAuth2 providers that issue no
+// id_token.
+func (p Provider) AuthCodeURL(redirectURI, state, nonce string) string {
 	q := url.Values{
 		"client_id":     {p.ClientID},
 		"redirect_uri":  {redirectURI},
 		"response_type": {"code"},
 		"scope":         {p.Scopes},
 		"state":         {state},
+	}
+	if nonce != "" {
+		q.Set("nonce", nonce)
 	}
 	sep := "?"
 	if strings.Contains(p.AuthURL, "?") {
@@ -72,8 +84,16 @@ var httpClient = &http.Client{Timeout: 15 * time.Second}
 // without one (HTTP 403).
 const userAgent = "uigraph"
 
-// Exchange swaps an authorization code for an access token.
-func Exchange(ctx context.Context, p Provider, code, redirectURI string) (string, error) {
+// Token is the subset of the token endpoint's response this package uses.
+// IDToken is empty for plain OAuth2 providers such as GitHub.
+type Token struct {
+	AccessToken string
+	IDToken     string
+}
+
+// Exchange swaps an authorization code for an access token and, for OIDC
+// providers, an id_token.
+func Exchange(ctx context.Context, p Provider, code, redirectURI string) (Token, error) {
 	form := url.Values{
 		"grant_type":    {"authorization_code"},
 		"code":          {code},
@@ -84,7 +104,7 @@ func Exchange(ctx context.Context, p Provider, code, redirectURI string) (string
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.TokenURL, strings.NewReader(form.Encode()))
 	if err != nil {
-		return "", fmt.Errorf("oauth: build token request: %w", err)
+		return Token{}, fmt.Errorf("oauth: build token request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
@@ -92,32 +112,106 @@ func Exchange(ctx context.Context, p Provider, code, redirectURI string) (string
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("oauth: token request: %w", err)
+		return Token{}, fmt.Errorf("oauth: token request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("oauth: token endpoint returned %d: %s", resp.StatusCode, body)
+		return Token{}, fmt.Errorf("oauth: token endpoint returned %d: %s", resp.StatusCode, body)
 	}
 
 	// Some providers (e.g. GitHub) return HTTP 200 with an error payload instead
 	// of an HTTP error status, so check the decoded body for an error too.
 	var tok struct {
 		AccessToken      string `json:"access_token"`
+		IDToken          string `json:"id_token"`
 		Error            string `json:"error"`
 		ErrorDescription string `json:"error_description"`
 	}
 	if err := json.Unmarshal(body, &tok); err != nil {
-		return "", fmt.Errorf("oauth: decode token response: %w", err)
+		return Token{}, fmt.Errorf("oauth: decode token response: %w", err)
 	}
 	if tok.AccessToken == "" {
 		if tok.Error != "" {
-			return "", fmt.Errorf("oauth: token endpoint error %q: %s", tok.Error, tok.ErrorDescription)
+			return Token{}, fmt.Errorf("oauth: token endpoint error %q: %s", tok.Error, tok.ErrorDescription)
 		}
-		return "", fmt.Errorf("oauth: token response missing access_token")
+		return Token{}, fmt.Errorf("oauth: token response missing access_token")
 	}
-	return tok.AccessToken, nil
+	return Token{AccessToken: tok.AccessToken, IDToken: tok.IDToken}, nil
+}
+
+// IDTokenClaims decodes a JWT's payload without verifying its signature. See the
+// package doc for why that is acceptable for a token taken straight from the
+// token endpoint, and only there.
+func IDTokenClaims(idToken string) (map[string]any, error) {
+	parts := strings.Split(idToken, ".")
+	if len(parts) != 3 {
+		return nil, fmt.Errorf("oauth: id_token is not a JWT")
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return nil, fmt.Errorf("oauth: decode id_token payload: %w", err)
+	}
+	var claims map[string]any
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return nil, fmt.Errorf("oauth: parse id_token payload: %w", err)
+	}
+	return claims, nil
+}
+
+// VerifyNonce checks that the id_token echoes the nonce sent on the
+// authorization request, binding the token to that request.
+//
+// A provider that issues no id_token has nothing to bind, so there is nothing to
+// check. A provider that issues one and drops the nonce is rejected: OIDC Core
+// §3.1.3.7 requires it to be echoed whenever it was sent.
+func VerifyNonce(claims map[string]any, want string) error {
+	if want == "" {
+		return fmt.Errorf("oauth: no nonce was issued for this login")
+	}
+	got, ok := claims["nonce"].(string)
+	if !ok || got == "" {
+		return fmt.Errorf("oauth: id_token is missing the nonce claim")
+	}
+	if got != want {
+		return fmt.Errorf("oauth: id_token nonce does not match the login request")
+	}
+	return nil
+}
+
+// MergedClaims returns the id_token claims overlaid with the userinfo response.
+//
+// Both are needed: userinfo is authoritative for profile fields and is fetched
+// live, while groups and roles are often only in the id_token. Userinfo wins on
+// the keys it actually returns; id_token-only keys survive.
+//
+// When the provider issues an id_token, its nonce is verified against nonce
+// before any of its claims are used.
+func MergedClaims(ctx context.Context, p Provider, tok Token, nonce string) (map[string]any, error) {
+	merged := map[string]any{}
+
+	if tok.IDToken != "" {
+		idClaims, err := IDTokenClaims(tok.IDToken)
+		if err != nil {
+			return nil, err
+		}
+		if err := VerifyNonce(idClaims, nonce); err != nil {
+			return nil, err
+		}
+		for k, v := range idClaims {
+			merged[k] = v
+		}
+	}
+
+	userinfo, err := FetchUserInfo(ctx, p, tok.AccessToken)
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range userinfo {
+		merged[k] = v
+	}
+	return merged, nil
 }
 
 // FetchUserInfo calls the provider userinfo endpoint and returns the raw claims.
@@ -216,23 +310,4 @@ func fetchGitHubPrimaryEmail(ctx context.Context, accessToken string) (string, e
 		}
 	}
 	return "", nil
-}
-
-// EmailAllowed reports whether email passes the provider's allowed-domain filter.
-// An empty AllowedDomains permits any domain.
-func (p Provider) EmailAllowed(email string) bool {
-	if p.AllowedDomains == "" {
-		return true
-	}
-	at := strings.LastIndex(email, "@")
-	if at < 0 {
-		return false
-	}
-	domain := strings.ToLower(email[at+1:])
-	for _, d := range strings.Split(p.AllowedDomains, ",") {
-		if strings.ToLower(strings.TrimSpace(d)) == domain {
-			return true
-		}
-	}
-	return false
 }
