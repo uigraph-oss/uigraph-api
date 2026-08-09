@@ -12,23 +12,32 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/uigraph/app/internal/asset"
+	"github.com/uigraph/app/internal/crypto"
 	"github.com/uigraph/app/internal/httputil"
 	"github.com/uigraph/app/internal/identity"
 	authmw "github.com/uigraph/app/internal/middleware"
 	"github.com/uigraph/app/internal/oauth"
 	"github.com/uigraph/app/internal/org"
+	"github.com/uigraph/app/internal/rolemap"
+	"github.com/uigraph/app/internal/saml"
 	"github.com/uigraph/app/internal/store"
 )
 
 // sessionCookie is the name of the HttpOnly cookie carrying the session token.
 const sessionCookie = "uigraph_session"
 
-// stateCookie is the short-lived HttpOnly cookie carrying the OAuth CSRF state.
-const stateCookie = "uigraph_oauth_state"
+const loginStateTTL = 10 * time.Minute
+
+const (
+	discoverWindow = 15 * time.Minute
+	discoverLimit  = 20
+)
 
 type sessionStore interface {
 	identity.SessionStore
 	identity.ProviderStore
+	identity.AuthIdentityStore
+	identity.LoginAttemptStore
 	identity.ServiceAccountStore
 	org.OrgStore
 	org.UserStore
@@ -38,15 +47,17 @@ type sessionStore interface {
 type SessionHandler struct {
 	store        sessionStore
 	assets       *asset.Resolver // presigns the avatar URL on /auth/me; may be nil
-	publicURL    string          // externally reachable base URL, e.g. https://uigraph.example.com
-	frontendURL  string          // SPA base URL; empty falls back to publicURL
-	cookieDomain string          // e.g. ".example.com" to share the session cookie across subdomains; empty = host-only
+	cipher       *crypto.Cipher
+	publicURL    string // externally reachable base URL, e.g. https://uigraph.example.com
+	frontendURL  string // SPA base URL; empty falls back to publicURL
+	cookieDomain string // e.g. ".example.com" to share the session cookie across subdomains; empty = host-only
 }
 
-func NewSessionHandler(s sessionStore, assets *asset.Resolver, publicURL, frontendURL, cookieDomain string) *SessionHandler {
+func NewSessionHandler(s sessionStore, assets *asset.Resolver, cipher *crypto.Cipher, publicURL, frontendURL, cookieDomain string) *SessionHandler {
 	return &SessionHandler{
 		store:        s,
 		assets:       assets,
+		cipher:       cipher,
 		publicURL:    strings.TrimRight(publicURL, "/"),
 		frontendURL:  strings.TrimRight(frontendURL, "/"),
 		cookieDomain: cookieDomain,
@@ -107,12 +118,24 @@ type myOrg struct {
 	OnboardingDone bool   `json:"onboardingDone"`
 }
 
+type discoverOrgsRequest struct {
+	Email string `json:"email"`
+}
+
+type discoveredOrg struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	LogoURL string `json:"logoUrl,omitempty"`
+}
+
 type providersResponse struct {
 	Providers []providerInfo `json:"providers"`
 }
 
 type providerInfo struct {
-	Name        string `json:"name"`
+	ID          string `json:"id"`
+	Slug        string `json:"slug"`
+	Kind        string `json:"kind"`
 	DisplayName string `json:"displayName"`
 	IconURL     string `json:"iconUrl"`
 	LoginURL    string `json:"loginUrl"`
@@ -190,140 +213,52 @@ func (h *SessionHandler) Login(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ListProviders returns all globally configured OAuth providers.
-// GET /api/v1/auth/providers
-// @Summary  ListProviders
+// @Summary  DiscoverOrgs
 // @Tags     auth
+// @Param    body  body  object  false  "request body"
 // @Success  200  {object}  map[string]interface{}
-// @Failure  401  {object}  httputil.errorBody
-// @Failure  403  {object}  httputil.errorBody
-// @Failure  404  {object}  httputil.errorBody
+// @Failure  400  {object}  httputil.errorBody
+// @Failure  429  {object}  httputil.errorBody
 // @Failure  500  {object}  httputil.errorBody
-// @Router   /auth/providers [get]
-func (h *SessionHandler) ListProviders(w http.ResponseWriter, r *http.Request) {
-	configs, err := h.store.ListOAuthProviders(r.Context())
+// @Router   /auth/discover-orgs [post]
+func (h *SessionHandler) DiscoverOrgs(w http.ResponseWriter, r *http.Request) {
+	var req discoverOrgsRequest
+	if err := httputil.Decode(r, &req); err != nil {
+		httputil.BadRequest(w, "invalid JSON")
+		return
+	}
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+	at := strings.LastIndex(email, "@")
+	if at <= 0 || at == len(email)-1 {
+		httputil.BadRequest(w, "a valid email address is required")
+		return
+	}
+
+	n, err := h.store.CountLoginAttempts(r.Context(), email, time.Now().UTC().Add(-discoverWindow))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if n >= discoverLimit {
+		httputil.TooManyRequests(w, "too many attempts, try again later")
+		return
+	}
+	if err := h.store.RecordLoginAttempt(r.Context(), email, r.RemoteAddr); err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+
+	byDomain, err := h.store.ListOrgsByDomain(r.Context(), email[at+1:])
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
 	}
 
-	out := providersResponse{Providers: []providerInfo{}}
-	for _, c := range configs {
-		label := c.DisplayName
-		if label == "" {
-			label = c.ProviderName
-		}
-		out.Providers = append(out.Providers, providerInfo{
-			Name:        c.ProviderName,
-			DisplayName: label,
-			IconURL:     h.avatarURL(r, &c.IconURL),
-			LoginURL:    "/api/v1/auth/login/" + c.ProviderName,
-		})
-	}
-	httputil.JSON(w, http.StatusOK, out)
-}
-
-// InitiateOAuth redirects the browser to the IdP authorization endpoint.
-// GET /api/v1/auth/login/{provider}
-// @Summary  InitiateOAuth
-// @Tags     auth
-// @Param    provider  path  string  true  "provider"
-// @Success  200  {object}  map[string]interface{}
-// @Failure  401  {object}  httputil.errorBody
-// @Failure  403  {object}  httputil.errorBody
-// @Failure  404  {object}  httputil.errorBody
-// @Failure  500  {object}  httputil.errorBody
-// @Router   /auth/login/{provider} [get]
-func (h *SessionHandler) InitiateOAuth(w http.ResponseWriter, r *http.Request) {
-	cfg, err := h.store.GetOAuthProvider(r.Context(), r.PathValue("provider"))
-	if err != nil {
-		httputil.Error(w, r, err)
-		return
-	}
-	if cfg == nil {
-		httputil.Error(w, r, store.ErrNotFound)
-		return
-	}
-	p := providerFromConfig(cfg)
-
-	state, _, err := generateSessionToken()
-	if err != nil {
-		httputil.Error(w, r, err)
-		return
-	}
-
-	http.SetCookie(w, &http.Cookie{
-		Name:     stateCookie,
-		Value:    state,
-		Path:     "/api/v1/auth",
-		MaxAge:   600, // 10 minutes
-		HttpOnly: true,
-		Secure:   h.secureCookies(),
-		SameSite: http.SameSiteLaxMode,
-	})
-
-	http.Redirect(w, r, p.AuthCodeURL(h.redirectURI(cfg.ProviderName), state), http.StatusFound)
-}
-
-// OAuthCallback handles the IdP redirect, exchanges the code for an access
-// token, reads the userinfo claims, provisions a global user, creates a
-// session, sets the session cookie, and redirects to the SPA.
-// GET /api/v1/auth/callback/{provider}?code=...&state=...
-// @Summary  OAuthCallback
-// @Tags     auth
-// @Param    provider  path  string  true  "provider"
-// @Success  200  {object}  map[string]interface{}
-// @Failure  401  {object}  httputil.errorBody
-// @Failure  403  {object}  httputil.errorBody
-// @Failure  404  {object}  httputil.errorBody
-// @Failure  500  {object}  httputil.errorBody
-// @Router   /auth/callback/{provider} [get]
-func (h *SessionHandler) OAuthCallback(w http.ResponseWriter, r *http.Request) {
-	cfg, err := h.store.GetOAuthProvider(r.Context(), r.PathValue("provider"))
-	if err != nil {
-		httputil.Error(w, r, err)
-		return
-	}
-	if cfg == nil {
-		httputil.Error(w, r, store.ErrNotFound)
-		return
-	}
-	p := providerFromConfig(cfg)
-
-	// Verify CSRF state against the cookie set at initiation, then clear it.
-	c, err := r.Cookie(stateCookie)
-	if err != nil || c.Value == "" || c.Value != r.URL.Query().Get("state") {
-		httputil.BadRequest(w, "invalid OAuth state")
-		return
-	}
-	h.clearCookie(w, stateCookie, "/api/v1/auth")
-
-	code := r.URL.Query().Get("code")
-	if code == "" {
-		httputil.BadRequest(w, "missing authorization code")
-		return
-	}
-
-	accessToken, err := oauth.Exchange(r.Context(), p, code, h.redirectURI(cfg.ProviderName))
-	if err != nil {
-		httputil.Error(w, r, err)
-		return
-	}
-
-	claims, err := oauth.FetchUserInfo(r.Context(), p, accessToken)
-	if err != nil {
-		httputil.Error(w, r, err)
-		return
-	}
-
-	email := claimString(claims, claimOr(cfg.EmailClaim, "email"))
-	if email == "" {
-		httputil.BadRequest(w, "userinfo response has no email claim")
-		return
-	}
-	if !p.EmailAllowed(email) {
-		httputil.Forbidden(w)
-		return
+	seen := map[string]bool{}
+	orgs := []discoveredOrg{}
+	for _, o := range byDomain {
+		seen[o.ID] = true
+		orgs = append(orgs, discoveredOrg{ID: o.ID, Name: o.Name, LogoURL: h.avatarURL(r, o.LogoAssetID)})
 	}
 
 	u, err := h.store.GetUserByEmail(r.Context(), email)
@@ -331,39 +266,326 @@ func (h *SessionHandler) OAuthCallback(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, r, err)
 		return
 	}
+	if u != nil {
+		memberships, err := h.store.ListOrgsForUser(r.Context(), u.ID)
+		if err != nil {
+			httputil.Error(w, r, err)
+			return
+		}
+		for _, m := range memberships {
+			if seen[m.Org.ID] {
+				continue
+			}
+			seen[m.Org.ID] = true
+			orgs = append(orgs, discoveredOrg{ID: m.Org.ID, Name: m.Org.Name, LogoURL: h.avatarURL(r, m.Org.LogoAssetID)})
+		}
+	}
+
+	httputil.JSON(w, http.StatusOK, map[string]any{"orgs": orgs})
+}
+
+// @Summary  OrgProviders
+// @Tags     auth
+// @Param    orgID  path  string  true  "orgID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /auth/orgs/{orgID}/providers [get]
+func (h *SessionHandler) OrgProviders(w http.ResponseWriter, r *http.Request) {
+	providers, err := h.store.ListEnabledAuthProviders(r.Context(), r.PathValue("orgID"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+
+	out := providersResponse{Providers: []providerInfo{}}
+	for _, p := range providers {
+		out.Providers = append(out.Providers, providerInfo{
+			ID:          p.ID,
+			Slug:        p.Slug,
+			Kind:        p.Kind,
+			DisplayName: p.DisplayName,
+			IconURL:     h.avatarURL(r, &p.IconAssetID),
+			LoginURL:    "/api/v1/auth/orgs/" + p.OrgID + "/login/" + p.Slug,
+		})
+	}
+	httputil.JSON(w, http.StatusOK, out)
+}
+
+// @Summary  InitiateLogin
+// @Tags     auth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    slug   path  string  true  "slug"
+// @Success  302
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /auth/orgs/{orgID}/login/{slug} [get]
+func (h *SessionHandler) InitiateLogin(w http.ResponseWriter, r *http.Request) {
+	prov, err := h.loadProvider(r)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+
+	state, _, err := generateSessionToken()
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	ls := identity.LoginState{
+		ID:         newID(),
+		State:      state,
+		OrgID:      prov.OrgID,
+		ProviderID: prov.ID,
+		RedirectTo: safeRedirect(r.URL.Query().Get("redirect_to")),
+		CreatedAt:  time.Now().UTC(),
+		ExpiresAt:  time.Now().UTC().Add(loginStateTTL),
+	}
+
+	var redirect string
+	switch prov.Kind {
+	case identity.KindOIDC:
+		nonce, _, err := generateSessionToken()
+		if err != nil {
+			httputil.Error(w, r, err)
+			return
+		}
+		ls.Nonce = nonce
+		p, err := h.oauthProvider(prov)
+		if err != nil {
+			httputil.Error(w, r, err)
+			return
+		}
+		redirect = p.AuthCodeURL(oidcRedirectURI(h.publicURL, prov.OrgID, prov.Slug), state, nonce)
+
+	case identity.KindSAML:
+		p, err := h.samlProvider(prov)
+		if err != nil {
+			httputil.Error(w, r, err)
+			return
+		}
+		url, requestID, err := saml.AuthnRequest(p, acsURL(h.publicURL, prov.OrgID, prov.Slug), state)
+		if err != nil {
+			httputil.Error(w, r, err)
+			return
+		}
+		ls.SAMLRequestID = requestID
+		redirect = url
+
+	default:
+		httputil.Error(w, r, fmt.Errorf("auth: provider %s has unknown kind %q", prov.Slug, prov.Kind))
+		return
+	}
+
+	if err := h.store.CreateLoginState(r.Context(), ls); err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	http.Redirect(w, r, redirect, http.StatusFound)
+}
+
+// @Summary  OIDCCallback
+// @Tags     auth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    slug   path  string  true  "slug"
+// @Success  302
+// @Failure  400  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /auth/orgs/{orgID}/callback/{slug} [get]
+func (h *SessionHandler) OIDCCallback(w http.ResponseWriter, r *http.Request) {
+	prov, ls, ok := h.consumeState(w, r, r.URL.Query().Get("state"), identity.KindOIDC)
+	if !ok {
+		return
+	}
+
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		httputil.BadRequest(w, "missing authorization code")
+		return
+	}
+
+	p, err := h.oauthProvider(prov)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	tok, err := oauth.Exchange(r.Context(), p, code, oidcRedirectURI(h.publicURL, prov.OrgID, prov.Slug))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	claims, err := oauth.MergedClaims(r.Context(), p, tok, ls.Nonce)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+
+	h.completeLogin(w, r, prov, ls, completedAuth{
+		Sub:        claimString(claims, claimOr(prov.SubClaim, "sub")),
+		Email:      claimString(claims, claimOr(prov.EmailClaim, "email")),
+		Name:       claimString(claims, claimOr(prov.NameClaim, "name")),
+		Attributes: claims,
+	})
+}
+
+// @Summary  SAMLACS
+// @Tags     auth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    slug   path  string  true  "slug"
+// @Param    body  body  object  false  "request body"
+// @Success  302
+// @Failure  400  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /auth/orgs/{orgID}/saml/{slug}/acs [post]
+func (h *SessionHandler) SAMLACS(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		httputil.BadRequest(w, "invalid ACS form")
+		return
+	}
+	prov, ls, ok := h.consumeState(w, r, r.PostForm.Get("RelayState"), identity.KindSAML)
+	if !ok {
+		return
+	}
+
+	p, err := h.samlProvider(prov)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	id, err := saml.ValidateResponse(p, acsURL(h.publicURL, prov.OrgID, prov.Slug), r, ls.SAMLRequestID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+
+	email := attrString(id.Attributes, claimOr(prov.EmailAttribute, "email"))
+	if email == "" {
+		email = id.NameID
+	}
+
+	h.completeLogin(w, r, prov, ls, completedAuth{
+		Sub:        id.NameID,
+		Email:      email,
+		Name:       attrString(id.Attributes, claimOr(prov.NameAttribute, "displayName")),
+		Attributes: id.Attributes,
+	})
+}
+
+// @Summary  SAMLMetadata
+// @Tags     auth
+// @Param    orgID  path  string  true  "orgID"
+// @Param    slug   path  string  true  "slug"
+// @Success  200  {string}  string
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /auth/orgs/{orgID}/saml/{slug}/metadata [get]
+func (h *SessionHandler) SAMLMetadata(w http.ResponseWriter, r *http.Request) {
+	prov, err := h.loadProvider(r)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if prov.Kind != identity.KindSAML {
+		httputil.Error(w, r, store.ErrNotFound)
+		return
+	}
+
+	p, err := h.samlProvider(prov)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	out, err := saml.SPMetadata(p, acsURL(h.publicURL, prov.OrgID, prov.Slug), samlMetadataURL(h.publicURL, prov.OrgID, prov.Slug))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/samlmetadata+xml")
+	_, _ = w.Write([]byte(out))
+}
+
+type completedAuth struct {
+	Sub        string
+	Email      string
+	Name       string
+	Attributes map[string]any
+}
+
+func (h *SessionHandler) completeLogin(w http.ResponseWriter, r *http.Request, prov *identity.AuthProvider, ls *identity.LoginState, auth completedAuth) {
+	if auth.Email == "" {
+		httputil.BadRequest(w, "the provider returned no email address")
+		return
+	}
+	if !prov.EmailAllowed(auth.Email) {
+		httputil.Forbidden(w)
+		return
+	}
+
+	u, err := h.store.GetUserByEmail(r.Context(), auth.Email)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if u == nil && !prov.AllowSignUp {
+		httputil.Forbidden(w)
+		return
+	}
 	if u == nil {
-		name := claimString(claims, claimOr(cfg.NameClaim, "name"))
+		name := auth.Name
 		if name == "" {
-			name = email
+			name = auth.Email
 		}
 		u = &org.User{
 			ID:    newID(),
-			Email: email,
+			Email: auth.Email,
 			Name:  name,
-			Login: email,
+			Login: auth.Email,
 		}
 		if err := h.store.CreateUser(r.Context(), *u); err != nil {
 			httputil.Error(w, r, err)
 			return
 		}
-		autoJoinOrgs, err := h.store.ListAutoJoinOrgs(r.Context())
-		if err != nil {
-			httputil.Error(w, r, err)
-			return
-		}
-		for _, o := range autoJoinOrgs {
-			err := h.store.AddMember(r.Context(), org.OrgMember{
-				UserID: u.ID, OrgID: o.ID, Role: "viewer", Source: "sso",
-			})
-			if err != nil {
-				httputil.Error(w, r, err)
-				return
-			}
-		}
 	}
 	if u.Disabled {
 		httputil.Forbidden(w)
 		return
+	}
+
+	rules, err := h.store.ListRoleMappings(r.Context(), prov.ID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	role, err := rolemap.Resolve(rules, auth.Attributes, prov.DefaultRole)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	err = h.store.UpsertMember(r.Context(), org.OrgMember{
+		UserID: u.ID,
+		OrgID:  prov.OrgID,
+		Role:   string(role),
+		Source: "sso",
+	})
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+
+	if auth.Sub != "" {
+		err := h.store.UpsertAuthIdentity(r.Context(), identity.AuthIdentity{
+			UserID:     u.ID,
+			ProviderID: prov.ID,
+			Sub:        auth.Sub,
+		})
+		if err != nil {
+			httputil.Error(w, r, err)
+			return
+		}
 	}
 
 	plaintext, hash, err := generateSessionToken()
@@ -381,7 +603,7 @@ func (h *SessionHandler) OAuthCallback(w http.ResponseWriter, r *http.Request) {
 		ExpiresAt:    time.Now().UTC().Add(30 * 24 * time.Hour),
 		LastActiveAt: time.Now().UTC(),
 		RotatedAt:    time.Now().UTC(),
-		AuthProvider: cfg.ProviderName,
+		AuthProvider: prov.DisplayName,
 	}
 	if err := h.store.CreateSession(r.Context(), sess); err != nil {
 		httputil.Error(w, r, err)
@@ -389,22 +611,7 @@ func (h *SessionHandler) OAuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.setSessionCookie(w, plaintext, sess.ExpiresAt)
-	http.Redirect(w, r, h.frontendBase()+"/", http.StatusFound)
-}
-
-// SAMLCallback handles the IdP POST to the ACS endpoint.
-// POST /api/v1/auth/saml/acs
-// @Summary  SAMLCallback
-// @Tags     auth
-// @Param    body  body  object  false  "request body"
-// @Success  200  {object}  map[string]interface{}
-// @Failure  401  {object}  httputil.errorBody
-// @Failure  403  {object}  httputil.errorBody
-// @Failure  404  {object}  httputil.errorBody
-// @Failure  500  {object}  httputil.errorBody
-// @Router   /auth/saml/acs [post]
-func (h *SessionHandler) SAMLCallback(w http.ResponseWriter, r *http.Request) {
-	httputil.NotImplemented(w)
+	http.Redirect(w, r, h.frontendBase()+ls.RedirectTo, http.StatusFound)
 }
 
 // Logout deletes the current session.
@@ -649,23 +856,111 @@ func extractBearerToken(r *http.Request) string {
 	return ""
 }
 
-// redirectURI is the IdP callback URL registered for the given provider.
-func (h *SessionHandler) redirectURI(provider string) string {
-	return h.publicURL + "/api/v1/auth/callback/" + provider
+func oidcRedirectURI(publicURL, orgID, slug string) string {
+	return publicURL + "/api/v1/auth/orgs/" + orgID + "/callback/" + slug
 }
 
-// providerFromConfig builds the runtime OAuth provider from a stored config row.
-func providerFromConfig(c *identity.OAuthProviderConfig) oauth.Provider {
-	return oauth.Provider{
-		Name:           c.ProviderName,
-		ClientID:       c.ClientID,
-		ClientSecret:   c.ClientSecret,
-		AuthURL:        c.AuthURL,
-		TokenURL:       c.TokenURL,
-		UserinfoURL:    c.UserinfoURL,
-		Scopes:         c.Scopes,
-		AllowedDomains: c.AllowedDomains,
+func acsURL(publicURL, orgID, slug string) string {
+	return publicURL + "/api/v1/auth/orgs/" + orgID + "/saml/" + slug + "/acs"
+}
+
+func samlMetadataURL(publicURL, orgID, slug string) string {
+	return publicURL + "/api/v1/auth/orgs/" + orgID + "/saml/" + slug + "/metadata"
+}
+
+func (h *SessionHandler) loadProvider(r *http.Request) (*identity.AuthProvider, error) {
+	prov, err := h.store.GetAuthProviderBySlug(r.Context(), r.PathValue("orgID"), r.PathValue("slug"))
+	if err != nil {
+		return nil, err
 	}
+	if prov == nil || !prov.Enabled {
+		return nil, store.ErrNotFound
+	}
+	return prov, nil
+}
+
+func (h *SessionHandler) consumeState(w http.ResponseWriter, r *http.Request, state, kind string) (*identity.AuthProvider, *identity.LoginState, bool) {
+	if state == "" {
+		httputil.BadRequest(w, "missing login state")
+		return nil, nil, false
+	}
+	ls, err := h.store.ConsumeLoginState(r.Context(), state)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return nil, nil, false
+	}
+	if ls == nil {
+		httputil.BadRequest(w, "login state is unknown or expired")
+		return nil, nil, false
+	}
+	prov, err := h.loadProvider(r)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return nil, nil, false
+	}
+	if ls.ProviderID != prov.ID {
+		httputil.BadRequest(w, "login state does not belong to this provider")
+		return nil, nil, false
+	}
+	if prov.Kind != kind {
+		httputil.BadRequest(w, "login state does not belong to this provider")
+		return nil, nil, false
+	}
+	return prov, ls, true
+}
+
+func (h *SessionHandler) oauthProvider(p *identity.AuthProvider) (oauth.Provider, error) {
+	secret, err := h.decrypt(p.ClientSecret)
+	if err != nil {
+		return oauth.Provider{}, err
+	}
+	return oauth.Provider{
+		Name:         p.DisplayName,
+		ClientID:     p.ClientID,
+		ClientSecret: secret,
+		AuthURL:      p.AuthURL,
+		TokenURL:     p.TokenURL,
+		UserinfoURL:  p.UserinfoURL,
+		Scopes:       p.Scopes,
+	}, nil
+}
+
+func (h *SessionHandler) samlProvider(p *identity.AuthProvider) (saml.Provider, error) {
+	key, err := h.decrypt(p.SPKey)
+	if err != nil {
+		return saml.Provider{}, err
+	}
+	return samlProviderFor(p, h.publicURL, key), nil
+}
+
+func samlProviderFor(p *identity.AuthProvider, publicURL, spKey string) saml.Provider {
+	return saml.Provider{
+		IDPEntityID:  p.IDPEntityID,
+		IDPSSOURL:    p.IDPSSOURL,
+		IDPCert:      p.IDPCert,
+		SPEntityID:   samlMetadataURL(publicURL, p.OrgID, p.Slug),
+		SPCert:       p.SPCert,
+		SPKey:        spKey,
+		SignRequests: p.SignRequests,
+		NameIDFormat: p.NameIDFormat,
+	}
+}
+
+func (h *SessionHandler) decrypt(ciphertext string) (string, error) {
+	if ciphertext == "" {
+		return "", nil
+	}
+	if h.cipher == nil {
+		return "", fmt.Errorf("auth: no secret key configured, provider secrets cannot be read")
+	}
+	return h.cipher.Decrypt(ciphertext)
+}
+
+func safeRedirect(raw string) string {
+	if strings.HasPrefix(raw, "/") && !strings.HasPrefix(raw, "//") {
+		return raw
+	}
+	return "/"
 }
 
 // claimOr returns configured if non-empty, otherwise fallback.
@@ -713,4 +1008,18 @@ func claimString(claims map[string]any, key string) string {
 		return v
 	}
 	return ""
+}
+
+func attrString(attrs map[string]any, key string) string {
+	switch v := attrs[key].(type) {
+	case string:
+		return v
+	case []string:
+		if len(v) > 0 {
+			return v[0]
+		}
+		return ""
+	default:
+		return ""
+	}
 }

@@ -1,13 +1,10 @@
 // Package oauth implements a minimal OAuth2 / OIDC authorization-code flow for
 // DB-configured providers (generic OIDC, Microsoft Entra ID, Okta).
-//
-// Token exchange uses the provider token endpoint; user identity is read from
-// the OIDC userinfo endpoint. No id_token JWT/JWKS validation is performed —
-// the access token is exchanged over TLS and immediately used against userinfo.
 package oauth
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,7 +14,6 @@ import (
 	"time"
 )
 
-// Provider type identifiers stored in oauth_provider_config.type.
 const (
 	Generic = "generic"
 	Entra   = "entra"
@@ -26,14 +22,13 @@ const (
 
 // Provider holds the resolved endpoints and credentials for one OAuth provider.
 type Provider struct {
-	Name           string
-	ClientID       string
-	ClientSecret   string
-	AuthURL        string
-	TokenURL       string
-	UserinfoURL    string
-	Scopes         string
-	AllowedDomains string // comma-separated; empty = unrestricted
+	Name         string
+	ClientID     string
+	ClientSecret string
+	AuthURL      string
+	TokenURL     string
+	UserinfoURL  string
+	Scopes       string
 }
 
 // EntraEndpoints derives the Microsoft Entra ID (Azure AD) authorization, token,
@@ -51,13 +46,16 @@ func OktaEndpoints(domain string) (authURL, tokenURL, userinfoURL string) {
 }
 
 // AuthCodeURL builds the provider authorization URL to redirect the browser to.
-func (p Provider) AuthCodeURL(redirectURI, state string) string {
+func (p Provider) AuthCodeURL(redirectURI, state, nonce string) string {
 	q := url.Values{
 		"client_id":     {p.ClientID},
 		"redirect_uri":  {redirectURI},
 		"response_type": {"code"},
 		"scope":         {p.Scopes},
 		"state":         {state},
+	}
+	if nonce != "" {
+		q.Set("nonce", nonce)
 	}
 	sep := "?"
 	if strings.Contains(p.AuthURL, "?") {
@@ -72,8 +70,12 @@ var httpClient = &http.Client{Timeout: 15 * time.Second}
 // without one (HTTP 403).
 const userAgent = "uigraph"
 
-// Exchange swaps an authorization code for an access token.
-func Exchange(ctx context.Context, p Provider, code, redirectURI string) (string, error) {
+type Token struct {
+	AccessToken string
+	IDToken     string
+}
+
+func Exchange(ctx context.Context, p Provider, code, redirectURI string) (Token, error) {
 	form := url.Values{
 		"grant_type":    {"authorization_code"},
 		"code":          {code},
@@ -84,7 +86,7 @@ func Exchange(ctx context.Context, p Provider, code, redirectURI string) (string
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.TokenURL, strings.NewReader(form.Encode()))
 	if err != nil {
-		return "", fmt.Errorf("oauth: build token request: %w", err)
+		return Token{}, fmt.Errorf("oauth: build token request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
@@ -92,32 +94,89 @@ func Exchange(ctx context.Context, p Provider, code, redirectURI string) (string
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("oauth: token request: %w", err)
+		return Token{}, fmt.Errorf("oauth: token request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("oauth: token endpoint returned %d: %s", resp.StatusCode, body)
+		return Token{}, fmt.Errorf("oauth: token endpoint returned %d: %s", resp.StatusCode, body)
 	}
 
 	// Some providers (e.g. GitHub) return HTTP 200 with an error payload instead
 	// of an HTTP error status, so check the decoded body for an error too.
 	var tok struct {
 		AccessToken      string `json:"access_token"`
+		IDToken          string `json:"id_token"`
 		Error            string `json:"error"`
 		ErrorDescription string `json:"error_description"`
 	}
 	if err := json.Unmarshal(body, &tok); err != nil {
-		return "", fmt.Errorf("oauth: decode token response: %w", err)
+		return Token{}, fmt.Errorf("oauth: decode token response: %w", err)
 	}
 	if tok.AccessToken == "" {
 		if tok.Error != "" {
-			return "", fmt.Errorf("oauth: token endpoint error %q: %s", tok.Error, tok.ErrorDescription)
+			return Token{}, fmt.Errorf("oauth: token endpoint error %q: %s", tok.Error, tok.ErrorDescription)
 		}
-		return "", fmt.Errorf("oauth: token response missing access_token")
+		return Token{}, fmt.Errorf("oauth: token response missing access_token")
 	}
-	return tok.AccessToken, nil
+	return Token{AccessToken: tok.AccessToken, IDToken: tok.IDToken}, nil
+}
+
+func IDTokenClaims(idToken string) (map[string]any, error) {
+	parts := strings.Split(idToken, ".")
+	if len(parts) != 3 {
+		return nil, fmt.Errorf("oauth: id_token is not a JWT")
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return nil, fmt.Errorf("oauth: decode id_token payload: %w", err)
+	}
+	var claims map[string]any
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return nil, fmt.Errorf("oauth: parse id_token payload: %w", err)
+	}
+	return claims, nil
+}
+
+func VerifyNonce(claims map[string]any, want string) error {
+	if want == "" {
+		return fmt.Errorf("oauth: no nonce was issued for this login")
+	}
+	got, ok := claims["nonce"].(string)
+	if !ok || got == "" {
+		return fmt.Errorf("oauth: id_token is missing the nonce claim")
+	}
+	if got != want {
+		return fmt.Errorf("oauth: id_token nonce does not match the login request")
+	}
+	return nil
+}
+
+func MergedClaims(ctx context.Context, p Provider, tok Token, nonce string) (map[string]any, error) {
+	merged := map[string]any{}
+
+	if tok.IDToken != "" {
+		idClaims, err := IDTokenClaims(tok.IDToken)
+		if err != nil {
+			return nil, err
+		}
+		if err := VerifyNonce(idClaims, nonce); err != nil {
+			return nil, err
+		}
+		for k, v := range idClaims {
+			merged[k] = v
+		}
+	}
+
+	userinfo, err := FetchUserInfo(ctx, p, tok.AccessToken)
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range userinfo {
+		merged[k] = v
+	}
+	return merged, nil
 }
 
 // FetchUserInfo calls the provider userinfo endpoint and returns the raw claims.
@@ -216,23 +275,4 @@ func fetchGitHubPrimaryEmail(ctx context.Context, accessToken string) (string, e
 		}
 	}
 	return "", nil
-}
-
-// EmailAllowed reports whether email passes the provider's allowed-domain filter.
-// An empty AllowedDomains permits any domain.
-func (p Provider) EmailAllowed(email string) bool {
-	if p.AllowedDomains == "" {
-		return true
-	}
-	at := strings.LastIndex(email, "@")
-	if at < 0 {
-		return false
-	}
-	domain := strings.ToLower(email[at+1:])
-	for _, d := range strings.Split(p.AllowedDomains, ",") {
-		if strings.ToLower(strings.TrimSpace(d)) == domain {
-			return true
-		}
-	}
-	return false
 }
