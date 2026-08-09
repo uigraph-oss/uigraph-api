@@ -930,16 +930,20 @@ func (h *SessionHandler) samlProvider(p *identity.AuthProvider) (saml.Provider, 
 	if err != nil {
 		return saml.Provider{}, err
 	}
+	return samlProviderFor(p, h.publicURL, key), nil
+}
+
+func samlProviderFor(p *identity.AuthProvider, publicURL, spKey string) saml.Provider {
 	return saml.Provider{
 		IDPEntityID:  p.IDPEntityID,
 		IDPSSOURL:    p.IDPSSOURL,
 		IDPCert:      p.IDPCert,
-		SPEntityID:   samlMetadataURL(h.publicURL, p.OrgID, p.Slug),
+		SPEntityID:   samlMetadataURL(publicURL, p.OrgID, p.Slug),
 		SPCert:       p.SPCert,
-		SPKey:        key,
+		SPKey:        spKey,
 		SignRequests: p.SignRequests,
 		NameIDFormat: p.NameIDFormat,
-	}, nil
+	}
 }
 
 func (h *SessionHandler) decrypt(ciphertext string) (string, error) {

@@ -329,17 +329,21 @@ func (h *AuthProviderHandler) SAMLMetadata(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	if err := h.ensureSPKeypair(r, p); err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+
+	key, err := h.decrypt(p.SPKey)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+
 	acs := acsURL(h.publicURL, p.OrgID, p.Slug)
 	metadataURL := samlMetadataURL(h.publicURL, p.OrgID, p.Slug)
 
-	doc, err := saml.SPMetadata(saml.Provider{
-		IDPEntityID:  p.IDPEntityID,
-		IDPSSOURL:    p.IDPSSOURL,
-		IDPCert:      p.IDPCert,
-		SPEntityID:   metadataURL,
-		SPCert:       p.SPCert,
-		NameIDFormat: p.NameIDFormat,
-	}, acs, metadataURL)
+	doc, err := saml.SPMetadata(samlProviderFor(p, h.publicURL, key), acs, metadataURL)
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
@@ -592,6 +596,38 @@ func (h *AuthProviderHandler) load(r *http.Request) (*identity.AuthProvider, err
 		return nil, store.ErrNotFound
 	}
 	return p, nil
+}
+
+func (h *AuthProviderHandler) decrypt(ciphertext string) (string, error) {
+	if ciphertext == "" {
+		return "", nil
+	}
+	if h.cipher == nil {
+		return "", fmt.Errorf("no secret key is configured, provider secrets cannot be read")
+	}
+	return h.cipher.Decrypt(ciphertext)
+}
+
+func (h *AuthProviderHandler) ensureSPKeypair(r *http.Request, p *identity.AuthProvider) error {
+	if p.SPCert != "" && p.SPKey != "" {
+		return nil
+	}
+	if h.cipher == nil {
+		return fmt.Errorf("no secret key is configured, an SP keypair cannot be generated")
+	}
+
+	certPEM, keyPEM, err := saml.GenerateSPKeypair(samlMetadataURL(h.publicURL, p.OrgID, p.Slug))
+	if err != nil {
+		return err
+	}
+	enc, err := h.cipher.Encrypt(keyPEM)
+	if err != nil {
+		return err
+	}
+
+	p.SPCert = certPEM
+	p.SPKey = enc
+	return h.store.UpdateAuthProvider(r.Context(), *p)
 }
 
 func (h *AuthProviderHandler) present(r *http.Request, p identity.AuthProvider) identity.AuthProvider {

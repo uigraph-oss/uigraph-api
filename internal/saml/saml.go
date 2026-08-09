@@ -259,14 +259,18 @@ func serviceProvider(p Provider, acsURL, metadataURL string) (*csaml.ServiceProv
 		sp.MetadataURL = *md
 	}
 
-	if p.SignRequests {
+	if strings.TrimSpace(p.SPCert) != "" && strings.TrimSpace(p.SPKey) != "" {
 		key, cert, err := keypair(p.SPCert, p.SPKey)
 		if err != nil {
 			return nil, err
 		}
 		sp.Key = key
 		sp.Certificate = cert
-		sp.SignatureMethod = dsig.RSASHA256SignatureMethod
+		if p.SignRequests {
+			sp.SignatureMethod = dsig.RSASHA256SignatureMethod
+		}
+	} else if p.SignRequests {
+		return nil, fmt.Errorf("saml: signing requests needs an SP certificate and key")
 	}
 
 	return &sp, nil

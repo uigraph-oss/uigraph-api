@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/beevik/etree"
+	"github.com/crewjam/saml/xmlenc"
 	dsig "github.com/russellhaering/goxmldsig"
 )
 
@@ -71,7 +72,7 @@ func defaults() assertionOpts {
 	}
 }
 
-func (i idp) signedResponse(t *testing.T, o assertionOpts) string {
+func (i idp) signedAssertion(t *testing.T, o assertionOpts) string {
 	t.Helper()
 	now := time.Now().UTC()
 	stamp := func(tm time.Time) string { return tm.UTC().Format(time.RFC3339) }
@@ -135,18 +136,62 @@ func (i idp) signedResponse(t *testing.T, o assertionOpts) string {
 
 	signedDoc := etree.NewDocument()
 	signedDoc.SetRoot(signed)
-	signedAssertion, err := signedDoc.WriteToString()
+	out, err := signedDoc.WriteToString()
 	if err != nil {
 		t.Fatalf("serialise assertion: %v", err)
 	}
+	return out
+}
 
+func wrapResponse(inner string) string {
 	responseXML := fmt.Sprintf(`<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" Destination="%s" ID="id-response-1" InResponseTo="%s" IssueInstant="%s" Version="2.0">
   <saml:Issuer>%s</saml:Issuer>
   <samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"></samlp:StatusCode></samlp:Status>
   %s
-</samlp:Response>`, testACSURL, testRequestID, stamp(now), testIDPEntityID, signedAssertion)
+</samlp:Response>`, testACSURL, testRequestID, time.Now().UTC().Format(time.RFC3339), testIDPEntityID, inner)
 
 	return base64.StdEncoding.EncodeToString([]byte(responseXML))
+}
+
+func (i idp) signedResponse(t *testing.T, o assertionOpts) string {
+	t.Helper()
+	return wrapResponse(i.signedAssertion(t, o))
+}
+
+func (i idp) encryptedResponse(t *testing.T, o assertionOpts, spCertPEM string) string {
+	t.Helper()
+
+	block, _ := pem.Decode([]byte(spCertPEM))
+	if block == nil {
+		t.Fatalf("sp certificate is not valid PEM")
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		t.Fatalf("parse sp certificate: %v", err)
+	}
+
+	encrypted, err := xmlenc.OAEP().Encrypt(cert, []byte(i.signedAssertion(t, o)), nil)
+	if err != nil {
+		t.Fatalf("encrypt assertion: %v", err)
+	}
+
+	doc := etree.NewDocument()
+	doc.SetRoot(encrypted)
+	encryptedXML, err := doc.WriteToString()
+	if err != nil {
+		t.Fatalf("serialise encrypted assertion: %v", err)
+	}
+
+	return wrapResponse(`<saml:EncryptedAssertion xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion">` + encryptedXML + `</saml:EncryptedAssertion>`)
+}
+
+func testSPKeypair(t *testing.T) (certPEM, keyPEM string) {
+	t.Helper()
+	certPEM, keyPEM, err := GenerateSPKeypair(testSPEntityID)
+	if err != nil {
+		t.Fatalf("generate sp keypair: %v", err)
+	}
+	return certPEM, keyPEM
 }
 
 func acsRequest(t *testing.T, samlResponse string) *http.Request {
@@ -320,6 +365,125 @@ func TestSPMetadata(t *testing.T) {
 	}
 	if !strings.Contains(out, testACSURL) {
 		t.Fatal("metadata should carry the ACS URL")
+	}
+}
+
+func TestValidateResponseDecryptsEncryptedAssertionWithoutSignedRequests(t *testing.T) {
+	i := newIDP(t)
+	certPEM, keyPEM := testSPKeypair(t)
+
+	p := i.provider()
+	p.SPCert, p.SPKey = certPEM, keyPEM
+	p.SignRequests = false
+
+	r := acsRequest(t, i.encryptedResponse(t, defaults(), certPEM))
+	id, err := ValidateResponse(p, testACSURL, r, testRequestID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if id.NameID != "ada@example.com" {
+		t.Fatalf("NameID = %q, want ada@example.com", id.NameID)
+	}
+	if got := id.Attributes["groups"]; fmt.Sprint(got) != "[eng platform-admin]" {
+		t.Fatalf("groups = %v, want [eng platform-admin]", got)
+	}
+}
+
+func TestValidateResponseRejectsTamperedEncryptedAssertion(t *testing.T) {
+	i := newIDP(t)
+	certPEM, keyPEM := testSPKeypair(t)
+
+	p := i.provider()
+	p.SPCert, p.SPKey = certPEM, keyPEM
+
+	o := defaults()
+	o.tamperAfterSign = true
+
+	r := acsRequest(t, i.encryptedResponse(t, o, certPEM))
+	if _, err := ValidateResponse(p, testACSURL, r, testRequestID); err == nil {
+		t.Fatal("a tampered assertion must be rejected even when encrypted")
+	}
+}
+
+func TestValidateResponseRejectsAssertionEncryptedToAnotherKey(t *testing.T) {
+	i := newIDP(t)
+	ourCert, ourKey := testSPKeypair(t)
+	theirCert, _ := testSPKeypair(t)
+
+	p := i.provider()
+	p.SPCert, p.SPKey = ourCert, ourKey
+
+	r := acsRequest(t, i.encryptedResponse(t, defaults(), theirCert))
+	if _, err := ValidateResponse(p, testACSURL, r, testRequestID); err == nil {
+		t.Fatal("an assertion encrypted to another key must not decrypt")
+	}
+}
+
+func TestSPMetadataAdvertisesEncryptionWithoutSignedRequests(t *testing.T) {
+	i := newIDP(t)
+	certPEM, keyPEM := testSPKeypair(t)
+
+	p := i.provider()
+	p.SPCert, p.SPKey = certPEM, keyPEM
+	p.SignRequests = false
+
+	out, err := SPMetadata(p, testACSURL, "https://app.uigraph.test/saml/p1/metadata")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, `use="encryption"`) {
+		t.Fatal("metadata must advertise an encryption certificate so the IdP can encrypt")
+	}
+	if strings.Contains(out, `use="signing"`) {
+		t.Fatal("metadata must not advertise a signing certificate when requests are unsigned")
+	}
+}
+
+func TestSPMetadataAdvertisesBothUsesWhenSigning(t *testing.T) {
+	i := newIDP(t)
+	certPEM, keyPEM := testSPKeypair(t)
+
+	p := i.provider()
+	p.SPCert, p.SPKey = certPEM, keyPEM
+	p.SignRequests = true
+
+	out, err := SPMetadata(p, testACSURL, "https://app.uigraph.test/saml/p1/metadata")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, `use="encryption"`) {
+		t.Fatal("metadata should advertise an encryption certificate")
+	}
+	if !strings.Contains(out, `use="signing"`) {
+		t.Fatal("metadata should advertise a signing certificate")
+	}
+}
+
+func TestValidateResponseWithoutSPKeypair(t *testing.T) {
+	i := newIDP(t)
+
+	p := i.provider()
+	p.SPCert, p.SPKey = "", ""
+
+	r := acsRequest(t, i.signedResponse(t, defaults()))
+	id, err := ValidateResponse(p, testACSURL, r, testRequestID)
+	if err != nil {
+		t.Fatalf("a provider with no SP keypair must still accept plain assertions: %v", err)
+	}
+	if id.NameID != "ada@example.com" {
+		t.Fatalf("NameID = %q, want ada@example.com", id.NameID)
+	}
+}
+
+func TestSigningRequiresAnSPKeypair(t *testing.T) {
+	i := newIDP(t)
+
+	p := i.provider()
+	p.SPCert, p.SPKey = "", ""
+	p.SignRequests = true
+
+	if _, _, err := AuthnRequest(p, testACSURL, "st4te"); err == nil {
+		t.Fatal("signing without an SP keypair must fail loudly")
 	}
 }
 
