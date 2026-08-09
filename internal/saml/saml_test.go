@@ -328,31 +328,72 @@ func TestSPMetadata(t *testing.T) {
 	}
 }
 
-func TestNormalizeCert(t *testing.T) {
-	certPEM, _, err := GenerateSPKeypair("test")
+func TestNormalizeCerts(t *testing.T) {
+	firstPEM, _, err := GenerateSPKeypair("first")
 	if err != nil {
 		t.Fatalf("generate: %v", err)
 	}
-	block, _ := pem.Decode([]byte(certPEM))
-	bare := base64.StdEncoding.EncodeToString(block.Bytes)
+	secondPEM, _, err := GenerateSPKeypair("second")
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	firstBlock, _ := pem.Decode([]byte(firstPEM))
+	secondBlock, _ := pem.Decode([]byte(secondPEM))
+	firstBare := base64.StdEncoding.EncodeToString(firstBlock.Bytes)
+	secondBare := base64.StdEncoding.EncodeToString(secondBlock.Bytes)
 
-	fromPEM, err := normalizeCert(certPEM)
+	fromPEM, err := normalizeCerts(firstPEM)
 	if err != nil {
 		t.Fatalf("PEM should be accepted: %v", err)
 	}
-	fromBare, err := normalizeCert(bare)
+	fromBare, err := normalizeCerts(firstBare)
 	if err != nil {
 		t.Fatalf("bare base64 should be accepted: %v", err)
 	}
-	if fromPEM != bare || fromBare != bare {
-		t.Fatal("both forms should normalise to the same base64 body")
+	if len(fromPEM) != 1 || fromPEM[0] != firstBare {
+		t.Fatalf("PEM normalised to %v", fromPEM)
+	}
+	if len(fromBare) != 1 || fromBare[0] != firstBare {
+		t.Fatalf("bare base64 normalised to %v", fromBare)
 	}
 
-	if _, err := normalizeCert("   "); err == nil {
+	both, err := normalizeCerts(firstPEM + secondPEM)
+	if err != nil {
+		t.Fatalf("concatenated PEM should be accepted: %v", err)
+	}
+	if len(both) != 2 || both[0] != firstBare || both[1] != secondBare {
+		t.Fatalf("concatenated PEM normalised to %d certs, want both in order", len(both))
+	}
+
+	if _, err := normalizeCerts("   "); err == nil {
 		t.Fatal("an empty certificate must be rejected")
 	}
-	if _, err := normalizeCert("this is not a certificate!!"); err == nil {
+	if _, err := normalizeCerts("this is not a certificate!!"); err == nil {
 		t.Fatal("a non-base64 certificate must be rejected")
+	}
+}
+
+// An IdP mid-rollover publishes several signing certificates and may sign with
+// any of them, so every certificate on the provider has to be trusted, not just
+// the first.
+func TestValidateResponseAcceptsAnyConfiguredCert(t *testing.T) {
+	retiring := newIDP(t)
+	active := newIDP(t)
+
+	p := active.provider()
+	p.IDPCert = retiring.certPEM + active.certPEM
+
+	id, err := ValidateResponse(p, testACSURL, acsRequest(t, active.signedResponse(t, defaults())), testRequestID)
+	if err != nil {
+		t.Fatalf("a response signed by the second configured cert should validate: %v", err)
+	}
+	if id.NameID != "ada@example.com" {
+		t.Fatalf("NameID = %q", id.NameID)
+	}
+
+	stranger := newIDP(t)
+	if _, err := ValidateResponse(p, testACSURL, acsRequest(t, stranger.signedResponse(t, defaults())), testRequestID); err == nil {
+		t.Fatal("a response signed by an unconfigured cert must be rejected")
 	}
 }
 
@@ -386,7 +427,44 @@ func TestParseMetadataDocument(t *testing.T) {
 	if md.SSOURL != testIDPSSOURL {
 		t.Fatalf("SSOURL = %q", md.SSOURL)
 	}
-	if md.Cert != bare {
+	certs, err := normalizeCerts(md.Cert)
+	if err != nil {
+		t.Fatalf("extracted certificate should normalise: %v", err)
+	}
+	if len(certs) != 1 || certs[0] != bare {
 		t.Fatal("the signing certificate should be extracted")
+	}
+}
+
+func TestParseMetadataKeepsEverySigningCert(t *testing.T) {
+	first := newIDP(t)
+	second := newIDP(t)
+	firstBlock, _ := pem.Decode([]byte(first.certPEM))
+	secondBlock, _ := pem.Decode([]byte(second.certPEM))
+	firstBare := base64.StdEncoding.EncodeToString(firstBlock.Bytes)
+	secondBare := base64.StdEncoding.EncodeToString(secondBlock.Bytes)
+
+	doc := fmt.Sprintf(`<EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata" entityID="%s">
+  <IDPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">
+    <KeyDescriptor use="signing">
+      <KeyInfo xmlns="http://www.w3.org/2000/09/xmldsig#"><X509Data><X509Certificate>%s</X509Certificate></X509Data></KeyInfo>
+    </KeyDescriptor>
+    <KeyDescriptor use="signing">
+      <KeyInfo xmlns="http://www.w3.org/2000/09/xmldsig#"><X509Data><X509Certificate>%s</X509Certificate></X509Data></KeyInfo>
+    </KeyDescriptor>
+    <SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect" Location="%s"/>
+  </IDPSSODescriptor>
+</EntityDescriptor>`, testIDPEntityID, firstBare, secondBare, testIDPSSOURL)
+
+	md, err := ParseMetadata(t.Context(), "", doc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	certs, err := normalizeCerts(md.Cert)
+	if err != nil {
+		t.Fatalf("extracted certificates should normalise: %v", err)
+	}
+	if len(certs) != 2 || certs[0] != firstBare || certs[1] != secondBare {
+		t.Fatalf("got %d certificates, want both signing certs in document order", len(certs))
 	}
 }

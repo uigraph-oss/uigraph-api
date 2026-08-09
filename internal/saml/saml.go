@@ -45,6 +45,11 @@ type Provider struct {
 }
 
 // Metadata is the subset of an IdP's metadata document that a provider stores.
+//
+// Cert holds every signing certificate the document advertises, as concatenated
+// PEM blocks. An IdP publishes more than one whenever a rollover is in flight,
+// and nothing says the active one is listed first, so keeping only one leaves
+// sign-in to fail the moment the IdP signs with any of the others.
 type Metadata struct {
 	EntityID string
 	SSOURL   string
@@ -90,6 +95,7 @@ func ParseMetadata(ctx context.Context, metadataURL, metadataXML string) (Metada
 	}
 
 	out := Metadata{EntityID: ed.EntityID}
+	var certs []string
 	for _, idp := range ed.IDPSSODescriptors {
 		for _, sso := range idp.SingleSignOnServices {
 			if sso.Binding == csaml.HTTPRedirectBinding && out.SSOURL == "" {
@@ -101,12 +107,15 @@ func ParseMetadata(ctx context.Context, metadataURL, metadataXML string) (Metada
 				continue
 			}
 			for _, c := range kd.KeyInfo.X509Data.X509Certificates {
-				if out.Cert == "" {
-					out.Cert = strings.Join(strings.Fields(c.Data), "")
+				der, err := base64.StdEncoding.DecodeString(strings.Join(strings.Fields(c.Data), ""))
+				if err != nil {
+					return Metadata{}, fmt.Errorf("saml: metadata certificate is not base64: %w", err)
 				}
+				certs = append(certs, string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})))
 			}
 		}
 	}
+	out.Cert = strings.Join(certs, "")
 
 	if out.SSOURL == "" {
 		return Metadata{}, fmt.Errorf("saml: metadata has no HTTP-Redirect SSO endpoint")
@@ -253,9 +262,13 @@ func serviceProvider(p Provider, acsURL, metadataURL string) (*csaml.ServiceProv
 		return nil, fmt.Errorf("saml: parse acs url: %w", err)
 	}
 
-	cert, err := normalizeCert(p.IDPCert)
+	certs, err := normalizeCerts(p.IDPCert)
 	if err != nil {
 		return nil, err
+	}
+	x509Certs := make([]csaml.X509Certificate, len(certs))
+	for i, c := range certs {
+		x509Certs[i] = csaml.X509Certificate{Data: c}
 	}
 
 	sp := csaml.ServiceProvider{
@@ -271,7 +284,7 @@ func serviceProvider(p Provider, acsURL, metadataURL string) (*csaml.ServiceProv
 							Use: "signing",
 							KeyInfo: csaml.KeyInfo{
 								X509Data: csaml.X509Data{
-									X509Certificates: []csaml.X509Certificate{{Data: cert}},
+									X509Certificates: x509Certs,
 								},
 							},
 						}},
@@ -335,22 +348,34 @@ func keypair(certPEM, keyPEM string) (*rsa.PrivateKey, *x509.Certificate, error)
 	return key, cert, nil
 }
 
-// normalizeCert accepts either a PEM block or bare base64 and returns the bare
-// base64 body that an X509Certificate element expects. IdP consoles hand out
-// both forms, and admins paste whichever they were given.
-func normalizeCert(cert string) (string, error) {
+// normalizeCerts accepts one or more concatenated PEM blocks, or a single bare
+// base64 body, and returns the bare base64 bodies an X509Certificate element
+// expects. IdP consoles hand out both forms, and admins paste whichever they
+// were given.
+func normalizeCerts(cert string) ([]string, error) {
 	cert = strings.TrimSpace(cert)
 	if cert == "" {
-		return "", fmt.Errorf("saml: idp certificate is required")
+		return nil, fmt.Errorf("saml: idp certificate is required")
 	}
-	if block, _ := pem.Decode([]byte(cert)); block != nil {
-		return base64.StdEncoding.EncodeToString(block.Bytes), nil
+
+	var out []string
+	for rest := []byte(cert); ; {
+		block, remainder := pem.Decode(rest)
+		if block == nil {
+			break
+		}
+		out = append(out, base64.StdEncoding.EncodeToString(block.Bytes))
+		rest = remainder
 	}
+	if len(out) > 0 {
+		return out, nil
+	}
+
 	body := strings.Join(strings.Fields(cert), "")
 	if _, err := base64.StdEncoding.DecodeString(body); err != nil {
-		return "", fmt.Errorf("saml: idp certificate is neither PEM nor base64: %w", err)
+		return nil, fmt.Errorf("saml: idp certificate is neither PEM nor base64: %w", err)
 	}
-	return body, nil
+	return []string{body}, nil
 }
 
 // collapse keeps single-valued attributes as plain strings so that an equals
