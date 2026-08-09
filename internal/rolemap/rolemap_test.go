@@ -19,6 +19,8 @@ func TestMatchOperators(t *testing.T) {
 			"groups": []any{"nested-eng"},
 		},
 		"empty": []any{},
+		"http://schemas.microsoft.com/ws/2008/06/identity/claims/groups":     "f2028123-ce2d-4a3b-adaa-0970d6863ab0",
+		"http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress": "ada@example.com",
 	}
 
 	tests := []struct {
@@ -70,6 +72,12 @@ func TestMatchOperators(t *testing.T) {
 		{"dot notation array", "user.groups", OpContains, "nested", true},
 		{"dot notation missing leaf", "user.missing", OpExists, "", false},
 		{"dot notation through scalar", "role.nope", OpExists, "", false},
+
+		{"saml claim uri equals", "http://schemas.microsoft.com/ws/2008/06/identity/claims/groups", OpEquals, "f2028123-ce2d-4a3b-adaa-0970d6863ab0", true},
+		{"saml claim uri equals miss", "http://schemas.microsoft.com/ws/2008/06/identity/claims/groups", OpEquals, "other-group", false},
+		{"saml claim uri exists", "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress", OpExists, "", true},
+		{"saml claim uri contains", "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress", OpContains, "@example.", true},
+		{"saml claim uri absent", "http://schemas.microsoft.com/ws/2008/06/identity/claims/role", OpExists, "", false},
 	}
 
 	for _, tc := range tests {

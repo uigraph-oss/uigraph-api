@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -555,6 +556,23 @@ type completedAuth struct {
 // runs until the IdP response has been verified, which is what keeps the
 // promise that no user is created or attached before authentication succeeds.
 func (h *SessionHandler) completeLogin(w http.ResponseWriter, r *http.Request, prov *identity.AuthProvider, ls *identity.LoginState, auth completedAuth) {
+	slog.InfoContext(r.Context(), "sso identity",
+		"provider", prov.Slug,
+		"kind", prov.Kind,
+		"sub", auth.Sub,
+		"email", auth.Email,
+		"name", auth.Name,
+		"attributeCount", len(auth.Attributes),
+	)
+	for k, v := range auth.Attributes {
+		slog.InfoContext(r.Context(), "sso attribute",
+			"provider", prov.Slug,
+			"key", k,
+			"value", v,
+			"type", fmt.Sprintf("%T", v),
+		)
+	}
+
 	if auth.Email == "" {
 		httputil.BadRequest(w, "the provider returned no email address")
 		return
@@ -603,6 +621,26 @@ func (h *SessionHandler) completeLogin(w http.ResponseWriter, r *http.Request, p
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
+	}
+	slog.InfoContext(r.Context(), "sso role resolved",
+		"provider", prov.Slug,
+		"email", auth.Email,
+		"ruleCount", len(rules),
+		"defaultRole", prov.DefaultRole,
+		"role", role,
+	)
+	for _, rule := range rules {
+		matched, matchErr := rolemap.Match(rule, auth.Attributes)
+		slog.InfoContext(r.Context(), "sso rule",
+			"provider", prov.Slug,
+			"priority", rule.Priority,
+			"attributeKey", rule.AttributeKey,
+			"operator", rule.Operator,
+			"attributeValue", rule.AttributeValue,
+			"grants", rule.Role,
+			"matched", matched,
+			"matchErr", matchErr,
+		)
 	}
 
 	// The role is re-resolved on every sign-in, so a change at the IdP takes

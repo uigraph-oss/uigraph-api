@@ -197,10 +197,22 @@ func Match(r Rule, attrs map[string]any) (bool, error) {
 	}
 }
 
-// Lookup traverses nested maps using dot-separated key segments, so a rule can
-// address a nested claim such as "user.role". Returns nil when any segment is
-// absent.
+// Lookup resolves an attribute key against the claims.
+//
+// The whole key is tried as a literal name first, and only when no attribute
+// carries that name is it split on "." and traversed as a path into nested
+// maps, so a rule can still address a nested claim such as "user.role". The
+// literal attempt is what makes SAML usable at all: every claim Entra, Okta and
+// ADFS emit is named with a URI such as
+// "http://schemas.microsoft.com/ws/2008/06/identity/claims/groups", and
+// splitting that on its first dot looks for a claim named "http://schemas".
+//
+// Returns nil when the key is neither a literal attribute nor a resolvable path.
 func Lookup(attrs map[string]any, key string) any {
+	if val, ok := attrs[key]; ok {
+		return val
+	}
+
 	parts := strings.SplitN(key, ".", 2)
 	val, ok := attrs[parts[0]]
 	if !ok {
