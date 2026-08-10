@@ -224,6 +224,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	requireScope(authz.ScopeAuthProvidersWrite, "DELETE", "/api/v1/orgs/{orgID}/auth/providers/{slug}/role-mappings/{mappingID}", authProviderH.DeleteRoleMapping)
 	requireScope(authz.ScopeAuthProvidersRead, "GET", "/api/v1/orgs/{orgID}/auth/domains", authProviderH.ListDomains)
 	requireScope(authz.ScopeAuthProvidersWrite, "POST", "/api/v1/orgs/{orgID}/auth/domains", authProviderH.CreateDomain)
+	requireScope(authz.ScopeAuthProvidersWrite, "PUT", "/api/v1/orgs/{orgID}/auth/domains/{domainID}", authProviderH.UpdateDomain)
 	requireScope(authz.ScopeAuthProvidersWrite, "DELETE", "/api/v1/orgs/{orgID}/auth/domains/{domainID}", authProviderH.DeleteDomain)
 
 	folder.Register(mux, s, scopeFn)

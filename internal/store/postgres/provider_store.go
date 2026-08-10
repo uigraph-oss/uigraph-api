@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lib/pq"
 	"github.com/uigraph/app/internal/identity"
 	"github.com/uigraph/app/internal/org"
 	"github.com/uigraph/app/internal/rolemap"
@@ -283,11 +282,27 @@ func (d *DB) CreateOrgDomain(ctx context.Context, dom identity.OrgDomain) error 
 		ON CONFLICT (org_id, domain) DO NOTHING`
 
 	if _, err := d.db.ExecContext(ctx, q, dom.ID, dom.OrgID, dom.Domain); err != nil {
-		var pqErr *pq.Error
-		if errors.As(err, &pqErr) && pqErr.Code == "23514" {
-			return store.ErrConflict
-		}
 		return fmt.Errorf("postgres: CreateOrgDomain: %w", err)
+	}
+	return nil
+}
+
+func (d *DB) UpdateOrgDomain(ctx context.Context, dom identity.OrgDomain) error {
+	const q = `
+		UPDATE org_domains
+		SET domain = LOWER($1), updated_at = NOW()
+		WHERE id = $2 AND org_id = $3`
+
+	result, err := d.db.ExecContext(ctx, q, dom.Domain, dom.ID, dom.OrgID)
+	if err != nil {
+		return fmt.Errorf("postgres: UpdateOrgDomain: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("postgres: UpdateOrgDomain rows affected: %w", err)
+	}
+	if rows == 0 {
+		return store.ErrNotFound
 	}
 	return nil
 }

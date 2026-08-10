@@ -567,13 +567,37 @@ func (h *AuthProviderHandler) CreateDomain(w http.ResponseWriter, r *http.Reques
 		httputil.Conflict(w, "an organization can currently have only one domain")
 		return
 	}
-
 	d := identity.OrgDomain{ID: newID(), OrgID: r.PathValue("orgID"), Domain: domain}
 	if err := h.store.CreateOrgDomain(r.Context(), d); err != nil {
 		httputil.Error(w, r, err)
 		return
 	}
 	httputil.JSON(w, http.StatusCreated, d)
+}
+
+func (h *AuthProviderHandler) UpdateDomain(w http.ResponseWriter, r *http.Request) {
+	var req orgDomainRequest
+	if err := httputil.Decode(r, &req); err != nil {
+		httputil.BadRequest(w, "invalid JSON")
+		return
+	}
+
+	domain, err := identity.NormalizeOrgDomain(req.Domain)
+	if err != nil {
+		httputil.BadRequest(w, "a valid email domain is required")
+		return
+	}
+
+	d := identity.OrgDomain{
+		ID:     r.PathValue("domainID"),
+		OrgID:  r.PathValue("orgID"),
+		Domain: domain,
+	}
+	if err := h.store.UpdateOrgDomain(r.Context(), d); err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, d)
 }
 
 // @Summary  DeleteDomain
