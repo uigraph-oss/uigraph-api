@@ -143,6 +143,9 @@ func Load() (*Config, error) {
 	if c.Enterprise && c.EnterpriseInternalToken == "" {
 		return nil, fmt.Errorf("config: UIGRAPH_ENTERPRISE_INTERNAL_TOKEN is required when UIGRAPH_ENTERPRISE is true")
 	}
+	if c.Enterprise && c.EnterpriseServiceURL == "" {
+		return nil, fmt.Errorf("config: UIGRAPH_ENTERPRISE_SERVICE_URL is required when UIGRAPH_ENTERPRISE is true")
+	}
 
 	return c, nil
 }

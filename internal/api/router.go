@@ -33,6 +33,7 @@ import (
 	"github.com/uigraph/app/internal/cache"
 	"github.com/uigraph/app/internal/config"
 	"github.com/uigraph/app/internal/crypto"
+	"github.com/uigraph/app/internal/enterprise"
 	"github.com/uigraph/app/internal/figma"
 	"github.com/uigraph/app/internal/identity"
 	"github.com/uigraph/app/internal/modelpricing"
@@ -58,7 +59,14 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 		authCipher = nil
 	}
 
-	sessionH := auth.NewSessionHandler(s, assetResolver, authCipher, cfg.PublicURL, cfg.FrontendURL, cfg.CookieDomain)
+	var enterpriseClient *enterprise.Client
+	if cfg.Enterprise {
+		enterpriseClient = enterprise.New(cfg.EnterpriseServiceURL, cfg.EnterpriseInternalToken)
+		signupH := auth.NewSignupHandler(s, cfg.EnterpriseInternalToken)
+		mux.HandleFunc("POST /internal/v1/accounts", signupH.ProvisionAccount)
+	}
+
+	sessionH := auth.NewSessionHandler(s, assetResolver, authCipher, cfg.PublicURL, cfg.FrontendURL, cfg.CookieDomain, enterpriseClient)
 	mux.HandleFunc("POST /api/v1/auth/login", sessionH.Login)
 	mux.HandleFunc("POST /api/v1/auth/discover-orgs", sessionH.DiscoverOrgs)
 	mux.HandleFunc("GET /api/v1/auth/orgs/{orgID}/providers", sessionH.OrgProviders)
@@ -66,11 +74,6 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	mux.HandleFunc("GET /api/v1/auth/orgs/{orgID}/callback/{slug}", sessionH.OIDCCallback)
 	mux.HandleFunc("POST /api/v1/auth/orgs/{orgID}/saml/{slug}/acs", sessionH.SAMLACS)
 	mux.HandleFunc("GET /api/v1/auth/orgs/{orgID}/saml/{slug}/metadata", sessionH.SAMLMetadata)
-
-	if cfg.Enterprise {
-		signupH := auth.NewSignupHandler(s, cfg.EnterpriseInternalToken)
-		mux.HandleFunc("POST /internal/v1/accounts", signupH.ProvisionAccount)
-	}
 
 	protected := func(method, pattern string, h http.HandlerFunc) {
 		mux.Handle(method+" "+pattern, mw.Handler(http.HandlerFunc(h)))
@@ -157,7 +160,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	saH := auth.NewServiceAccountHandler(s, c)
 	requireScope(authz.ScopeMembersRead, "GET", "/api/v1/orgs/{orgID}/scopes", saH.ListScopes)
 
-	memberH := auth.NewMemberHandler(s, s, s)
+	memberH := auth.NewMemberHandler(s, s, s, enterpriseClient)
 	requireScope(authz.ScopeMembersRead, "GET", "/api/v1/orgs/{orgID}/members", memberH.List)
 	requireScope(authz.ScopeMembersAdd, "POST", "/api/v1/orgs/{orgID}/members", memberH.Add)
 	requireScope(authz.ScopeMembersUpdateRole, "PUT", "/api/v1/orgs/{orgID}/members/{userID}", memberH.UpdateMember)
