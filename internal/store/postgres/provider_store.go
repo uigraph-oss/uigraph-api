@@ -287,6 +287,26 @@ func (d *DB) CreateOrgDomain(ctx context.Context, dom identity.OrgDomain) error 
 	return nil
 }
 
+func (d *DB) UpdateOrgDomain(ctx context.Context, dom identity.OrgDomain) error {
+	const q = `
+		UPDATE org_domains
+		SET domain = LOWER($1), updated_at = NOW()
+		WHERE id = $2 AND org_id = $3`
+
+	result, err := d.db.ExecContext(ctx, q, dom.Domain, dom.ID, dom.OrgID)
+	if err != nil {
+		return fmt.Errorf("postgres: UpdateOrgDomain: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("postgres: UpdateOrgDomain rows affected: %w", err)
+	}
+	if rows == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
 func (d *DB) ListOrgDomains(ctx context.Context, orgID string) ([]identity.OrgDomain, error) {
 	const q = `
 		SELECT id, org_id, domain, created_at, updated_at

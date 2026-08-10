@@ -150,6 +150,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	protected("GET", "/api/v1/orgs/{orgID}", orgH.GetMine)
 	requireScope(authz.ScopeOrgUpdate, "PUT", "/api/v1/orgs/{orgID}", orgH.Update)
 	requireScope(authz.ScopeOrgUpdate, "POST", "/api/v1/orgs/{orgID}/onboarding-complete", orgH.CompleteOnboarding)
+	requireScope(authz.ScopeOrgUpdate, "POST", "/api/v1/orgs/{orgID}/logo/prepare", avatarH.PrepareOrgLogoUpload)
 	requireScope(authz.ScopeOrgUpdate, "PUT", "/api/v1/orgs/{orgID}/logo", avatarH.PutOrgLogo)
 	requireScope(authz.ScopeOrgUpdate, "DELETE", "/api/v1/orgs/{orgID}/logo", avatarH.DeleteOrgLogo)
 	requireScope(authz.ScopeOrgDelete, "DELETE", "/api/v1/orgs/{orgID}", orgH.Delete)
@@ -223,6 +224,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	requireScope(authz.ScopeAuthProvidersWrite, "DELETE", "/api/v1/orgs/{orgID}/auth/providers/{slug}/role-mappings/{mappingID}", authProviderH.DeleteRoleMapping)
 	requireScope(authz.ScopeAuthProvidersRead, "GET", "/api/v1/orgs/{orgID}/auth/domains", authProviderH.ListDomains)
 	requireScope(authz.ScopeAuthProvidersWrite, "POST", "/api/v1/orgs/{orgID}/auth/domains", authProviderH.CreateDomain)
+	requireScope(authz.ScopeAuthProvidersWrite, "PUT", "/api/v1/orgs/{orgID}/auth/domains/{domainID}", authProviderH.UpdateDomain)
 	requireScope(authz.ScopeAuthProvidersWrite, "DELETE", "/api/v1/orgs/{orgID}/auth/domains/{domainID}", authProviderH.DeleteDomain)
 
 	folder.Register(mux, s, scopeFn)
