@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -461,8 +462,14 @@ func (h *SessionHandler) SAMLACS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	email := attrString(id.Attributes, claimOr(prov.EmailAttribute, "email"))
-	if email == "" {
+	email := ""
+	if prov.EmailAttribute != "" {
+		email = attrString(id.Attributes, prov.EmailAttribute)
+		if email == "" {
+			httputil.BadRequest(w, fmt.Sprintf("configured email attribute %q was not returned by the SAML provider", prov.EmailAttribute))
+			return
+		}
+	} else {
 		email = id.NameID
 	}
 
@@ -610,6 +617,7 @@ func (h *SessionHandler) completeLogin(w http.ResponseWriter, r *http.Request, p
 		return
 	}
 
+	slog.InfoContext(r.Context(), "SSO sign-in response", "provider", prov.Slug, "response", auth.Attributes)
 	h.setSessionCookie(w, plaintext, sess.ExpiresAt)
 	http.Redirect(w, r, h.frontendBase()+ls.RedirectTo, http.StatusFound)
 }
