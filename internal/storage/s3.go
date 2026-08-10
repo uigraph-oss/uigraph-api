@@ -1,8 +1,10 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -86,16 +88,29 @@ func (c *s3Client) EnsureBucket(ctx context.Context) error {
 }
 
 func (c *s3Client) Upload(ctx context.Context, key, contentType string, r io.Reader, size int64) error {
-	input := &s3.PutObjectInput{
-		Bucket:      aws.String(c.bucket),
-		Key:         aws.String(key),
-		Body:        r,
-		ContentType: aws.String(contentType),
+	body := r
+	if size < 0 {
+		// Unlike minio-go's PutObject (which buffers internally when size is unknown, per
+		// this package's Client interface doc comment), the raw AWS SDK v2 PutObject call
+		// requires either an explicit ContentLength or a seekable body it can measure --
+		// handing it a plain streaming reader (e.g. the body from Download, as
+		// maps.uploadScreenshot's gateway-uploads copy path does) fails with
+		// "MissingContentLength: You must provide the Content-Length HTTP header." Buffer
+		// here so size=-1 actually behaves as documented for every caller, not just this one.
+		buf, err := io.ReadAll(r)
+		if err != nil {
+			return fmt.Errorf("buffering upload of unknown size: %w", err)
+		}
+		body = bytes.NewReader(buf)
+		size = int64(len(buf))
 	}
-	if size >= 0 {
-		input.ContentLength = aws.Int64(size)
-	}
-	_, err := c.client.PutObject(ctx, input)
+	_, err := c.client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:        aws.String(c.bucket),
+		Key:           aws.String(key),
+		Body:          body,
+		ContentType:   aws.String(contentType),
+		ContentLength: aws.Int64(size),
+	})
 	return err
 }
 
