@@ -1,5 +1,11 @@
+DROP TRIGGER IF EXISTS enforce_single_org_domain_trigger ON org_domains;
+DROP FUNCTION IF EXISTS enforce_single_org_domain();
+
 UPDATE org_domains
 SET domain = LOWER(TRIM(domain));
+
+ALTER TABLE org_domains
+    DROP CONSTRAINT IF EXISTS org_domains_domain_format_check;
 
 ALTER TABLE org_domains
     ADD CONSTRAINT org_domains_domain_format_check CHECK (
