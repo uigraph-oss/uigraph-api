@@ -150,6 +150,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	protected("GET", "/api/v1/orgs/{orgID}", orgH.GetMine)
 	requireScope(authz.ScopeOrgUpdate, "PUT", "/api/v1/orgs/{orgID}", orgH.Update)
 	requireScope(authz.ScopeOrgUpdate, "POST", "/api/v1/orgs/{orgID}/onboarding-complete", orgH.CompleteOnboarding)
+	requireScope(authz.ScopeOrgUpdate, "POST", "/api/v1/orgs/{orgID}/logo/prepare", avatarH.PrepareOrgLogoUpload)
 	requireScope(authz.ScopeOrgUpdate, "PUT", "/api/v1/orgs/{orgID}/logo", avatarH.PutOrgLogo)
 	requireScope(authz.ScopeOrgUpdate, "DELETE", "/api/v1/orgs/{orgID}/logo", avatarH.DeleteOrgLogo)
 	requireScope(authz.ScopeOrgDelete, "DELETE", "/api/v1/orgs/{orgID}", orgH.Delete)

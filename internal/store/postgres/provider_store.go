@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lib/pq"
 	"github.com/uigraph/app/internal/identity"
 	"github.com/uigraph/app/internal/org"
 	"github.com/uigraph/app/internal/rolemap"
@@ -282,6 +283,10 @@ func (d *DB) CreateOrgDomain(ctx context.Context, dom identity.OrgDomain) error 
 		ON CONFLICT (org_id, domain) DO NOTHING`
 
 	if _, err := d.db.ExecContext(ctx, q, dom.ID, dom.OrgID, dom.Domain); err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23514" {
+			return store.ErrConflict
+		}
 		return fmt.Errorf("postgres: CreateOrgDomain: %w", err)
 	}
 	return nil

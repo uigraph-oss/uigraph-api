@@ -553,9 +553,18 @@ func (h *AuthProviderHandler) CreateDomain(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	domain := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(req.Domain, "@")))
-	if domain == "" || strings.ContainsAny(domain, "@ /") || !strings.Contains(domain, ".") {
+	domain, err := identity.NormalizeOrgDomain(req.Domain)
+	if err != nil {
 		httputil.BadRequest(w, "a valid email domain is required")
+		return
+	}
+	domains, err := h.store.ListOrgDomains(r.Context(), r.PathValue("orgID"))
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if len(domains) > 0 {
+		httputil.Conflict(w, "an organization can currently have only one domain")
 		return
 	}
 

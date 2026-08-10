@@ -65,6 +65,8 @@ type AuthProvider struct {
 }
 
 var slugPattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
+var domainLabelPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
+var domainLetterPattern = regexp.MustCompile(`[a-z]`)
 
 func ValidateSlug(slug string) error {
 	if slug == "" {
@@ -143,6 +145,32 @@ type OrgDomain struct {
 	Domain    string    `json:"domain"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+func NormalizeOrgDomain(value string) (string, error) {
+	domain := strings.TrimSpace(value)
+	domain = strings.TrimPrefix(domain, "@")
+	domain = strings.ToLower(strings.TrimSpace(domain))
+	if len(domain) < 3 || len(domain) > 253 {
+		return "", fmt.Errorf("identity: invalid organization domain")
+	}
+
+	labels := strings.Split(domain, ".")
+	if len(labels) < 2 {
+		return "", fmt.Errorf("identity: invalid organization domain")
+	}
+
+	for _, label := range labels {
+		if len(label) < 1 || len(label) > 63 || !domainLabelPattern.MatchString(label) {
+			return "", fmt.Errorf("identity: invalid organization domain")
+		}
+	}
+
+	if !domainLetterPattern.MatchString(labels[len(labels)-1]) {
+		return "", fmt.Errorf("identity: invalid organization domain")
+	}
+
+	return domain, nil
 }
 
 type LoginState struct {
