@@ -473,10 +473,10 @@ func (d *DB) CreateMLRun(ctx context.Context, run mlstudio.Run) error {
 	if err != nil {
 		return fmt.Errorf("postgres: CreateMLRun: %w", err)
 	}
-	if err := replaceMLParams(ctx, tx, "ml_runs_params", "run_id", run.ID, run.Parameters); err != nil {
+	if _, err := replaceMLParams(ctx, tx, "ml_runs_params", "run_id", run.ID, run.Parameters); err != nil {
 		return fmt.Errorf("postgres: CreateMLRun parameters: %w", err)
 	}
-	if err := replaceMLMetrics(ctx, tx, "ml_runs_metrics", "run_id", run.ID, run.Metrics); err != nil {
+	if _, err := replaceMLMetrics(ctx, tx, "ml_runs_metrics", "run_id", run.ID, run.Metrics); err != nil {
 		return fmt.Errorf("postgres: CreateMLRun metrics: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -506,10 +506,10 @@ func (d *DB) UpdateMLRun(ctx context.Context, run mlstudio.Run) error {
 	if err != nil {
 		return fmt.Errorf("postgres: UpdateMLRun: %w", err)
 	}
-	if err := replaceMLParams(ctx, tx, "ml_runs_params", "run_id", run.ID, run.Parameters); err != nil {
+	if _, err := replaceMLParams(ctx, tx, "ml_runs_params", "run_id", run.ID, run.Parameters); err != nil {
 		return fmt.Errorf("postgres: UpdateMLRun parameters: %w", err)
 	}
-	if err := replaceMLMetrics(ctx, tx, "ml_runs_metrics", "run_id", run.ID, run.Metrics); err != nil {
+	if _, err := replaceMLMetrics(ctx, tx, "ml_runs_metrics", "run_id", run.ID, run.Metrics); err != nil {
 		return fmt.Errorf("postgres: UpdateMLRun metrics: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -646,10 +646,10 @@ func (d *DB) CreateMLEvaluation(ctx context.Context, eval mlstudio.Evaluation) e
 	if err != nil {
 		return fmt.Errorf("postgres: CreateMLEvaluation: %w", err)
 	}
-	if err := replaceMLParams(ctx, tx, "ml_evaluations_params", "eval_id", eval.ID, eval.Parameters); err != nil {
+	if _, err := replaceMLParams(ctx, tx, "ml_evaluations_params", "eval_id", eval.ID, eval.Parameters); err != nil {
 		return fmt.Errorf("postgres: CreateMLEvaluation parameters: %w", err)
 	}
-	if err := replaceMLMetrics(ctx, tx, "ml_evaluations_metrics", "eval_id", eval.ID, eval.Metrics); err != nil {
+	if _, err := replaceMLMetrics(ctx, tx, "ml_evaluations_metrics", "eval_id", eval.ID, eval.Metrics); err != nil {
 		return fmt.Errorf("postgres: CreateMLEvaluation metrics: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -679,10 +679,10 @@ func (d *DB) UpdateMLEvaluation(ctx context.Context, eval mlstudio.Evaluation) e
 	if err != nil {
 		return fmt.Errorf("postgres: UpdateMLEvaluation: %w", err)
 	}
-	if err := replaceMLParams(ctx, tx, "ml_evaluations_params", "eval_id", eval.ID, eval.Parameters); err != nil {
+	if _, err := replaceMLParams(ctx, tx, "ml_evaluations_params", "eval_id", eval.ID, eval.Parameters); err != nil {
 		return fmt.Errorf("postgres: UpdateMLEvaluation parameters: %w", err)
 	}
-	if err := replaceMLMetrics(ctx, tx, "ml_evaluations_metrics", "eval_id", eval.ID, eval.Metrics); err != nil {
+	if _, err := replaceMLMetrics(ctx, tx, "ml_evaluations_metrics", "eval_id", eval.ID, eval.Metrics); err != nil {
 		return fmt.Errorf("postgres: UpdateMLEvaluation metrics: %w", err)
 	}
 	if err := tx.Commit(); err != nil {

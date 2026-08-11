@@ -3,26 +3,26 @@ package mlstudio
 import "context"
 
 type Store interface {
-	UpsertMLProjects(ctx context.Context, orgID, actorID string, in []ProjectInput) error
+	UpsertMLProjects(ctx context.Context, orgID, actorID string, in []ProjectInput) (SyncCounts, error)
 	CreateMLProject(ctx context.Context, orgID, actorID string, in ProjectInput) (*Project, error)
 	ListMLProjects(ctx context.Context, orgID string) ([]Project, error)
 	GetMLProject(ctx context.Context, orgID, id string) (*Project, error)
 	UpdateMLProject(ctx context.Context, orgID, id, actorID string, in ProjectInput) (*Project, error)
 	DeleteMLProject(ctx context.Context, orgID, id, actorID string) error
 
-	UpsertMLModels(ctx context.Context, orgID, actorID string, in []ModelInput) error
+	UpsertMLModels(ctx context.Context, orgID, actorID string, in []ModelInput) (SyncCounts, error)
 	CreateMLModel(ctx context.Context, m Model) error
 	UpdateMLModel(ctx context.Context, orgID, id, actorID string, in ModelUpdateInput) error
 	UpdateMLModelInfo(ctx context.Context, m Model) error
 	DeleteMLModel(ctx context.Context, orgID, id, deletedBy string) error
-	UpsertMLModelVersions(ctx context.Context, orgID, actorID string, in []ModelVersionInput) error
+	UpsertMLModelVersions(ctx context.Context, orgID, actorID string, in []ModelVersionInput) (SyncCounts, error)
 	CreateMLModelVersion(ctx context.Context, v ModelVersion) error
 	SetMLModelVersionRun(ctx context.Context, orgID, versionID string, runID *string, actorID string) error
-	UpsertMLExperiments(ctx context.Context, orgID, actorID string, in []ExperimentInput) error
-	UpsertMLRuns(ctx context.Context, orgID, actorID string, in []RunInput) error
-	UpsertMLArtifacts(ctx context.Context, orgID, actorID string, in []ArtifactInput) error
-	UpsertMLDatasets(ctx context.Context, orgID, actorID string, in []DatasetInput) error
-	UpsertMLEvaluations(ctx context.Context, orgID, actorID string, in []EvaluationInput) error
+	UpsertMLExperiments(ctx context.Context, orgID, actorID string, in []ExperimentInput) (SyncCounts, error)
+	UpsertMLRuns(ctx context.Context, orgID, actorID string, in []RunInput) (SyncCounts, error)
+	UpsertMLArtifacts(ctx context.Context, orgID, actorID string, in []ArtifactInput) (SyncCounts, error)
+	UpsertMLDatasets(ctx context.Context, orgID, actorID string, in []DatasetInput) (SyncCounts, error)
+	UpsertMLEvaluations(ctx context.Context, orgID, actorID string, in []EvaluationInput) (SyncCounts, error)
 	ResolveOrgUserIDsByEmail(ctx context.Context, orgID string, emails []string) (map[string]string, error)
 
 	ListMLModels(ctx context.Context, orgID, projectID string) ([]Model, error)

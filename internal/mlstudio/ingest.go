@@ -2,6 +2,11 @@ package mlstudio
 
 import "time"
 
+type SyncCounts struct {
+	Created int `json:"created"`
+	Updated int `json:"updated"`
+}
+
 type ProjectInput struct {
 	Name        string  `json:"name"`
 	Type        string  `json:"type"`

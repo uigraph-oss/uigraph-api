@@ -276,12 +276,12 @@ const mlExperimentCols = `id, org_id, mlflow_id, project_id, name, description, 
 func scanMLProject(row interface{ Scan(...any) error }) (mlstudio.Project, error) {
 	var p mlstudio.Project
 	err := row.Scan(
-		&p.ID, &p.OrgID, &p.Name, &p.Type, &p.Description, &p.SourceType, &p.SourceURL, &p.TeamID, &p.UpdatedAt,
+		&p.ID, &p.OrgID, &p.Name, &p.Type, &p.Description, &p.SourceType, &p.SourceURL, &p.TeamID, &p.UpdatedAt, &p.SyncedAt,
 	)
 	return p, err
 }
 
-const mlProjectCols = `id, org_id, name, type, description, source_type, source_url, team_id, updated_at`
+const mlProjectCols = `id, org_id, name, type, description, source_type, source_url, team_id, updated_at, synced_at`
 
 func (d *DB) ListMLProjects(ctx context.Context, orgID string) ([]mlstudio.Project, error) {
 	rows, err := d.db.QueryContext(ctx, `
@@ -299,7 +299,7 @@ func (d *DB) ListMLProjects(ctx context.Context, orgID string) ([]mlstudio.Proje
 		var p mlstudio.Project
 		var stats mlstudio.ProjectStats
 		if err := rows.Scan(
-			&p.ID, &p.OrgID, &p.Name, &p.Type, &p.Description, &p.SourceType, &p.SourceURL, &p.TeamID, &p.UpdatedAt,
+			&p.ID, &p.OrgID, &p.Name, &p.Type, &p.Description, &p.SourceType, &p.SourceURL, &p.TeamID, &p.UpdatedAt, &p.SyncedAt,
 			&stats.ModelCount, &stats.ExperimentCount, &stats.RunCount,
 		); err != nil {
 			return nil, fmt.Errorf("postgres: ListMLProjects scan: %w", err)

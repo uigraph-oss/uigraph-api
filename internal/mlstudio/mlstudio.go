@@ -13,6 +13,7 @@ type Project struct {
 	TeamID      *string       `json:"teamId,omitempty"`
 	TeamName    string        `json:"-"`
 	UpdatedAt   *time.Time    `json:"updatedAt,omitempty"`
+	SyncedAt    *time.Time    `json:"syncedAt,omitempty"`
 	Stats       *ProjectStats `json:"stats,omitempty"`
 }
 

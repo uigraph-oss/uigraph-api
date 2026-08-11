@@ -62,11 +62,12 @@ func (h *Handler) SyncProjects(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := h.store.UpsertMLProjects(r.Context(), orgID, p.UserID, in); err != nil {
+	counts, err := h.store.UpsertMLProjects(r.Context(), orgID, p.UserID, in)
+	if err != nil {
 		writeErr(w, r, err)
 		return
 	}
-	httputil.JSON(w, http.StatusOK, map[string]any{"synced": len(in)})
+	httputil.JSON(w, http.StatusOK, map[string]any{"synced": len(in), "created": counts.Created, "updated": counts.Updated})
 }
 
 func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
@@ -240,11 +241,12 @@ func (h *Handler) SyncModels(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := h.store.UpsertMLModels(r.Context(), orgID, p.UserID, in); err != nil {
+	counts, err := h.store.UpsertMLModels(r.Context(), orgID, p.UserID, in)
+	if err != nil {
 		writeErr(w, r, err)
 		return
 	}
-	httputil.JSON(w, http.StatusOK, map[string]any{"synced": len(in)})
+	httputil.JSON(w, http.StatusOK, map[string]any{"synced": len(in), "created": counts.Created, "updated": counts.Updated})
 }
 
 func (h *Handler) UpdateModel(w http.ResponseWriter, r *http.Request) {
@@ -311,11 +313,12 @@ func (h *Handler) SyncVersions(w http.ResponseWriter, r *http.Request) {
 		}
 		in[i].ActorID = actors[strings.ToLower(strings.TrimSpace(in[i].UserEmail))]
 	}
-	if err := h.store.UpsertMLModelVersions(r.Context(), orgID, p.UserID, in); err != nil {
+	counts, err := h.store.UpsertMLModelVersions(r.Context(), orgID, p.UserID, in)
+	if err != nil {
 		writeErr(w, r, err)
 		return
 	}
-	httputil.JSON(w, http.StatusOK, map[string]any{"synced": len(in)})
+	httputil.JSON(w, http.StatusOK, map[string]any{"synced": len(in), "created": counts.Created, "updated": counts.Updated})
 }
 
 func (h *Handler) SyncExperiments(w http.ResponseWriter, r *http.Request) {
@@ -352,11 +355,12 @@ func (h *Handler) SyncExperiments(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := h.store.UpsertMLExperiments(r.Context(), orgID, p.UserID, in); err != nil {
+	counts, err := h.store.UpsertMLExperiments(r.Context(), orgID, p.UserID, in)
+	if err != nil {
 		writeErr(w, r, err)
 		return
 	}
-	httputil.JSON(w, http.StatusOK, map[string]any{"synced": len(in)})
+	httputil.JSON(w, http.StatusOK, map[string]any{"synced": len(in), "created": counts.Created, "updated": counts.Updated})
 }
 
 func (h *Handler) SyncRuns(w http.ResponseWriter, r *http.Request) {
@@ -399,11 +403,12 @@ func (h *Handler) SyncRuns(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := h.store.UpsertMLRuns(r.Context(), orgID, p.UserID, in); err != nil {
+	counts, err := h.store.UpsertMLRuns(r.Context(), orgID, p.UserID, in)
+	if err != nil {
 		writeErr(w, r, err)
 		return
 	}
-	httputil.JSON(w, http.StatusOK, map[string]any{"synced": len(in)})
+	httputil.JSON(w, http.StatusOK, map[string]any{"synced": len(in), "created": counts.Created, "updated": counts.Updated})
 }
 
 func (h *Handler) SyncArtifacts(w http.ResponseWriter, r *http.Request) {
@@ -431,11 +436,12 @@ func (h *Handler) SyncArtifacts(w http.ResponseWriter, r *http.Request) {
 		}
 		in[i].ActorID = actors[strings.ToLower(strings.TrimSpace(in[i].UserEmail))]
 	}
-	if err := h.store.UpsertMLArtifacts(r.Context(), orgID, p.UserID, in); err != nil {
+	counts, err := h.store.UpsertMLArtifacts(r.Context(), orgID, p.UserID, in)
+	if err != nil {
 		writeErr(w, r, err)
 		return
 	}
-	httputil.JSON(w, http.StatusOK, map[string]any{"synced": len(in)})
+	httputil.JSON(w, http.StatusOK, map[string]any{"synced": len(in), "created": counts.Created, "updated": counts.Updated})
 }
 
 func (h *Handler) SyncDatasets(w http.ResponseWriter, r *http.Request) {
@@ -472,11 +478,12 @@ func (h *Handler) SyncDatasets(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := h.store.UpsertMLDatasets(r.Context(), orgID, p.UserID, in); err != nil {
+	counts, err := h.store.UpsertMLDatasets(r.Context(), orgID, p.UserID, in)
+	if err != nil {
 		writeErr(w, r, err)
 		return
 	}
-	httputil.JSON(w, http.StatusOK, map[string]any{"synced": len(in)})
+	httputil.JSON(w, http.StatusOK, map[string]any{"synced": len(in), "created": counts.Created, "updated": counts.Updated})
 }
 
 func (h *Handler) SyncEvaluations(w http.ResponseWriter, r *http.Request) {
@@ -516,9 +523,10 @@ func (h *Handler) SyncEvaluations(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := h.store.UpsertMLEvaluations(r.Context(), orgID, p.UserID, in); err != nil {
+	counts, err := h.store.UpsertMLEvaluations(r.Context(), orgID, p.UserID, in)
+	if err != nil {
 		writeErr(w, r, err)
 		return
 	}
-	httputil.JSON(w, http.StatusOK, map[string]any{"synced": len(in)})
+	httputil.JSON(w, http.StatusOK, map[string]any{"synced": len(in), "created": counts.Created, "updated": counts.Updated})
 }
