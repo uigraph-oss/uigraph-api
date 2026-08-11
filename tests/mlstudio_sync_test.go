@@ -145,6 +145,121 @@ func TestMLSync_SoftDeletedRowStaysDeleted(t *testing.T) {
 	}
 }
 
+func mlProjectNames(t *testing.T, query string) map[string]M {
+	t.Helper()
+	res := mustDo(t, "GET", mlBase()+"/projects"+query, adminToken, nil)
+	out := map[string]M{}
+	list, ok := res["projects"].([]any)
+	if !ok {
+		return out
+	}
+	for _, item := range list {
+		p, ok := item.(M)
+		if !ok {
+			t.Fatalf("project entry is %T, want an object", item)
+		}
+		out[str(p, "name")] = p
+	}
+	return out
+}
+
+func TestListProjects_IncludeDeletedExposesSoftDeletedProjects(t *testing.T) {
+	project := "listdel-project-" + uniqueSuffix(t)
+
+	mustDo(t, "POST", mlBase()+"/projects/sync", adminToken, []M{{"name": project, "type": "training", "team": "uigraph"}})
+	if _, ok := mlProjectNames(t, "")[project]; !ok {
+		t.Fatalf("project %q missing from the default listing", project)
+	}
+
+	_, err := testDB.DB().ExecContext(context.Background(),
+		`UPDATE ml_projects SET deleted_at=NOW() WHERE org_id=$1 AND name=$2`, orgID, project)
+	if err != nil {
+		t.Fatalf("soft delete project: %v", err)
+	}
+
+	if _, ok := mlProjectNames(t, "")[project]; ok {
+		t.Fatalf("soft-deleted project %q still in the default listing", project)
+	}
+	if _, ok := mlProjectNames(t, "?includeDeleted=false")[project]; ok {
+		t.Fatalf("soft-deleted project %q returned with includeDeleted=false", project)
+	}
+
+	found, ok := mlProjectNames(t, "?includeDeleted=true")[project]
+	if !ok {
+		t.Fatalf("soft-deleted project %q missing with includeDeleted=true", project)
+	}
+	if str(found, "deletedAt") == "" {
+		t.Fatalf("project %q returned without deletedAt: %v", project, found)
+	}
+}
+
+func TestListProjects_RejectsInvalidIncludeDeleted(t *testing.T) {
+	resp := do("GET", mlBase()+"/projects?includeDeleted=garbage", adminToken, nil)
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != 400 {
+		t.Fatalf("includeDeleted=garbage → %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestMLProjects_RestoreBringsBackADeletedProject(t *testing.T) {
+	suffix := uniqueSuffix(t)
+	project := "restore-project-" + suffix
+	experiment := "restore-exp-" + suffix
+
+	mustDo(t, "POST", mlBase()+"/projects/sync", adminToken, []M{{"name": project, "type": "training", "team": "uigraph"}})
+	_, err := testDB.DB().ExecContext(context.Background(),
+		`UPDATE ml_projects SET deleted_at=NOW() WHERE org_id=$1 AND name=$2`, orgID, project)
+	if err != nil {
+		t.Fatalf("soft delete project: %v", err)
+	}
+
+	resp := mustDo(t, "POST", mlBase()+"/projects/restore", adminToken, []M{{"name": project}})
+	if restored, _ := resp["restored"].(float64); restored != 1 {
+		t.Fatalf("restore = %v, want restored 1", resp)
+	}
+
+	found, ok := mlProjectNames(t, "")[project]
+	if !ok {
+		t.Fatalf("restored project %q missing from the default listing", project)
+	}
+	if str(found, "deletedAt") != "" {
+		t.Fatalf("restored project %q still has deletedAt: %v", project, found)
+	}
+
+	created, updated := syncCounts(t, "/experiments/sync", []M{
+		{"mlflowId": experiment, "projectName": project, "name": "restore", "status": "active"},
+	})
+	if created != 1 || updated != 0 {
+		t.Fatalf("experiment sync under a restored project = created %d updated %d, want 1/0", created, updated)
+	}
+
+	resp = mustDo(t, "POST", mlBase()+"/projects/restore", adminToken, []M{{"name": project}})
+	if restored, _ := resp["restored"].(float64); restored != 0 {
+		t.Fatalf("restoring a live project = %v, want restored 0", resp)
+	}
+}
+
+func TestMLProjects_RestoreRejectsAnEmptyName(t *testing.T) {
+	resp := do("POST", mlBase()+"/projects/restore", adminToken, []M{{"name": ""}})
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != 400 {
+		t.Fatalf("restore with an empty name → %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestMLSync_ChildOfUnknownProjectIsRejected(t *testing.T) {
+	project := "nosuch-project-" + uniqueSuffix(t)
+	experiment := "nosuch-exp-" + uniqueSuffix(t)
+
+	resp := do("POST", mlBase()+"/experiments/sync", adminToken, []M{
+		{"mlflowId": experiment, "projectName": project, "name": "orphan", "status": "active"},
+	})
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != 400 {
+		t.Fatalf("experiment under an unknown project → %d, want 400", resp.StatusCode)
+	}
+}
+
 func TestMLSync_EvaluationDatasetResolvesWithinItsOwnExperiment(t *testing.T) {
 	suffix := uniqueSuffix(t)
 	project := "evalds-project-" + suffix

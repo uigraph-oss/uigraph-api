@@ -5,10 +5,11 @@ import "context"
 type Store interface {
 	UpsertMLProjects(ctx context.Context, orgID, actorID string, in []ProjectInput) (SyncCounts, error)
 	CreateMLProject(ctx context.Context, orgID, actorID string, in ProjectInput) (*Project, error)
-	ListMLProjects(ctx context.Context, orgID string) ([]Project, error)
+	ListMLProjects(ctx context.Context, orgID string, includeDeleted bool) ([]Project, error)
 	GetMLProject(ctx context.Context, orgID, id string) (*Project, error)
 	UpdateMLProject(ctx context.Context, orgID, id, actorID string, in ProjectInput) (*Project, error)
 	DeleteMLProject(ctx context.Context, orgID, id, actorID string) error
+	RestoreMLProjects(ctx context.Context, orgID, actorID string, names []string) (int, error)
 
 	UpsertMLModels(ctx context.Context, orgID, actorID string, in []ModelInput) (SyncCounts, error)
 	CreateMLModel(ctx context.Context, m Model) error
