@@ -95,3 +95,56 @@ func TestMLSync_SoftDeletedRowCountsAsUpdatedAndStaysDeleted(t *testing.T) {
 		t.Fatal("sync resurrected a soft-deleted row, deleted_at is NULL")
 	}
 }
+
+func TestMLSync_EvaluationDatasetResolvesWithinItsOwnExperiment(t *testing.T) {
+	suffix := uniqueSuffix(t)
+	project := "evalds-project-" + suffix
+	experimentA := "evalds-exp-a-" + suffix
+	experimentB := "evalds-exp-b-" + suffix
+	digest := "evalds-digest-" + suffix
+	model := "evalds-model-" + suffix
+	version := model + "/1"
+	evaluation := version + "/evalds-run-" + suffix
+
+	mustDo(t, "POST", mlBase()+"/projects/sync", adminToken, []M{{"name": project, "type": "training", "team": "uigraph"}})
+	mustDo(t, "POST", mlBase()+"/experiments/sync", adminToken, []M{
+		{"mlflowId": experimentA, "projectName": project, "name": "a", "status": "active"},
+		{"mlflowId": experimentB, "projectName": project, "name": "b", "status": "active"},
+	})
+
+	mustDo(t, "POST", mlBase()+"/datasets/sync", adminToken, []M{
+		{"mlflowId": digest, "experimentMlflowId": experimentA, "name": "ds-a", "digest": digest, "context": "training"},
+	})
+	mustDo(t, "POST", mlBase()+"/datasets/sync", adminToken, []M{
+		{"mlflowId": digest, "experimentMlflowId": experimentB, "name": "ds-b", "digest": digest, "context": "evaluation"},
+	})
+
+	mustDo(t, "POST", mlBase()+"/models/sync", adminToken, []M{
+		{"mlflowId": model, "projectName": project, "name": model},
+	})
+	mustDo(t, "POST", mlBase()+"/versions/sync", adminToken, []M{
+		{"mlflowId": version, "modelMlflowId": model, "version": "1"},
+	})
+
+	mustDo(t, "POST", mlBase()+"/evaluations/sync", adminToken, []M{
+		{
+			"mlflowId":           evaluation,
+			"versionMlflowId":    version,
+			"experimentMlflowId": experimentB,
+			"datasetMlflowId":    digest,
+			"name":               "eval",
+			"type":               "Offline Benchmark",
+		},
+	})
+
+	var datasetName *string
+	err := testDB.DB().QueryRowContext(context.Background(),
+		`SELECT d.name FROM ml_evaluations e JOIN ml_datasets d ON d.id = e.dataset_id
+		 WHERE e.org_id=$1 AND e.mlflow_id=$2`, orgID, evaluation).Scan(&datasetName)
+	if err != nil {
+		t.Fatalf("read evaluation dataset: %v", err)
+	}
+	if datasetName == nil || *datasetName != "ds-b" {
+		t.Fatalf("evaluation linked to dataset %v, want ds-b (same experiment as the evaluation)", datasetName)
+	}
+}

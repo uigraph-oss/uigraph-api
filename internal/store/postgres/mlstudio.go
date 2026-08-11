@@ -674,9 +674,16 @@ func (d *DB) UpsertMLEvaluations(ctx context.Context, orgID, actorID string, in 
 		if !ok {
 			return counts, fmt.Errorf("%w: experiment %q", mlstudio.ErrParentNotFound, e.ExperimentMLflowID)
 		}
-		datasetID, err := resolveOptional(ctx, tx, "ml_datasets", orgID, e.DatasetMLflowID)
-		if err != nil {
-			return counts, fmt.Errorf("postgres: UpsertMLEvaluations resolve dataset: %w", err)
+		var datasetID any
+		if e.DatasetMLflowID != nil && *e.DatasetMLflowID != "" {
+			var id string
+			err := tx.QueryRowContext(ctx, `SELECT id FROM ml_datasets WHERE org_id=$1 AND experiment_id=$2 AND mlflow_id=$3 AND deleted_at IS NULL`, orgID, experimentID, *e.DatasetMLflowID).Scan(&id)
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+				return counts, fmt.Errorf("postgres: UpsertMLEvaluations resolve dataset: %w", err)
+			}
+			if err == nil {
+				datasetID = id
+			}
 		}
 		tags := e.Tags
 		if tags == nil {
@@ -723,18 +730,4 @@ func (d *DB) UpsertMLEvaluations(ctx context.Context, orgID, actorID string, in 
 		return counts, fmt.Errorf("postgres: UpsertMLEvaluations commit: %w", err)
 	}
 	return counts, nil
-}
-
-func resolveOptional(ctx context.Context, tx *sql.Tx, table, orgID string, mlflowID *string) (any, error) {
-	if mlflowID == nil || *mlflowID == "" {
-		return nil, nil
-	}
-	id, ok, err := resolveMLID(ctx, tx, table, orgID, *mlflowID)
-	if err != nil {
-		return nil, err
-	}
-	if !ok {
-		return nil, nil
-	}
-	return id, nil
 }
