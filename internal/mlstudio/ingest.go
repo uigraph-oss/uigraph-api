@@ -7,15 +7,6 @@ type SyncCounts struct {
 	Updated int `json:"updated"`
 }
 
-type RunPruneInput struct {
-	MLflowID string `json:"mlflowId"`
-}
-
-type VersionPruneInput struct {
-	ModelMLflowID string   `json:"modelMlflowId"`
-	Keep          []string `json:"keep"`
-}
-
 type ProjectInput struct {
 	Name        string  `json:"name"`
 	Type        string  `json:"type"`
