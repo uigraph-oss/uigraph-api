@@ -322,6 +322,20 @@ func (d *DB) DeleteMLProject(ctx context.Context, orgID, id, actorID string) err
 	return nil
 }
 
+func (d *DB) RestoreMLProjects(ctx context.Context, orgID, actorID string, names []string) (int, error) {
+	res, err := d.db.ExecContext(ctx, `
+		UPDATE ml_projects SET deleted_at=NULL, deleted_by=NULL, updated_by=$1, updated_at=NOW()
+		WHERE org_id=$2 AND name=ANY($3) AND deleted_at IS NOT NULL`, actorID, orgID, pq.Array(names))
+	if err != nil {
+		return 0, fmt.Errorf("postgres: RestoreMLProjects: %w", err)
+	}
+	restored, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("postgres: RestoreMLProjects rows: %w", err)
+	}
+	return int(restored), nil
+}
+
 func (d *DB) UpsertMLModels(ctx context.Context, orgID, actorID string, in []mlstudio.ModelInput) (mlstudio.SyncCounts, error) {
 	var counts mlstudio.SyncCounts
 	tx, err := d.db.BeginTx(ctx, nil)

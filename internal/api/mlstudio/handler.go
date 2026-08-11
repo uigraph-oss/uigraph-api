@@ -33,6 +33,7 @@ func Register(
 	const base = "/api/v1/orgs/{orgID}/ml"
 
 	requireScope("mlstudio:write", "POST", base+"/projects/sync", h.SyncProjects)
+	requireScope("mlstudio:write", "POST", base+"/projects/restore", h.RestoreProjects)
 	requireScope("mlstudio:write", "POST", base+"/projects", h.CreateProject)
 	requireScope("mlstudio:read", "GET", base+"/projects", h.ListProjects)
 	requireScope("mlstudio:read", "GET", base+"/projects/{projectId}", h.GetProject)

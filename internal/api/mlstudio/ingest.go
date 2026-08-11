@@ -70,6 +70,34 @@ func (h *Handler) SyncProjects(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"synced": len(in), "created": counts.Created, "updated": counts.Updated})
 }
 
+func (h *Handler) RestoreProjects(w http.ResponseWriter, r *http.Request) {
+	p, orgID, ok := h.authorizeOrg(w, r)
+	if !ok {
+		return
+	}
+	var in []struct {
+		Name string `json:"name"`
+	}
+	if err := httputil.Decode(r, &in); err != nil {
+		httputil.BadRequest(w, "invalid request body")
+		return
+	}
+	names := make([]string, 0, len(in))
+	for i := range in {
+		if in[i].Name == "" {
+			httputil.BadRequest(w, "name is required")
+			return
+		}
+		names = append(names, in[i].Name)
+	}
+	restored, err := h.store.RestoreMLProjects(r.Context(), orgID, p.UserID, names)
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{"restored": restored})
+}
+
 func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	p, orgID, ok := h.authorizeOrg(w, r)
 	if !ok {

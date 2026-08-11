@@ -50,7 +50,17 @@ func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	projects, err := h.store.ListMLProjects(r.Context(), orgID)
+	var includeDeleted bool
+	switch r.URL.Query().Get("includeDeleted") {
+	case "", "false":
+		includeDeleted = false
+	case "true":
+		includeDeleted = true
+	default:
+		httputil.BadRequest(w, `includeDeleted must be "true" or "false"`)
+		return
+	}
+	projects, err := h.store.ListMLProjects(r.Context(), orgID, includeDeleted)
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
