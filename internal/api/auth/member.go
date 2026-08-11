@@ -1,24 +1,64 @@
 package auth
 
 import (
+	"log/slog"
 	"net/http"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/uigraph/app/internal/enterprise"
 	"github.com/uigraph/app/internal/httputil"
 	"github.com/uigraph/app/internal/org"
 	"github.com/uigraph/app/internal/store"
 )
 
 type MemberHandler struct {
-	members org.MemberStore
-	users   org.UserStore
-	teams   org.TeamStore
+	members    org.MemberStore
+	users      org.UserStore
+	teams      org.TeamStore
+	enterprise *enterprise.Client // nil for self-hosted (UIGRAPH_ENTERPRISE unset)
 }
 
-func NewMemberHandler(m org.MemberStore, u org.UserStore, t org.TeamStore) *MemberHandler {
-	return &MemberHandler{members: m, users: u, teams: t}
+func NewMemberHandler(m org.MemberStore, u org.UserStore, t org.TeamStore, ent *enterprise.Client) *MemberHandler {
+	return &MemberHandler{members: m, users: u, teams: t, enterprise: ent}
+}
+
+// seatLimitReached checks orgID against uigraph-enterprise's current seat
+// limit before a new member is added. Returns true (and has already written
+// a 409/403 response via httputil.JSON) when the org is at or over capacity.
+// A nil h.enterprise (self-hosted) always returns false without any network
+// call. Any error reaching uigraph-enterprise fails open -- a billing-service
+// hiccup must never block adding a teammate -- and is logged for visibility.
+func seatLimitReached(w http.ResponseWriter, r *http.Request, ent *enterprise.Client, members org.MemberStore, orgID string, status int) bool {
+	if ent == nil {
+		return false
+	}
+	info, err := ent.SeatLimit(r.Context(), orgID)
+	if err != nil {
+		slog.WarnContext(r.Context(), "seat-limit check failed, allowing member add (fail open)", "err", err, "orgId", orgID)
+		return false
+	}
+	if info.Limit < 0 {
+		return false
+	}
+	current, err := members.ListMembers(r.Context(), orgID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return true
+	}
+	if len(current) < info.Limit {
+		return false
+	}
+	plan := info.PlanID
+	if plan == "" {
+		plan = "free"
+	}
+	httputil.JSON(w, status, map[string]string{
+		"code":    "seat_limit_reached",
+		"message": "Your organization has reached its seat limit on the " + plan + " plan. Upgrade to add more members.",
+	})
+	return true
 }
 
 // ── Request / Response types ─────────────────────────────────────────────────
@@ -116,6 +156,9 @@ func (h *MemberHandler) Add(w http.ResponseWriter, r *http.Request) {
 	}
 	if existing != nil {
 		httputil.Error(w, r, store.ErrConflict)
+		return
+	}
+	if seatLimitReached(w, r, h.enterprise, h.members, orgID, http.StatusConflict) {
 		return
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)

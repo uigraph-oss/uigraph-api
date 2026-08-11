@@ -15,6 +15,7 @@ import (
 
 	"github.com/uigraph/app/internal/asset"
 	"github.com/uigraph/app/internal/crypto"
+	"github.com/uigraph/app/internal/enterprise"
 	"github.com/uigraph/app/internal/httputil"
 	"github.com/uigraph/app/internal/identity"
 	authmw "github.com/uigraph/app/internal/middleware"
@@ -53,9 +54,10 @@ type SessionHandler struct {
 	publicURL    string // externally reachable base URL, e.g. https://uigraph.example.com
 	frontendURL  string // SPA base URL; empty falls back to publicURL
 	cookieDomain string // e.g. ".example.com" to share the session cookie across subdomains; empty = host-only
+	enterprise   *enterprise.Client // nil for self-hosted (UIGRAPH_ENTERPRISE unset)
 }
 
-func NewSessionHandler(s sessionStore, assets *asset.Resolver, cipher *crypto.Cipher, publicURL, frontendURL, cookieDomain string) *SessionHandler {
+func NewSessionHandler(s sessionStore, assets *asset.Resolver, cipher *crypto.Cipher, publicURL, frontendURL, cookieDomain string, ent *enterprise.Client) *SessionHandler {
 	return &SessionHandler{
 		store:        s,
 		assets:       assets,
@@ -63,6 +65,7 @@ func NewSessionHandler(s sessionStore, assets *asset.Resolver, cipher *crypto.Ci
 		publicURL:    strings.TrimRight(publicURL, "/"),
 		frontendURL:  strings.TrimRight(frontendURL, "/"),
 		cookieDomain: cookieDomain,
+		enterprise:   ent,
 	}
 }
 
@@ -578,6 +581,20 @@ func (h *SessionHandler) completeLogin(w http.ResponseWriter, r *http.Request, p
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
+	}
+	existingMember, err := h.store.GetMember(r.Context(), u.ID, prov.OrgID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if existingMember == nil {
+		// A brand-new membership via SSO self-join, not just a role refresh on
+		// an already-existing member -- this is the only case that should ever
+		// be seat-gated here, so an org that drifts over its cap doesn't lock
+		// out members who were already in it.
+		if seatLimitReached(w, r, h.enterprise, h.store, prov.OrgID, http.StatusForbidden) {
+			return
+		}
 	}
 	err = h.store.UpsertMember(r.Context(), org.OrgMember{
 		UserID: u.ID,
