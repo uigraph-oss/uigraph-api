@@ -262,7 +262,7 @@ func (d *DB) UpdateMLProject(ctx context.Context, orgID, id, actorID string, p m
 
 func (d *DB) DeleteMLProject(ctx context.Context, orgID, id, actorID string) error {
 	_, err := d.db.ExecContext(ctx, `
-		UPDATE ml_projects SET deleted_at=NOW(), updated_by=$1, updated_at=NOW()
+		UPDATE ml_projects SET deleted_at=NOW(), deleted_by=$1, updated_by=$1, updated_at=NOW()
 		WHERE org_id=$2 AND id=$3 AND deleted_at IS NULL`, actorID, orgID, id)
 	if err != nil {
 		return fmt.Errorf("postgres: DeleteMLProject: %w", err)
