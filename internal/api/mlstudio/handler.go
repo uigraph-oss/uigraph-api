@@ -46,6 +46,8 @@ func Register(
 	requireScope("mlstudio:write", "POST", base+"/artifacts/sync", h.SyncArtifacts)
 	requireScope("mlstudio:write", "POST", base+"/datasets/sync", h.SyncDatasets)
 	requireScope("mlstudio:write", "POST", base+"/evaluations/sync", h.SyncEvaluations)
+	requireScope("mlstudio:write", "POST", base+"/runs/prune", h.PruneRuns)
+	requireScope("mlstudio:write", "POST", base+"/versions/prune", h.PruneVersions)
 
 	requireScope("mlstudio:write", "POST", base+"/models", h.CreateModel)
 	requireScope("mlstudio:write", "PATCH", base+"/models/{modelId}", h.UpdateModel)
