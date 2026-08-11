@@ -41,15 +41,15 @@ func call(t *testing.T, h http.HandlerFunc, body string) (int, map[string]any) {
 }
 
 func TestSyncProjects_ReportsCreatedAndUpdated(t *testing.T) {
-	store := &fakeStore{projectCount: mlstudio.SyncCounts{Created: 1, Updated: 2}}
+	store := &fakeStore{projectCount: mlstudio.SyncCounts{Created: 1, Updated: 1}}
 	h := New(store, nil)
 
 	code, out := call(t, h.SyncProjects, `[{"name":"p1","type":"training"},{"name":"p2","type":"model"},{"name":"p3","type":"model"}]`)
 	if code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (%v)", code, out)
 	}
-	if out["synced"] != float64(3) || out["created"] != float64(1) || out["updated"] != float64(2) {
-		t.Fatalf("response = %v, want synced 3 created 1 updated 2", out)
+	if out["synced"] != float64(3) || out["created"] != float64(1) || out["updated"] != float64(1) {
+		t.Fatalf("response = %v, want synced 3 created 1 updated 1", out)
 	}
 	if len(store.projects) != 3 {
 		t.Fatalf("store received %d projects, want 3", len(store.projects))

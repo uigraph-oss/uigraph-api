@@ -47,8 +47,13 @@ func TestMLSync_CountsCreatedThenUpdated(t *testing.T) {
 	}
 
 	created, updated = syncCounts(t, "/projects/sync", []M{{"name": project, "type": "training", "team": "uigraph"}})
+	if created != 0 || updated != 0 {
+		t.Fatalf("identical project re-sync = created %d updated %d, want 0/0", created, updated)
+	}
+
+	created, updated = syncCounts(t, "/projects/sync", []M{{"name": project, "type": "training", "description": "changed", "team": "uigraph"}})
 	if created != 0 || updated != 1 {
-		t.Fatalf("second project sync = created %d updated %d, want 0/1", created, updated)
+		t.Fatalf("changed project re-sync = created %d updated %d, want 0/1", created, updated)
 	}
 
 	created, updated = syncCounts(t, "/experiments/sync", []M{
@@ -59,14 +64,58 @@ func TestMLSync_CountsCreatedThenUpdated(t *testing.T) {
 	}
 
 	created, updated = syncCounts(t, "/experiments/sync", []M{
+		{"mlflowId": experiment, "projectName": project, "name": "counts", "status": "active"},
+	})
+	if created != 0 || updated != 0 {
+		t.Fatalf("identical experiment re-sync = created %d updated %d, want 0/0", created, updated)
+	}
+
+	created, updated = syncCounts(t, "/experiments/sync", []M{
 		{"mlflowId": experiment, "projectName": project, "name": "counts renamed", "status": "active"},
 	})
 	if created != 0 || updated != 1 {
-		t.Fatalf("second experiment sync = created %d updated %d, want 0/1", created, updated)
+		t.Fatalf("renamed experiment re-sync = created %d updated %d, want 0/1", created, updated)
 	}
 }
 
-func TestMLSync_SoftDeletedRowCountsAsUpdatedAndStaysDeleted(t *testing.T) {
+func TestMLSync_RunMetricChangeCountsAsUpdated(t *testing.T) {
+	suffix := uniqueSuffix(t)
+	project := "metric-project-" + suffix
+	experiment := "metric-exp-" + suffix
+	run := "metric-run-" + suffix
+
+	mustDo(t, "POST", mlBase()+"/projects/sync", adminToken, []M{{"name": project, "type": "training", "team": "uigraph"}})
+	mustDo(t, "POST", mlBase()+"/experiments/sync", adminToken, []M{
+		{"mlflowId": experiment, "projectName": project, "name": "metric", "status": "active"},
+	})
+
+	runBody := func(accuracy float64) []M {
+		return []M{{
+			"mlflowId":           run,
+			"experimentMlflowId": experiment,
+			"name":               "metric-run",
+			"status":             "completed",
+			"metrics":            M{"accuracy": accuracy},
+		}}
+	}
+
+	created, updated := syncCounts(t, "/runs/sync", runBody(0.9))
+	if created != 1 || updated != 0 {
+		t.Fatalf("first run sync = created %d updated %d, want 1/0", created, updated)
+	}
+
+	created, updated = syncCounts(t, "/runs/sync", runBody(0.9))
+	if created != 0 || updated != 0 {
+		t.Fatalf("identical run re-sync = created %d updated %d, want 0/0", created, updated)
+	}
+
+	created, updated = syncCounts(t, "/runs/sync", runBody(0.95))
+	if created != 0 || updated != 1 {
+		t.Fatalf("run re-sync with a changed metric = created %d updated %d, want 0/1", created, updated)
+	}
+}
+
+func TestMLSync_SoftDeletedRowStaysDeleted(t *testing.T) {
 	suffix := uniqueSuffix(t)
 	project := "softdel-project-" + suffix
 	experiment := "softdel-exp-" + suffix
@@ -88,8 +137,8 @@ func TestMLSync_SoftDeletedRowCountsAsUpdatedAndStaysDeleted(t *testing.T) {
 	created, updated = syncCounts(t, "/experiments/sync", []M{
 		{"mlflowId": experiment, "projectName": project, "name": "softdel", "status": "active"},
 	})
-	if created != 0 || updated != 1 {
-		t.Fatalf("re-sync of a soft-deleted row = created %d updated %d, want 0/1", created, updated)
+	if created != 0 || updated != 0 {
+		t.Fatalf("re-sync of a soft-deleted row = created %d updated %d, want 0/0", created, updated)
 	}
 	if mlDeletedAt(t, "ml_experiments", experiment) == nil {
 		t.Fatal("sync resurrected a soft-deleted row, deleted_at is NULL")

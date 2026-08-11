@@ -24,16 +24,16 @@ func resolveMLID(ctx context.Context, tx *sql.Tx, table, orgID, mlflowID string)
 	return id, true, nil
 }
 
-func mlRowExists(ctx context.Context, tx *sql.Tx, table, orgID, mlflowID string) (bool, error) {
-	var one int
-	err := tx.QueryRowContext(ctx, `SELECT 1 FROM `+table+` WHERE org_id=$1 AND mlflow_id=$2`, orgID, mlflowID).Scan(&one)
+func mlRowID(ctx context.Context, tx *sql.Tx, table, orgID, mlflowID string) (string, bool, error) {
+	var id string
+	err := tx.QueryRowContext(ctx, `SELECT id FROM `+table+` WHERE org_id=$1 AND mlflow_id=$2`, orgID, mlflowID).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
+		return "", false, nil
 	}
 	if err != nil {
-		return false, err
+		return "", false, err
 	}
-	return true, nil
+	return id, true, nil
 }
 
 func jsonBytes(v any) ([]byte, error) {
@@ -48,26 +48,41 @@ type mlQuerier interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 }
 
-func replaceMLParams(ctx context.Context, tx *sql.Tx, table, parentCol, parentID string, params map[string]any) error {
+func replaceMLParams(ctx context.Context, tx *sql.Tx, table, parentCol, parentID string, params map[string]any) (bool, error) {
+	var affected int64
 	keys := make([]string, 0, len(params))
 	for key, value := range params {
 		encoded, err := json.Marshal(value)
 		if err != nil {
-			return fmt.Errorf("param %q: %w", key, err)
+			return false, fmt.Errorf("param %q: %w", key, err)
 		}
-		_, err = tx.ExecContext(ctx, `
+		res, err := tx.ExecContext(ctx, `
 			INSERT INTO `+table+` (`+parentCol+`, key, value) VALUES ($1,$2,$3)
-			ON CONFLICT (`+parentCol+`, key) DO UPDATE SET value=EXCLUDED.value`, parentID, key, string(encoded))
+			ON CONFLICT (`+parentCol+`, key) DO UPDATE SET value=EXCLUDED.value
+			WHERE `+table+`.value IS DISTINCT FROM EXCLUDED.value`, parentID, key, string(encoded))
 		if err != nil {
-			return err
+			return false, err
 		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return false, err
+		}
+		affected += n
 		keys = append(keys, key)
 	}
-	_, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE `+parentCol+`=$1 AND key <> ALL($2)`, parentID, pq.Array(keys))
-	return err
+	res, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE `+parentCol+`=$1 AND key <> ALL($2)`, parentID, pq.Array(keys))
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return affected+n > 0, nil
 }
 
-func replaceMLMetrics(ctx context.Context, tx *sql.Tx, table, parentCol, parentID string, metrics map[string]any) error {
+func replaceMLMetrics(ctx context.Context, tx *sql.Tx, table, parentCol, parentID string, metrics map[string]any) (bool, error) {
+	var affected int64
 	keys := make([]string, 0, len(metrics))
 	for key, value := range metrics {
 		var number float64
@@ -77,22 +92,35 @@ func replaceMLMetrics(ctx context.Context, tx *sql.Tx, table, parentCol, parentI
 		case json.Number:
 			parsed, err := v.Float64()
 			if err != nil {
-				return fmt.Errorf("metric %q: %w", key, err)
+				return false, fmt.Errorf("metric %q: %w", key, err)
 			}
 			number = parsed
 		default:
-			return fmt.Errorf("%w: metric %q must be a number", mlstudio.ErrInvalidValue, key)
+			return false, fmt.Errorf("%w: metric %q must be a number", mlstudio.ErrInvalidValue, key)
 		}
-		_, err := tx.ExecContext(ctx, `
+		res, err := tx.ExecContext(ctx, `
 			INSERT INTO `+table+` (`+parentCol+`, key, value) VALUES ($1,$2,$3)
-			ON CONFLICT (`+parentCol+`, key) DO UPDATE SET value=EXCLUDED.value`, parentID, key, number)
+			ON CONFLICT (`+parentCol+`, key) DO UPDATE SET value=EXCLUDED.value
+			WHERE `+table+`.value IS DISTINCT FROM EXCLUDED.value`, parentID, key, number)
 		if err != nil {
-			return err
+			return false, err
 		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return false, err
+		}
+		affected += n
 		keys = append(keys, key)
 	}
-	_, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE `+parentCol+`=$1 AND key <> ALL($2)`, parentID, pq.Array(keys))
-	return err
+	res, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE `+parentCol+`=$1 AND key <> ALL($2)`, parentID, pq.Array(keys))
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return affected+n > 0, nil
 }
 
 func loadMLParams(ctx context.Context, q mlQuerier, table, parentCol string, parentIDs []string) (map[string]map[string]any, error) {
@@ -205,22 +233,35 @@ func (d *DB) UpsertMLProjects(ctx context.Context, orgID, actorID string, in []m
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return counts, fmt.Errorf("postgres: UpsertMLProjects existing: %w", err)
 		}
-		if err == nil {
-			counts.Updated++
-		}
-		if errors.Is(err, sql.ErrNoRows) {
-			counts.Created++
-		}
-		_, err = tx.ExecContext(ctx, `
+		existed := err == nil
+
+		var id string
+		err = tx.QueryRowContext(ctx, `
 			INSERT INTO ml_projects (org_id, name, type, description, source_type, source_url, team_id, synced_at, created_by, updated_by)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,NOW(),$8,$8)
 			ON CONFLICT (org_id, name) DO UPDATE SET
 				type=EXCLUDED.type, description=EXCLUDED.description, source_type=EXCLUDED.source_type,
 				source_url=EXCLUDED.source_url, team_id=EXCLUDED.team_id,
-				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()`,
-			orgID, p.Name, p.Type, p.Description, p.SourceType, p.SourceURL, p.TeamID, actorID)
-		if err != nil {
+				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()
+			WHERE ROW(ml_projects.type, ml_projects.description, ml_projects.source_type, ml_projects.source_url, ml_projects.team_id)
+			   IS DISTINCT FROM ROW(EXCLUDED.type, EXCLUDED.description, EXCLUDED.source_type, EXCLUDED.source_url, EXCLUDED.team_id)
+			RETURNING id`,
+			orgID, p.Name, p.Type, p.Description, p.SourceType, p.SourceURL, p.TeamID, actorID).Scan(&id)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return counts, fmt.Errorf("postgres: UpsertMLProjects upsert: %w", err)
+		}
+		changed := err == nil
+
+		if !existed {
+			counts.Created++
+		}
+		if existed && changed {
+			counts.Updated++
+		}
+
+		_, err = tx.ExecContext(ctx, `UPDATE ml_projects SET synced_at=NOW() WHERE org_id=$1 AND name=$2`, orgID, p.Name)
+		if err != nil {
+			return counts, fmt.Errorf("postgres: UpsertMLProjects synced_at: %w", err)
 		}
 	}
 	if err := tx.Commit(); err != nil {
@@ -315,17 +356,12 @@ func (d *DB) UpsertMLModels(ctx context.Context, orgID, actorID string, in []mls
 		if m.ActorID != "" {
 			actor = m.ActorID
 		}
-		existed, err := mlRowExists(ctx, tx, "ml_models", orgID, m.MLflowID)
+		_, existed, err := mlRowID(ctx, tx, "ml_models", orgID, m.MLflowID)
 		if err != nil {
 			return counts, fmt.Errorf("postgres: UpsertMLModels existing: %w", err)
 		}
-		if existed {
-			counts.Updated++
-		}
-		if !existed {
-			counts.Created++
-		}
-		_, err = tx.ExecContext(ctx, `
+		var id string
+		err = tx.QueryRowContext(ctx, `
 			INSERT INTO ml_models (org_id, mlflow_id, project_id, name, description, tags, problem_type, domain, license, intended_use, limitations, recommendations, considerations, production_version_id, mlflow_created_at, mlflow_updated_at, origin, synced_at, created_by, updated_by)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'mlflow',NOW(),$17,$17)
 			ON CONFLICT (org_id, mlflow_id) DO UPDATE SET
@@ -336,10 +372,31 @@ func (d *DB) UpsertMLModels(ctx context.Context, orgID, actorID string, in []mls
 				recommendations=EXCLUDED.recommendations, considerations=EXCLUDED.considerations,
 				production_version_id=COALESCE(EXCLUDED.production_version_id, ml_models.production_version_id),
 				mlflow_created_at=EXCLUDED.mlflow_created_at, mlflow_updated_at=EXCLUDED.mlflow_updated_at,
-				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()`,
-			orgID, m.MLflowID, projectID, m.Name, m.Description, pq.Array(tags), problemType, m.Domain, m.License, m.IntendedUse, m.Limitations, m.Recommendations, m.Considerations, pv, m.CreatedAt, m.UpdatedAt, actor)
-		if err != nil {
+				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()
+			WHERE ROW(ml_models.project_id, ml_models.name, ml_models.description, ml_models.tags,
+			          ml_models.problem_type, ml_models.domain, ml_models.license,
+			          ml_models.intended_use, ml_models.limitations,
+			          ml_models.recommendations, ml_models.considerations,
+			          ml_models.production_version_id,
+			          ml_models.mlflow_created_at, ml_models.mlflow_updated_at)
+			   IS DISTINCT FROM ROW(COALESCE(EXCLUDED.project_id, ml_models.project_id), EXCLUDED.name, EXCLUDED.description, EXCLUDED.tags,
+			          EXCLUDED.problem_type, EXCLUDED.domain, EXCLUDED.license,
+			          EXCLUDED.intended_use, EXCLUDED.limitations,
+			          EXCLUDED.recommendations, EXCLUDED.considerations,
+			          COALESCE(EXCLUDED.production_version_id, ml_models.production_version_id),
+			          EXCLUDED.mlflow_created_at, EXCLUDED.mlflow_updated_at)
+			RETURNING id`,
+			orgID, m.MLflowID, projectID, m.Name, m.Description, pq.Array(tags), problemType, m.Domain, m.License, m.IntendedUse, m.Limitations, m.Recommendations, m.Considerations, pv, m.CreatedAt, m.UpdatedAt, actor).Scan(&id)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return counts, fmt.Errorf("postgres: UpsertMLModels upsert: %w", err)
+		}
+		changed := err == nil
+
+		if !existed {
+			counts.Created++
+		}
+		if existed && changed {
+			counts.Updated++
 		}
 	}
 	if err := tx.Commit(); err != nil {
@@ -396,27 +453,35 @@ func (d *DB) UpsertMLModelVersions(ctx context.Context, orgID, actorID string, i
 		if v.ActorID != "" {
 			actor = v.ActorID
 		}
-		existed, err := mlRowExists(ctx, tx, "ml_model_versions", orgID, v.MLflowID)
+		_, existed, err := mlRowID(ctx, tx, "ml_model_versions", orgID, v.MLflowID)
 		if err != nil {
 			return counts, fmt.Errorf("postgres: UpsertMLModelVersions existing: %w", err)
 		}
-		if existed {
-			counts.Updated++
-		}
-		if !existed {
-			counts.Created++
-		}
-		_, err = tx.ExecContext(ctx, `
+		var id string
+		err = tx.QueryRowContext(ctx, `
 			INSERT INTO ml_model_versions (org_id, mlflow_id, model_id, version, description, run_id, mlflow_created_at, source, synced_at, created_by, updated_by)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,'mlflow',NOW(),$8,$8)
 			ON CONFLICT (org_id, mlflow_id) DO UPDATE SET
 				model_id=EXCLUDED.model_id, version=EXCLUDED.version, description=EXCLUDED.description,
 				run_id=COALESCE(EXCLUDED.run_id, ml_model_versions.run_id),
 				mlflow_created_at=EXCLUDED.mlflow_created_at,
-				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()`,
-			orgID, v.MLflowID, modelID, v.Version, v.Description, runID, v.CreatedAt, actor)
-		if err != nil {
+				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()
+			WHERE ROW(ml_model_versions.model_id, ml_model_versions.version, ml_model_versions.description,
+			          ml_model_versions.run_id, ml_model_versions.mlflow_created_at)
+			   IS DISTINCT FROM ROW(EXCLUDED.model_id, EXCLUDED.version, EXCLUDED.description,
+			          COALESCE(EXCLUDED.run_id, ml_model_versions.run_id), EXCLUDED.mlflow_created_at)
+			RETURNING id`,
+			orgID, v.MLflowID, modelID, v.Version, v.Description, runID, v.CreatedAt, actor).Scan(&id)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return counts, fmt.Errorf("postgres: UpsertMLModelVersions upsert: %w", err)
+		}
+		changed := err == nil
+
+		if !existed {
+			counts.Created++
+		}
+		if existed && changed {
+			counts.Updated++
 		}
 	}
 	if err := tx.Commit(); err != nil {
@@ -445,26 +510,32 @@ func (d *DB) UpsertMLExperiments(ctx context.Context, orgID, actorID string, in 
 		if e.ActorID != "" {
 			actor = e.ActorID
 		}
-		existed, err := mlRowExists(ctx, tx, "ml_experiments", orgID, e.MLflowID)
+		_, existed, err := mlRowID(ctx, tx, "ml_experiments", orgID, e.MLflowID)
 		if err != nil {
 			return counts, fmt.Errorf("postgres: UpsertMLExperiments existing: %w", err)
 		}
-		if existed {
-			counts.Updated++
-		}
-		if !existed {
-			counts.Created++
-		}
-		_, err = tx.ExecContext(ctx, `
+		var id string
+		err = tx.QueryRowContext(ctx, `
 			INSERT INTO ml_experiments (org_id, mlflow_id, project_id, name, description, status, tags, source, synced_at, created_by, updated_by)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,'mlflow',NOW(),$8,$8)
 			ON CONFLICT (org_id, mlflow_id) DO UPDATE SET
 				project_id=COALESCE(EXCLUDED.project_id, ml_experiments.project_id),
 				name=EXCLUDED.name, description=EXCLUDED.description, status=EXCLUDED.status, tags=EXCLUDED.tags,
-				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()`,
-			orgID, e.MLflowID, projectID, e.Name, e.Description, e.Status, pq.Array(tags), actor)
-		if err != nil {
+				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()
+			WHERE ROW(ml_experiments.project_id, ml_experiments.name, ml_experiments.description, ml_experiments.status, ml_experiments.tags)
+			   IS DISTINCT FROM ROW(COALESCE(EXCLUDED.project_id, ml_experiments.project_id), EXCLUDED.name, EXCLUDED.description, EXCLUDED.status, EXCLUDED.tags)
+			RETURNING id`,
+			orgID, e.MLflowID, projectID, e.Name, e.Description, e.Status, pq.Array(tags), actor).Scan(&id)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return counts, fmt.Errorf("postgres: UpsertMLExperiments upsert: %w", err)
+		}
+		changed := err == nil
+
+		if !existed {
+			counts.Created++
+		}
+		if existed && changed {
+			counts.Updated++
 		}
 	}
 	if err := tx.Commit(); err != nil {
@@ -507,15 +578,9 @@ func (d *DB) UpsertMLRuns(ctx context.Context, orgID, actorID string, in []mlstu
 		if run.ActorID != "" {
 			actor = run.ActorID
 		}
-		existed, err := mlRowExists(ctx, tx, "ml_runs", orgID, run.MLflowID)
+		existingID, existed, err := mlRowID(ctx, tx, "ml_runs", orgID, run.MLflowID)
 		if err != nil {
 			return counts, fmt.Errorf("postgres: UpsertMLRuns existing: %w", err)
-		}
-		if existed {
-			counts.Updated++
-		}
-		if !existed {
-			counts.Created++
 		}
 		var runID string
 		err = tx.QueryRowContext(ctx, `
@@ -527,16 +592,35 @@ func (d *DB) UpsertMLRuns(ctx context.Context, orgID, actorID string, in []mlstu
 				notes=EXCLUDED.notes, tags=EXCLUDED.tags,
 				dataset_id=COALESCE(EXCLUDED.dataset_id, ml_runs.dataset_id),
 				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()
+			WHERE ROW(ml_runs.experiment_id, ml_runs.name, ml_runs.status,
+			          ml_runs.started_at, ml_runs.ended_at, ml_runs.notes, ml_runs.tags, ml_runs.dataset_id)
+			   IS DISTINCT FROM ROW(EXCLUDED.experiment_id, EXCLUDED.name, EXCLUDED.status,
+			          EXCLUDED.started_at, EXCLUDED.ended_at, EXCLUDED.notes, EXCLUDED.tags,
+			          COALESCE(EXCLUDED.dataset_id, ml_runs.dataset_id))
 			RETURNING id`,
 			orgID, run.MLflowID, experimentID, run.Name, run.Status, run.StartedAt, run.EndedAt, run.Notes, pq.Array(tags), datasetID, actor).Scan(&runID)
-		if err != nil {
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return counts, fmt.Errorf("postgres: UpsertMLRuns upsert: %w", err)
 		}
-		if err := replaceMLParams(ctx, tx, "ml_runs_params", "run_id", runID, run.Parameters); err != nil {
+		rowChanged := err == nil
+		if !rowChanged {
+			runID = existingID
+		}
+		paramsChanged, err := replaceMLParams(ctx, tx, "ml_runs_params", "run_id", runID, run.Parameters)
+		if err != nil {
 			return counts, fmt.Errorf("postgres: UpsertMLRuns parameters: %w", err)
 		}
-		if err := replaceMLMetrics(ctx, tx, "ml_runs_metrics", "run_id", runID, run.Metrics); err != nil {
+		metricsChanged, err := replaceMLMetrics(ctx, tx, "ml_runs_metrics", "run_id", runID, run.Metrics)
+		if err != nil {
 			return counts, fmt.Errorf("postgres: UpsertMLRuns metrics: %w", err)
+		}
+		changed := rowChanged || paramsChanged || metricsChanged
+
+		if !existed {
+			counts.Created++
+		}
+		if existed && changed {
+			counts.Updated++
 		}
 	}
 	if err := tx.Commit(); err != nil {
@@ -564,26 +648,34 @@ func (d *DB) UpsertMLArtifacts(ctx context.Context, orgID, actorID string, in []
 		if a.ActorID != "" {
 			actor = a.ActorID
 		}
-		existed, err := mlRowExists(ctx, tx, "ml_artifacts", orgID, a.MLflowID)
+		_, existed, err := mlRowID(ctx, tx, "ml_artifacts", orgID, a.MLflowID)
 		if err != nil {
 			return counts, fmt.Errorf("postgres: UpsertMLArtifacts existing: %w", err)
 		}
-		if existed {
-			counts.Updated++
-		}
-		if !existed {
-			counts.Created++
-		}
-		_, err = tx.ExecContext(ctx, `
+		var id string
+		err = tx.QueryRowContext(ctx, `
 			INSERT INTO ml_artifacts (org_id, mlflow_id, run_id, name, type, uri, download_uri, size, format, source, synced_at, created_by, updated_by)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'mlflow',NOW(),$10,$10)
 			ON CONFLICT (org_id, mlflow_id) DO UPDATE SET
 				run_id=EXCLUDED.run_id, name=EXCLUDED.name, type=EXCLUDED.type,
 				uri=EXCLUDED.uri, download_uri=EXCLUDED.download_uri, size=EXCLUDED.size, format=EXCLUDED.format,
-				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()`,
-			orgID, a.MLflowID, runID, a.Name, a.Type, a.URI, a.DownloadURI, a.Size, a.Format, actor)
-		if err != nil {
+				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()
+			WHERE ROW(ml_artifacts.run_id, ml_artifacts.name, ml_artifacts.type,
+			          ml_artifacts.uri, ml_artifacts.download_uri, ml_artifacts.size, ml_artifacts.format)
+			   IS DISTINCT FROM ROW(EXCLUDED.run_id, EXCLUDED.name, EXCLUDED.type,
+			          EXCLUDED.uri, EXCLUDED.download_uri, EXCLUDED.size, EXCLUDED.format)
+			RETURNING id`,
+			orgID, a.MLflowID, runID, a.Name, a.Type, a.URI, a.DownloadURI, a.Size, a.Format, actor).Scan(&id)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return counts, fmt.Errorf("postgres: UpsertMLArtifacts upsert: %w", err)
+		}
+		changed := err == nil
+
+		if !existed {
+			counts.Created++
+		}
+		if existed && changed {
+			counts.Updated++
 		}
 	}
 	if err := tx.Commit(); err != nil {
@@ -628,22 +720,32 @@ func (d *DB) UpsertMLDatasets(ctx context.Context, orgID, actorID string, in []m
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return counts, fmt.Errorf("postgres: UpsertMLDatasets existing: %w", err)
 		}
-		if err == nil {
-			counts.Updated++
-		}
-		if errors.Is(err, sql.ErrNoRows) {
-			counts.Created++
-		}
-		_, err = tx.ExecContext(ctx, `
+		existed := err == nil
+
+		var id string
+		err = tx.QueryRowContext(ctx, `
 			INSERT INTO ml_datasets (org_id, experiment_id, mlflow_id, name, digest, source, source_type, context, row_count, schema, tags, origin, synced_at, created_by, updated_by)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'mlflow',NOW(),$12,$12)
 			ON CONFLICT (org_id, experiment_id, mlflow_id) DO UPDATE SET
 				name=EXCLUDED.name, digest=EXCLUDED.digest, source=EXCLUDED.source, source_type=EXCLUDED.source_type,
 				context=EXCLUDED.context, row_count=EXCLUDED.row_count, schema=EXCLUDED.schema, tags=EXCLUDED.tags,
-				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()`,
-			orgID, experimentID, ds.MLflowID, ds.Name, ds.Digest, ds.Source, ds.SourceType, ds.Context, ds.RowCount, schemaJSON, pq.Array(tags), actor)
-		if err != nil {
+				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()
+			WHERE ROW(ml_datasets.name, ml_datasets.digest, ml_datasets.source, ml_datasets.source_type,
+			          ml_datasets.context, ml_datasets.row_count, ml_datasets.schema, ml_datasets.tags)
+			   IS DISTINCT FROM ROW(EXCLUDED.name, EXCLUDED.digest, EXCLUDED.source, EXCLUDED.source_type,
+			          EXCLUDED.context, EXCLUDED.row_count, EXCLUDED.schema, EXCLUDED.tags)
+			RETURNING id`,
+			orgID, experimentID, ds.MLflowID, ds.Name, ds.Digest, ds.Source, ds.SourceType, ds.Context, ds.RowCount, schemaJSON, pq.Array(tags), actor).Scan(&id)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return counts, fmt.Errorf("postgres: UpsertMLDatasets upsert: %w", err)
+		}
+		changed := err == nil
+
+		if !existed {
+			counts.Created++
+		}
+		if existed && changed {
+			counts.Updated++
 		}
 	}
 	if err := tx.Commit(); err != nil {
@@ -693,15 +795,9 @@ func (d *DB) UpsertMLEvaluations(ctx context.Context, orgID, actorID string, in 
 		if e.ActorID != "" {
 			actor = e.ActorID
 		}
-		existed, err := mlRowExists(ctx, tx, "ml_evaluations", orgID, e.MLflowID)
+		existingID, existed, err := mlRowID(ctx, tx, "ml_evaluations", orgID, e.MLflowID)
 		if err != nil {
 			return counts, fmt.Errorf("postgres: UpsertMLEvaluations existing: %w", err)
-		}
-		if existed {
-			counts.Updated++
-		}
-		if !existed {
-			counts.Created++
 		}
 		var evalID string
 		err = tx.QueryRowContext(ctx, `
@@ -714,16 +810,37 @@ func (d *DB) UpsertMLEvaluations(ctx context.Context, orgID, actorID string, in 
 				started_at=EXCLUDED.started_at, ended_at=EXCLUDED.ended_at, evaluator=EXCLUDED.evaluator,
 				tags=EXCLUDED.tags,
 				synced_at=NOW(), updated_by=EXCLUDED.updated_by, updated_at=NOW()
+			WHERE ROW(ml_evaluations.version_id, ml_evaluations.experiment_id, ml_evaluations.dataset_id,
+			          ml_evaluations.name, ml_evaluations.type, ml_evaluations.description, ml_evaluations.summary,
+			          ml_evaluations.started_at, ml_evaluations.ended_at, ml_evaluations.evaluator, ml_evaluations.tags)
+			   IS DISTINCT FROM ROW(EXCLUDED.version_id, EXCLUDED.experiment_id,
+			          COALESCE(EXCLUDED.dataset_id, ml_evaluations.dataset_id),
+			          EXCLUDED.name, EXCLUDED.type, EXCLUDED.description, EXCLUDED.summary,
+			          EXCLUDED.started_at, EXCLUDED.ended_at, EXCLUDED.evaluator, EXCLUDED.tags)
 			RETURNING id`,
 			orgID, e.MLflowID, versionID, experimentID, datasetID, e.Name, e.Type, e.Description, e.Summary, e.StartedAt, e.EndedAt, e.Evaluator, pq.Array(tags), actor).Scan(&evalID)
-		if err != nil {
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return counts, fmt.Errorf("postgres: UpsertMLEvaluations upsert: %w", err)
 		}
-		if err := replaceMLParams(ctx, tx, "ml_evaluations_params", "eval_id", evalID, e.Parameters); err != nil {
+		rowChanged := err == nil
+		if !rowChanged {
+			evalID = existingID
+		}
+		paramsChanged, err := replaceMLParams(ctx, tx, "ml_evaluations_params", "eval_id", evalID, e.Parameters)
+		if err != nil {
 			return counts, fmt.Errorf("postgres: UpsertMLEvaluations parameters: %w", err)
 		}
-		if err := replaceMLMetrics(ctx, tx, "ml_evaluations_metrics", "eval_id", evalID, e.Metrics); err != nil {
+		metricsChanged, err := replaceMLMetrics(ctx, tx, "ml_evaluations_metrics", "eval_id", evalID, e.Metrics)
+		if err != nil {
 			return counts, fmt.Errorf("postgres: UpsertMLEvaluations metrics: %w", err)
+		}
+		changed := rowChanged || paramsChanged || metricsChanged
+
+		if !existed {
+			counts.Created++
+		}
+		if existed && changed {
+			counts.Updated++
 		}
 	}
 	if err := tx.Commit(); err != nil {
