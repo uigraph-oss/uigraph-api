@@ -68,9 +68,9 @@ type createOrgRequest struct {
 }
 
 type updateOrgRequest struct {
-	Name     string `json:"name"`
-	Disabled bool   `json:"disabled"`
-	AutoJoin bool   `json:"autoJoin"`
+	Name     *string `json:"name"`
+	Disabled *bool   `json:"disabled"`
+	AutoJoin *bool   `json:"autoJoin"`
 }
 
 // ── Handlers ─────────────────────────────────────────────────────────────────
@@ -302,7 +302,7 @@ func (h *OrgHandler) Update(w http.ResponseWriter, r *http.Request) {
 		httputil.BadRequest(w, "invalid JSON")
 		return
 	}
-	if req.Name == "" {
+	if req.Name != nil && *req.Name == "" {
 		httputil.BadRequest(w, "name is required")
 		return
 	}
@@ -315,9 +315,15 @@ func (h *OrgHandler) Update(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, r, store.ErrNotFound)
 		return
 	}
-	o.Name = req.Name
-	o.Disabled = req.Disabled
-	o.AutoJoin = req.AutoJoin
+	if req.Name != nil {
+		o.Name = *req.Name
+	}
+	if req.Disabled != nil {
+		o.Disabled = *req.Disabled
+	}
+	if req.AutoJoin != nil {
+		o.AutoJoin = *req.AutoJoin
+	}
 	if err := h.store.UpdateOrg(r.Context(), *o); err != nil {
 		httputil.Error(w, r, err)
 		return

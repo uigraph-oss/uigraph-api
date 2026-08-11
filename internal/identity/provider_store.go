@@ -22,6 +22,7 @@ type ProviderStore interface {
 	DeleteRoleMapping(ctx context.Context, providerID, mappingID string) error
 
 	CreateOrgDomain(ctx context.Context, d OrgDomain) error
+	UpdateOrgDomain(ctx context.Context, d OrgDomain) error
 	ListOrgDomains(ctx context.Context, orgID string) ([]OrgDomain, error)
 	DeleteOrgDomain(ctx context.Context, orgID, domainID string) error
 	ListOrgsByDomain(ctx context.Context, domain string) ([]org.Org, error)

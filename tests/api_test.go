@@ -705,24 +705,26 @@ func TestRoleMappings_RejectsUnknownOperator(t *testing.T) {
 	}
 }
 
-func TestOrgDomains_CreateListDelete(t *testing.T) {
+func TestOrgDomains_RejectsSecondDomain(t *testing.T) {
 	base := "/api/v1/orgs/" + orgID + "/auth/domains"
 	domain := fmt.Sprintf("d%d.example.net", time.Now().UnixNano())
 
-	created := mustDo(t, "POST", base, adminToken, M{"domain": domain})
-	domainID := str(created, "id")
-	if domainID == "" {
-		t.Fatalf("expected an id, got %v", created)
-	}
-
 	body := mustDo(t, "GET", base, adminToken, nil)
-	if len(list(body, "domains")) == 0 {
-		t.Fatal("expected at least one domain")
+	if len(list(body, "domains")) != 1 {
+		t.Fatalf("expected one domain, got %v", body)
 	}
 
-	r := do("DELETE", base+"/"+domainID, adminToken, nil)
-	if r.StatusCode != http.StatusNoContent {
-		t.Fatalf("want 204, got %d", r.StatusCode)
+	r := do("POST", base, adminToken, M{"domain": domain})
+	if r.StatusCode != http.StatusConflict {
+		t.Fatalf("want 409, got %d", r.StatusCode)
+	}
+}
+
+func TestOrgDomains_RejectsInvalidDomain(t *testing.T) {
+	base := "/api/v1/orgs/" + orgID + "/auth/domains"
+	r := do("POST", base, adminToken, M{"domain": "https://example.com"})
+	if r.StatusCode != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d", r.StatusCode)
 	}
 }
 
