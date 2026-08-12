@@ -10,11 +10,15 @@ import (
 // Authorizer evaluates RBAC decisions for UIGraph.
 type Authorizer interface {
 	// ScopesForUser resolves the user's org role into its explicit scope set.
-	// Returns nil (deny everything) when the user has no membership in orgID.
+	// Server admins get the admin scope set in every org, regardless of
+	// membership. Returns nil (deny everything) when a non-server-admin user
+	// has no membership in orgID.
 	ScopesForUser(ctx context.Context, userID, orgID string) ([]Scope, error)
 
-	// IsUserServerAdmin checks if the user has the instance-level server_admin role.
-	// This is a separate axis from org scopes and governs only global endpoints.
+	// IsUserServerAdmin checks if the user has the instance-level server_admin
+	// role. Disabled users are never server admins. This is a separate axis
+	// from org scopes and governs global endpoints plus the org-wide grant in
+	// ScopesForUser.
 	IsUserServerAdmin(ctx context.Context, userID string) (bool, error)
 }
 
@@ -41,6 +45,14 @@ func New(store rbacQuerier, users userRoleQuerier) Authorizer {
 }
 
 func (a *authorizer) ScopesForUser(ctx context.Context, userID, orgID string) ([]Scope, error) {
+	serverAdmin, err := a.IsUserServerAdmin(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if serverAdmin {
+		return ScopesForRole(RoleAdmin), nil
+	}
+
 	m, err := a.store.GetOrgMember(ctx, userID, orgID)
 	if errors.Is(err, ErrNotFound) {
 		return nil, nil
@@ -57,6 +69,9 @@ func (a *authorizer) IsUserServerAdmin(ctx context.Context, userID string) (bool
 		return false, err
 	}
 	if u == nil {
+		return false, nil
+	}
+	if u.Disabled {
 		return false, nil
 	}
 	return u.Role == "server_admin", nil

@@ -14,6 +14,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/uigraph/app/internal/asset"
+	"github.com/uigraph/app/internal/authz"
 	"github.com/uigraph/app/internal/crypto"
 	"github.com/uigraph/app/internal/enterprise"
 	"github.com/uigraph/app/internal/httputil"
@@ -790,6 +791,27 @@ func (h *SessionHandler) MyOrgs(w http.ResponseWriter, r *http.Request) {
 		httputil.Unauthorized(w)
 		return
 	}
+
+	if p.IsServerAdmin {
+		all, err := h.store.ListOrgs(r.Context())
+		if err != nil {
+			httputil.Error(w, r, err)
+			return
+		}
+		orgs := make([]myOrg, 0, len(all))
+		for _, o := range all {
+			orgs = append(orgs, myOrg{
+				ID:             o.ID,
+				Name:           o.Name,
+				LogoURL:        h.avatarURL(r, o.LogoAssetID),
+				Role:           string(authz.RoleAdmin),
+				OnboardingDone: o.OnboardingDone,
+			})
+		}
+		httputil.JSON(w, http.StatusOK, map[string]any{"orgs": orgs})
+		return
+	}
+
 	memberships, err := h.store.ListOrgsForUser(r.Context(), p.UserID)
 	if err != nil {
 		httputil.Error(w, r, err)

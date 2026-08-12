@@ -33,7 +33,7 @@ func (v *SessionVerifier) VerifyBearer(token string) (identity.Principal, error)
 	}
 	isServerAdmin := false
 	u, err := v.susers.GetUser(context.Background(), sess.UserID)
-	if err == nil && u != nil && u.Role == "server_admin" {
+	if err == nil && u != nil && !u.Disabled && u.Role == "server_admin" {
 		isServerAdmin = true
 	}
 	return identity.Principal{
