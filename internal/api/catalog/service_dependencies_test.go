@@ -63,7 +63,7 @@ func (*fakeDependencyStore) UpdateService(_ context.Context, _ catalogpkg.Servic
 func (*fakeDependencyStore) SoftDeleteService(_ context.Context, _, _ string) error {
 	return errNotMocked
 }
-func (*fakeDependencyStore) ListServiceDocs(_ context.Context, _ string) ([]catalogpkg.ServiceDoc, error) {
+func (*fakeDependencyStore) ListServiceDocs(_ context.Context, _ string, _ *string) ([]catalogpkg.ServiceDoc, error) {
 	return nil, errNotMocked
 }
 func (*fakeDependencyStore) GetServiceDoc(_ context.Context, _, _ string) (*catalogpkg.ServiceDoc, error) {
@@ -82,7 +82,7 @@ func (*fakeDependencyStore) GetDoc(_ context.Context, _ string) (*docspkg.Doc, e
 	return nil, errNotMocked
 }
 func (*fakeDependencyStore) CreateDoc(_ context.Context, _ docspkg.Doc) error { return errNotMocked }
-func (*fakeDependencyStore) ListServiceDiagrams(_ context.Context, _ string) ([]catalogpkg.ServiceDiagram, error) {
+func (*fakeDependencyStore) ListServiceDiagrams(_ context.Context, _ string, _ *string) ([]catalogpkg.ServiceDiagram, error) {
 	return nil, errNotMocked
 }
 func (*fakeDependencyStore) GetServiceDiagram(_ context.Context, _, _ string) (*catalogpkg.ServiceDiagram, error) {
@@ -103,7 +103,7 @@ func (*fakeDependencyStore) CreateDiagram(_ context.Context, _ diagrampkg.Diagra
 func (*fakeDependencyStore) CreateDiagramVersion(_ context.Context, _ diagrampkg.Version) error {
 	return errNotMocked
 }
-func (*fakeDependencyStore) ListAPIGroups(_ context.Context, _ string) ([]catalogpkg.APIGroup, error) {
+func (*fakeDependencyStore) ListAPIGroups(_ context.Context, _ string, _ *string) ([]catalogpkg.APIGroup, error) {
 	return nil, errNotMocked
 }
 func (*fakeDependencyStore) GetAPIGroup(_ context.Context, _ string) (*catalogpkg.APIGroup, error) {
@@ -133,10 +133,10 @@ func (*fakeDependencyStore) LatestAPIGroupVersionNumber(_ context.Context, _ str
 func (*fakeDependencyStore) PublishAPIGroupVersion(_ context.Context, _ catalogpkg.PublishAPIGroupVersionInput) (catalogpkg.APIGroupVersion, error) {
 	return catalogpkg.APIGroupVersion{}, errNotMocked
 }
-func (*fakeDependencyStore) ListAPIEndpoints(_ context.Context, _ string) ([]catalogpkg.APIEndpoint, error) {
+func (*fakeDependencyStore) ListAPIEndpoints(_ context.Context, _ string, _ *string) ([]catalogpkg.APIEndpoint, error) {
 	return nil, errNotMocked
 }
-func (*fakeDependencyStore) ListAPIEndpointsForVersion(_ context.Context, _, _ string) ([]catalogpkg.APIEndpoint, error) {
+func (*fakeDependencyStore) ListAPIEndpointsForVersion(_ context.Context, _, _ string, _ *string) ([]catalogpkg.APIEndpoint, error) {
 	return nil, errNotMocked
 }
 func (*fakeDependencyStore) GetAPIEndpoint(_ context.Context, _ string) (*catalogpkg.APIEndpoint, error) {
@@ -157,7 +157,7 @@ func (*fakeDependencyStore) SoftDeleteCurrentAPIEndpoints(_ context.Context, _, 
 func (*fakeDependencyStore) CopyEndpointsForVersion(_ context.Context, _, _, _ string) error {
 	return errNotMocked
 }
-func (*fakeDependencyStore) ListServiceDBs(_ context.Context, _ string) ([]catalogpkg.ServiceDB, error) {
+func (*fakeDependencyStore) ListServiceDBs(_ context.Context, _ string, _ *string) ([]catalogpkg.ServiceDB, error) {
 	return nil, errNotMocked
 }
 func (*fakeDependencyStore) GetServiceDB(_ context.Context, _ string) (*catalogpkg.ServiceDB, error) {
@@ -214,7 +214,7 @@ func (*fakeDependencyStore) SoftDeleteSavedQuery(_ context.Context, _, _ string)
 func (*fakeDependencyStore) UpsertSavedQueryBySourceRef(_ context.Context, _ catalogpkg.SavedQuery) (catalogpkg.SavedQuery, bool, error) {
 	return catalogpkg.SavedQuery{}, false, errNotMocked
 }
-func (*fakeDependencyStore) ListTestPacks(_ context.Context, _ string) ([]catalogpkg.TestPack, error) {
+func (*fakeDependencyStore) ListTestPacks(_ context.Context, _ string, _ *string) ([]catalogpkg.TestPack, error) {
 	return nil, errNotMocked
 }
 func (*fakeDependencyStore) GetTestPack(_ context.Context, _ string) (*catalogpkg.TestPack, error) {
@@ -229,7 +229,7 @@ func (*fakeDependencyStore) UpdateTestPack(_ context.Context, _ catalogpkg.TestP
 func (*fakeDependencyStore) SoftDeleteTestPack(_ context.Context, _, _ string) error {
 	return errNotMocked
 }
-func (*fakeDependencyStore) ListTestCases(_ context.Context, _ string, _ *string) ([]catalogpkg.TestCase, error) {
+func (*fakeDependencyStore) ListTestCases(_ context.Context, _ string, _, _ *string) ([]catalogpkg.TestCase, error) {
 	return nil, errNotMocked
 }
 func (*fakeDependencyStore) GetTestCase(_ context.Context, _ string) (*catalogpkg.TestCase, error) {

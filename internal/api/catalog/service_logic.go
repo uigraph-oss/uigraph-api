@@ -134,7 +134,7 @@ func (h *Handler) publishAPIGroupVersion(ctx context.Context, p publishParams) (
 		in.NewEndpoints[i].CreatedByCommitHash = p.commitHash
 	}
 	if in.ReplaceEndpoints {
-		if existing, err := h.store.ListAPIEndpoints(ctx, g.ID); err == nil {
+		if existing, err := h.store.ListAPIEndpoints(ctx, g.ID, nil); err == nil {
 			preserveEndpointSLAs(existing, in.NewEndpoints)
 		}
 	}

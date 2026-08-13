@@ -23,6 +23,7 @@ import (
 // @Security BearerAuth
 // @Param    orgID  path  string  true  "orgID"
 // @Param    serviceID  path  string  true  "serviceID"
+// @Param    exact_name  query  string  false  "Exact (case-insensitive) name match"
 // @Success  200  {object}  map[string]interface{}
 // @Failure  401  {object}  httputil.errorBody
 // @Failure  403  {object}  httputil.errorBody
@@ -30,7 +31,7 @@ import (
 // @Failure  500  {object}  httputil.errorBody
 // @Router   /orgs/{orgID}/services/{serviceID}/api-groups [get]
 func (h *Handler) ListAPIGroups(w http.ResponseWriter, r *http.Request) {
-	groups, err := h.store.ListAPIGroups(r.Context(), r.PathValue("serviceID"))
+	groups, err := h.store.ListAPIGroups(r.Context(), r.PathValue("serviceID"), httputil.Exact(r.URL.Query(), "exact_name"))
 	if err != nil {
 		httputil.Error(w, r, err)
 		return

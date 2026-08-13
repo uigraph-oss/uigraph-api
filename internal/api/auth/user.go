@@ -75,6 +75,10 @@ type updateUserRequest struct {
 	Disabled *bool  `json:"disabled,omitempty"`
 }
 
+func validUserRole(role string) bool {
+	return role == "user" || role == "server_admin"
+}
+
 // ── Handlers ─────────────────────────────────────────────────────────────────
 
 // List returns all users globally (server admin only).
@@ -131,6 +135,10 @@ func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
 	role := req.Role
 	if role == "" {
 		role = "user"
+	}
+	if !validUserRole(role) {
+		httputil.BadRequest(w, "role must be 'user' or 'server_admin'")
+		return
 	}
 	existing, err := h.store.GetUserByEmail(r.Context(), req.Email)
 	if err != nil {
@@ -218,6 +226,10 @@ func (h *UserHandler) Update(w http.ResponseWriter, r *http.Request) {
 		u.Name = req.Name
 	}
 	if req.Role != "" {
+		if !validUserRole(req.Role) {
+			httputil.BadRequest(w, "role must be 'user' or 'server_admin'")
+			return
+		}
 		u.Role = req.Role
 	}
 	if req.Disabled != nil {

@@ -17,6 +17,14 @@ import (
 // @Tags     maps
 // @Security BearerAuth
 // @Param    orgID  path  string  true  "orgID"
+// @Param    exact_name  query  string  false  "Exact (case-insensitive) name match"
+// @Param    folderId  query  string  false  "Filter by folder"
+// @Param    teamId  query  string  false  "Filter by team"
+// @Param    search  query  string  false  "Substring match on name"
+// @Param    sortBy  query  string  false  "name, created or updated"
+// @Param    sortDir  query  string  false  "asc or desc"
+// @Param    limit  query  int  false  "Page size"
+// @Param    offset  query  int  false  "Page offset"
 // @Success  200  {object}  map[string]interface{}
 // @Failure  401  {object}  httputil.errorBody
 // @Failure  403  {object}  httputil.errorBody
@@ -43,6 +51,7 @@ func (h *Handler) ListMaps(w http.ResponseWriter, r *http.Request) {
 	if v := q.Get("search"); v != "" {
 		p.Search = &v
 	}
+	p.ExactName = httputil.Exact(q, "exact_name")
 	maps, total, err := h.store.ListMaps(r.Context(), orgID, p)
 	if err != nil {
 		httputil.Error(w, r, err)

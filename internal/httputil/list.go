@@ -1,6 +1,10 @@
 package httputil
 
-import "strconv"
+import (
+	"net/url"
+	"strconv"
+	"strings"
+)
 
 const (
 	defaultListLimit = 24
@@ -30,4 +34,12 @@ func ListOffset(raw string) int {
 		return 0
 	}
 	return n
+}
+
+func Exact(q url.Values, name string) *string {
+	v := strings.TrimSpace(q.Get(name))
+	if v == "" {
+		return nil
+	}
+	return &v
 }

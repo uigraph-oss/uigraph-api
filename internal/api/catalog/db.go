@@ -22,6 +22,7 @@ import (
 // @Security BearerAuth
 // @Param    orgID  path  string  true  "orgID"
 // @Param    serviceID  path  string  true  "serviceID"
+// @Param    exact_db_name  query  string  false  "Exact (case-insensitive) dbName match"
 // @Success  200  {object}  map[string]interface{}
 // @Failure  401  {object}  httputil.errorBody
 // @Failure  403  {object}  httputil.errorBody
@@ -33,7 +34,7 @@ func (h *Handler) ListDBs(w http.ResponseWriter, r *http.Request) {
 	if ok := h.ensureServiceInOrg(w, r, serviceID); !ok {
 		return
 	}
-	dbs, err := h.store.ListServiceDBs(r.Context(), serviceID)
+	dbs, err := h.store.ListServiceDBs(r.Context(), serviceID, httputil.Exact(r.URL.Query(), "exact_db_name"))
 	if err != nil {
 		httputil.Error(w, r, err)
 		return

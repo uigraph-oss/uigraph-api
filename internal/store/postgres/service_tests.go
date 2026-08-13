@@ -49,14 +49,21 @@ func (d *DB) GetTestPack(ctx context.Context, id string) (*catalog.TestPack, err
 	return &p, nil
 }
 
-func (d *DB) ListTestPacks(ctx context.Context, serviceID string) ([]catalog.TestPack, error) {
-	const q = `
+func (d *DB) ListTestPacks(ctx context.Context, serviceID string, exactName *string) ([]catalog.TestPack, error) {
+	q := `
 		SELECT id, service_id, org_id, name, type, load_config, baseline_run_id,
 		       created_by, updated_by, created_by_commit_hash, updated_by_commit_hash, deleted_by, created_at, updated_at, deleted_at
 		FROM test_packs
-		WHERE service_id=$1 AND deleted_at IS NULL
-		ORDER BY created_at ASC`
-	rows, err := d.db.QueryContext(ctx, q, serviceID)
+		WHERE service_id=$1 AND deleted_at IS NULL`
+	args := []any{serviceID}
+	order := " ORDER BY created_at ASC, id ASC"
+	if exactName != nil {
+		args = append(args, *exactName)
+		q += fmt.Sprintf(" AND LOWER(name) = LOWER($%d)", len(args))
+		order = fmt.Sprintf(" ORDER BY (name = $%d) DESC, created_at ASC, id ASC", len(args))
+	}
+	q += order
+	rows, err := d.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListTestPacks: %w", err)
 	}
@@ -179,7 +186,7 @@ func (d *DB) GetTestCase(ctx context.Context, id string) (*catalog.TestCase, err
 	return &tc, nil
 }
 
-func (d *DB) ListTestCases(ctx context.Context, serviceID string, testPackID *string) ([]catalog.TestCase, error) {
+func (d *DB) ListTestCases(ctx context.Context, serviceID string, testPackID, exactTitle *string) ([]catalog.TestCase, error) {
 	q := `
 		SELECT id, test_pack_id, service_id, org_id, title, ord, type, description, priority,
 		       labels, linked_ticket, estimated_duration_mins, test_owner, linked_map_node_id,
@@ -194,7 +201,13 @@ func (d *DB) ListTestCases(ctx context.Context, serviceID string, testPackID *st
 		args = append(args, *testPackID)
 		q += fmt.Sprintf(" AND test_pack_id = $%d", len(args))
 	}
-	q += " ORDER BY ord ASC, created_at ASC"
+	order := " ORDER BY ord ASC, created_at ASC, id ASC"
+	if exactTitle != nil {
+		args = append(args, *exactTitle)
+		q += fmt.Sprintf(" AND LOWER(title) = LOWER($%d)", len(args))
+		order = fmt.Sprintf(" ORDER BY (title = $%d) DESC, ord ASC, created_at ASC, id ASC", len(args))
+	}
+	q += order
 	rows, err := d.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListTestCases: %w", err)

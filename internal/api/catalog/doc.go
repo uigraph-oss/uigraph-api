@@ -27,6 +27,7 @@ import (
 // @Security BearerAuth
 // @Param    orgID  path  string  true  "orgID"
 // @Param    serviceID  path  string  true  "serviceID"
+// @Param    exact_file_name  query  string  false  "Exact (case-insensitive) fileName match"
 // @Success  200  {object}  map[string]interface{}
 // @Failure  401  {object}  httputil.errorBody
 // @Failure  403  {object}  httputil.errorBody
@@ -38,7 +39,7 @@ func (h *Handler) ListDocs(w http.ResponseWriter, r *http.Request) {
 	if ok := h.ensureServiceInOrg(w, r, serviceID); !ok {
 		return
 	}
-	docs, err := h.store.ListServiceDocs(r.Context(), serviceID)
+	docs, err := h.store.ListServiceDocs(r.Context(), serviceID, httputil.Exact(r.URL.Query(), "exact_file_name"))
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
@@ -245,6 +246,7 @@ func nonEmptyPtr(s *string) *string {
 // @Security BearerAuth
 // @Param    orgID  path  string  true  "orgID"
 // @Param    serviceID  path  string  true  "serviceID"
+// @Param    exact_name  query  string  false  "Exact (case-insensitive) name match"
 // @Success  200  {object}  map[string]interface{}
 // @Failure  401  {object}  httputil.errorBody
 // @Failure  403  {object}  httputil.errorBody
@@ -256,7 +258,7 @@ func (h *Handler) ListDiagrams(w http.ResponseWriter, r *http.Request) {
 	if ok := h.ensureServiceInOrg(w, r, serviceID); !ok {
 		return
 	}
-	diagrams, err := h.store.ListServiceDiagrams(r.Context(), serviceID)
+	diagrams, err := h.store.ListServiceDiagrams(r.Context(), serviceID, httputil.Exact(r.URL.Query(), "exact_name"))
 	if err != nil {
 		httputil.Error(w, r, err)
 		return

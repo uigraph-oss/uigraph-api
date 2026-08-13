@@ -101,7 +101,8 @@ func (h *OrgHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListMine returns only the orgs the caller is actually a member of (or, for
-// a service account, the single org it's bound to). Unlike List, this is
+// a service account, the single org it's bound to). Server admins get every
+// org on the instance, since they may enter any of them. Unlike List, this is
 // safe to expose to any authenticated principal.
 // GET /api/v1/orgs
 // @Summary  ListMine
@@ -126,6 +127,19 @@ func (h *OrgHandler) ListMine(w http.ResponseWriter, r *http.Request) {
 		out := []orgResponse{}
 		if o != nil {
 			out = append(out, h.orgToResponse(r, *o))
+		}
+		httputil.JSON(w, http.StatusOK, map[string]any{"orgs": out})
+		return
+	}
+	if p.IsServerAdmin {
+		orgs, err := h.store.ListOrgs(r.Context())
+		if err != nil {
+			httputil.Error(w, r, err)
+			return
+		}
+		out := make([]orgResponse, len(orgs))
+		for i, o := range orgs {
+			out[i] = h.orgToResponse(r, o)
 		}
 		httputil.JSON(w, http.StatusOK, map[string]any{"orgs": out})
 		return
@@ -233,8 +247,9 @@ func (h *OrgHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetMine returns a single org by ID, but only if the caller is actually a
-// member of it (or, for a service account, it's the org it's bound to) —
-// unlike Get, this is safe to expose to any authenticated principal.
+// member of it (or, for a service account, it's the org it's bound to, or the
+// caller is a server admin) — unlike Get, this is safe to expose to any
+// authenticated principal.
 // GET /api/v1/orgs/{orgID}
 // @Summary  GetMine
 // @Tags     orgs
@@ -258,7 +273,7 @@ func (h *OrgHandler) GetMine(w http.ResponseWriter, r *http.Request) {
 			httputil.Forbidden(w)
 			return
 		}
-	} else {
+	} else if !p.IsServerAdmin {
 		member, err := h.members.GetMember(r.Context(), p.UserID, orgID)
 		if err != nil {
 			httputil.Error(w, r, err)

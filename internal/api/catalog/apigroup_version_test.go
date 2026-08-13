@@ -30,7 +30,7 @@ func (f *fakePublishStore) PublishAPIGroupVersion(_ context.Context, in catalogp
 // ListAPIEndpoints is called by publishAPIGroupVersion to look up existing
 // endpoints and preserve their SLAs across a spec re-sync. No existing
 // endpoints in these tests, so an empty list is always correct.
-func (f *fakePublishStore) ListAPIEndpoints(_ context.Context, _ string) ([]catalogpkg.APIEndpoint, error) {
+func (f *fakePublishStore) ListAPIEndpoints(_ context.Context, _ string, _ *string) ([]catalogpkg.APIEndpoint, error) {
 	return nil, nil
 }
 

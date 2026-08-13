@@ -23,6 +23,8 @@ import (
 // @Param    orgID  path  string  true  "orgID"
 // @Param    serviceID  path  string  true  "serviceID"
 // @Param    apiGroupID  path  string  true  "apiGroupID"
+// @Param    versionId  query  string  false  "Return a published version's snapshot instead of the working copy"
+// @Param    exact_operation_id  query  string  false  "Exact (case-sensitive) operationId match"
 // @Success  200  {object}  map[string]interface{}
 // @Failure  401  {object}  httputil.errorBody
 // @Failure  403  {object}  httputil.errorBody
@@ -31,14 +33,16 @@ import (
 // @Router   /orgs/{orgID}/services/{serviceID}/api-groups/{apiGroupID}/endpoints [get]
 func (h *Handler) ListAPIEndpoints(w http.ResponseWriter, r *http.Request) {
 	apiGroupID := r.PathValue("apiGroupID")
+	q := r.URL.Query()
+	exactOperationID := httputil.Exact(q, "exact_operation_id")
 	var (
 		endpoints []catalogpkg.APIEndpoint
 		err       error
 	)
-	if versionID := r.URL.Query().Get("versionId"); versionID != "" {
-		endpoints, err = h.store.ListAPIEndpointsForVersion(r.Context(), apiGroupID, versionID)
+	if versionID := q.Get("versionId"); versionID != "" {
+		endpoints, err = h.store.ListAPIEndpointsForVersion(r.Context(), apiGroupID, versionID, exactOperationID)
 	} else {
-		endpoints, err = h.store.ListAPIEndpoints(r.Context(), apiGroupID)
+		endpoints, err = h.store.ListAPIEndpoints(r.Context(), apiGroupID, exactOperationID)
 	}
 	if err != nil {
 		httputil.Error(w, r, err)
