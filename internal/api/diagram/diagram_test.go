@@ -11,6 +11,7 @@ import (
 	"time"
 
 	diagrampkg "github.com/uigraph/app/internal/diagram"
+	"github.com/uigraph/app/internal/enterprise"
 	"github.com/uigraph/app/internal/identity"
 	authmw "github.com/uigraph/app/internal/middleware"
 	storepkg "github.com/uigraph/app/internal/store"
@@ -343,6 +344,110 @@ func TestCreate_success(t *testing.T) {
 	}
 	if createdDiagram.CreatedBy != "user-1" {
 		t.Fatalf("unexpected createdBy: %q", createdDiagram.CreatedBy)
+	}
+}
+
+// ── Sync ─────────────────────────────────────────────────────────────────────
+
+// TestSync_createPath_AtDiagramLimit_Rejected covers the gap CLI-driven syncs
+// (uigraph-cli -> uigraph-gateway -> POST /diagrams/sync) hit: Sync has its
+// own "create path" for a new diagram (no diagramId in the request) separate
+// from Create, and needs the same free-tier limit check.
+func TestSync_createPath_AtDiagramLimit_Rejected(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"seatLimit":1,"planId":"","maxDiagrams":3,"maxServices":3,"maxMaps":3,"assistEnabled":false}`))
+	}))
+	defer srv.Close()
+
+	var created bool
+	s := &fakeDiagramStore{
+		listDiagramsFn: func(_ context.Context, _ string, _ diagrampkg.ListParams) ([]diagrampkg.Diagram, int, error) {
+			return nil, 3, nil // already at the free-tier cap of 3
+		},
+		createDiagramFn: func(_ context.Context, _ diagrampkg.Diagram) error {
+			created = true
+			return nil
+		},
+	}
+	h := New(s, &fakeObjectStore{}, nil, nil, enterprise.New(srv.URL, "secret"))
+
+	body, _ := json.Marshal(map[string]any{"name": "Architecture", "content": `{"nodes":[]}`})
+	r := withAuth(newReq(http.MethodPost, "/api/v1/orgs/org-1/diagrams/sync", body))
+	w := httptest.NewRecorder()
+	h.Sync(w, r)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("status = %d, body = %s, want %d", w.Code, w.Body.String(), http.StatusConflict)
+	}
+	if created {
+		t.Fatal("expected no diagram to be created once at the limit")
+	}
+}
+
+func TestSync_createPath_UnderDiagramLimit_Allowed(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"seatLimit":1,"planId":"","maxDiagrams":3,"maxServices":3,"maxMaps":3,"assistEnabled":false}`))
+	}))
+	defer srv.Close()
+
+	st := &fakeObjectStore{
+		uploadFn: func(_ context.Context, _, _ string, _ io.Reader, _ int64) error { return nil },
+	}
+	s := &fakeDiagramStore{
+		listDiagramsFn: func(_ context.Context, _ string, _ diagrampkg.ListParams) ([]diagrampkg.Diagram, int, error) {
+			return nil, 2, nil // one under the free-tier cap of 3
+		},
+		createDiagramFn: func(_ context.Context, _ diagrampkg.Diagram) error { return nil },
+		createVersionFn: func(_ context.Context, _ diagrampkg.Version) error { return nil },
+	}
+	h := New(s, st, nil, nil, enterprise.New(srv.URL, "secret"))
+
+	body, _ := json.Marshal(map[string]any{"name": "Architecture", "content": `{"nodes":[]}`})
+	r := withAuth(newReq(http.MethodPost, "/api/v1/orgs/org-1/diagrams/sync", body))
+	w := httptest.NewRecorder()
+	h.Sync(w, r)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, body = %s, want %d", w.Code, w.Body.String(), http.StatusCreated)
+	}
+}
+
+// TestSync_updatePath_NotGatedByDiagramLimit confirms the limit check only
+// applies to genuinely new diagrams -- updating an existing one (diagramId
+// set) must never be blocked by the org's diagram count.
+func TestSync_updatePath_NotGatedByDiagramLimit(t *testing.T) {
+	var enterpriseCalled bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		enterpriseCalled = true
+		_, _ = w.Write([]byte(`{"seatLimit":1,"planId":"","maxDiagrams":3,"maxServices":3,"maxMaps":3,"assistEnabled":false}`))
+	}))
+	defer srv.Close()
+
+	st := &fakeObjectStore{
+		uploadFn: func(_ context.Context, _, _ string, _ io.Reader, _ int64) error { return nil },
+	}
+	existing := &diagrampkg.Diagram{ID: "diagram-1", OrgID: "org-1", ContentHash: "old-hash", ContentKey: "key-1"}
+	s := &fakeDiagramStore{
+		getDiagramFn: func(_ context.Context, id string) (*diagrampkg.Diagram, error) {
+			return existing, nil
+		},
+		updateDiagramFn: func(_ context.Context, _ diagrampkg.Diagram) error { return nil },
+		latestVersionFn: func(_ context.Context, _ string) (int, error) { return 1, nil },
+		createVersionFn: func(_ context.Context, _ diagrampkg.Version) error { return nil },
+	}
+	h := New(s, st, nil, nil, enterprise.New(srv.URL, "secret"))
+
+	diagramID := "diagram-1"
+	body, _ := json.Marshal(map[string]any{"diagramId": diagramID, "name": "Architecture", "content": `{"nodes":["new"]}`})
+	r := withAuth(newReq(http.MethodPost, "/api/v1/orgs/org-1/diagrams/sync", body))
+	w := httptest.NewRecorder()
+	h.Sync(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s, want %d", w.Code, w.Body.String(), http.StatusOK)
+	}
+	if enterpriseCalled {
+		t.Fatal("expected the enterprise service not to be called on the update path")
 	}
 }
 

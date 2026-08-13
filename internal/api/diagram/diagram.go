@@ -105,13 +105,15 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, total, err := h.store.ListDiagrams(r.Context(), orgID, diagrampkg.ListParams{Limit: 1})
-	if err != nil {
-		httputil.Error(w, r, err)
-		return
-	}
-	if enterprise.ResourceLimitReached(w, r, h.enterprise, orgID, "diagram", total, func(i enterprise.SeatLimitInfo) int { return i.MaxDiagrams }) {
-		return
+	if h.enterprise != nil {
+		_, total, err := h.store.ListDiagrams(r.Context(), orgID, diagrampkg.ListParams{Limit: 1})
+		if err != nil {
+			httputil.Error(w, r, err)
+			return
+		}
+		if enterprise.ResourceLimitReached(w, r, h.enterprise, orgID, "diagram", total, func(i enterprise.SeatLimitInfo) int { return i.MaxDiagrams }) {
+			return
+		}
 	}
 
 	id := uuid.NewString()
@@ -520,6 +522,17 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create path — no diagramId.
+	if h.enterprise != nil {
+		_, total, err := h.store.ListDiagrams(r.Context(), orgID, diagrampkg.ListParams{Limit: 1})
+		if err != nil {
+			httputil.Error(w, r, err)
+			return
+		}
+		if enterprise.ResourceLimitReached(w, r, h.enterprise, orgID, "diagram", total, func(i enterprise.SeatLimitInfo) int { return i.MaxDiagrams }) {
+			return
+		}
+	}
+
 	id := uuid.NewString()
 	contentKey := storage.DiagramContentKey(orgID, id)
 	if err := h.uploadContent(r.Context(), contentKey, body.Content); err != nil {

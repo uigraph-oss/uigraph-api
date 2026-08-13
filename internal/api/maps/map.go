@@ -86,13 +86,15 @@ func (h *Handler) CreateMap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, total, err := h.store.ListMaps(r.Context(), orgID, uimap.ListParams{Limit: 1})
-	if err != nil {
-		httputil.Error(w, r, err)
-		return
-	}
-	if enterprise.ResourceLimitReached(w, r, h.enterprise, orgID, "map", total, func(i enterprise.SeatLimitInfo) int { return i.MaxMaps }) {
-		return
+	if h.enterprise != nil {
+		_, total, err := h.store.ListMaps(r.Context(), orgID, uimap.ListParams{Limit: 1})
+		if err != nil {
+			httputil.Error(w, r, err)
+			return
+		}
+		if enterprise.ResourceLimitReached(w, r, h.enterprise, orgID, "map", total, func(i enterprise.SeatLimitInfo) int { return i.MaxMaps }) {
+			return
+		}
 	}
 
 	now := time.Now().UTC()

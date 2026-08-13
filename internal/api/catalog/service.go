@@ -164,13 +164,15 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, total, err := h.store.ListServices(r.Context(), orgID, catalogpkg.ListParams{Limit: 1})
-	if err != nil {
-		httputil.Error(w, r, err)
-		return
-	}
-	if enterprise.ResourceLimitReached(w, r, h.enterprise, orgID, "service", total, func(i enterprise.SeatLimitInfo) int { return i.MaxServices }) {
-		return
+	if h.enterprise != nil {
+		_, total, err := h.store.ListServices(r.Context(), orgID, catalogpkg.ListParams{Limit: 1})
+		if err != nil {
+			httputil.Error(w, r, err)
+			return
+		}
+		if enterprise.ResourceLimitReached(w, r, h.enterprise, orgID, "service", total, func(i enterprise.SeatLimitInfo) int { return i.MaxServices }) {
+			return
+		}
 	}
 
 	if body.Status == "" {
