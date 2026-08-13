@@ -24,7 +24,7 @@ type store interface {
 
 	CreateFocalPoint(ctx context.Context, fp uimap.FocalPoint) error
 	GetFocalPoint(ctx context.Context, id string) (*uimap.FocalPoint, error)
-	ListFocalPoints(ctx context.Context, frameID string) ([]uimap.FocalPoint, error)
+	ListFocalPoints(ctx context.Context, frameID string, exactName *string) ([]uimap.FocalPoint, error)
 	UpdateFocalPoint(ctx context.Context, fp uimap.FocalPoint) error
 	SoftDeleteFocalPoint(ctx context.Context, id, deletedBy string) error
 

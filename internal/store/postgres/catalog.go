@@ -127,6 +127,12 @@ func (d *DB) ListServices(ctx context.Context, orgID string, p catalog.ListParam
 		args = append(args, "%"+*p.Search+"%")
 		where += fmt.Sprintf(" AND (name ILIKE $%d OR description ILIKE $%d)", len(args), len(args))
 	}
+	exactIdx := 0
+	if p.ExactName != nil {
+		args = append(args, *p.ExactName)
+		exactIdx = len(args)
+		where += fmt.Sprintf(" AND LOWER(name) = LOWER($%d)", exactIdx)
+	}
 
 	var total int
 	if err := d.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM services"+where, args...).Scan(&total); err != nil {
@@ -142,6 +148,10 @@ func (d *DB) ListServices(ctx context.Context, orgID string, p catalog.ListParam
 	if strings.EqualFold(p.SortDir, "desc") {
 		dir = "DESC"
 	}
+	order := fmt.Sprintf(" ORDER BY %s %s, id ASC", col, dir)
+	if exactIdx > 0 {
+		order = fmt.Sprintf(" ORDER BY (name = $%d) DESC, %s %s, id ASC", exactIdx, col, dir)
+	}
 
 	q := `
 		SELECT id, org_id, folder_id, team_id, name, description,
@@ -150,7 +160,7 @@ func (d *DB) ListServices(ctx context.Context, orgID string, p catalog.ListParam
 		       labels, metadata, doc_links, created_by, updated_by,
 		       created_by_commit_hash, updated_by_commit_hash,
 		       created_at, updated_at, deleted_at, deleted_by
-		FROM services` + where + fmt.Sprintf(" ORDER BY %s %s", col, dir)
+		FROM services` + where + order
 	if p.Limit > 0 {
 		args = append(args, p.Limit)
 		q += fmt.Sprintf(" LIMIT $%d", len(args))
@@ -578,15 +588,22 @@ func (d *DB) GetAPIGroup(ctx context.Context, id string) (*catalog.APIGroup, err
 	return &g, nil
 }
 
-func (d *DB) ListAPIGroups(ctx context.Context, serviceID string) ([]catalog.APIGroup, error) {
-	const q = `
+func (d *DB) ListAPIGroups(ctx context.Context, serviceID string, exactName *string) ([]catalog.APIGroup, error) {
+	q := `
 		SELECT id, service_id, org_id, name, version, label, protocol,
 		       spec_key, spec_hash,
 		       created_by, updated_by, created_by_commit_hash, updated_by_commit_hash,
 		       created_at, updated_at, deleted_at, deleted_by
-		FROM api_groups WHERE service_id = $1 AND deleted_at IS NULL
-		ORDER BY created_at ASC`
-	rows, err := d.db.QueryContext(ctx, q, serviceID)
+		FROM api_groups WHERE service_id = $1 AND deleted_at IS NULL`
+	args := []any{serviceID}
+	order := " ORDER BY created_at ASC, id ASC"
+	if exactName != nil {
+		args = append(args, *exactName)
+		q += fmt.Sprintf(" AND LOWER(name) = LOWER($%d)", len(args))
+		order = fmt.Sprintf(" ORDER BY (name = $%d) DESC, created_at ASC, id ASC", len(args))
+	}
+	q += order
+	rows, err := d.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListAPIGroups: %w", err)
 	}
@@ -776,8 +793,8 @@ func (d *DB) GetAPIEndpoint(ctx context.Context, id string) (*catalog.APIEndpoin
 	return &e, nil
 }
 
-func (d *DB) ListAPIEndpoints(ctx context.Context, apiGroupID string) ([]catalog.APIEndpoint, error) {
-	const q = `
+func (d *DB) ListAPIEndpoints(ctx context.Context, apiGroupID string, exactOperationID *string) ([]catalog.APIEndpoint, error) {
+	q := `
 		SELECT id, api_group_id, api_group_version_id, service_id, org_id,
 		       operation_id, method, path, summary, description,
 		       tags, token_count, parameters, request_body, responses,
@@ -785,9 +802,14 @@ func (d *DB) ListAPIEndpoints(ctx context.Context, apiGroupID string) ([]catalog
 		       created_by, updated_by, created_by_commit_hash, updated_by_commit_hash,
 		       created_at, updated_at, deleted_at, deleted_by
 		FROM api_endpoints
-		WHERE api_group_id = $1 AND api_group_version_id IS NULL AND deleted_at IS NULL
-		ORDER BY ord ASC, created_at ASC`
-	rows, err := d.db.QueryContext(ctx, q, apiGroupID)
+		WHERE api_group_id = $1 AND api_group_version_id IS NULL AND deleted_at IS NULL`
+	args := []any{apiGroupID}
+	if exactOperationID != nil {
+		args = append(args, *exactOperationID)
+		q += fmt.Sprintf(" AND operation_id = $%d", len(args))
+	}
+	q += " ORDER BY ord ASC, created_at ASC, id ASC"
+	rows, err := d.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListAPIEndpoints: %w", err)
 	}
@@ -860,8 +882,8 @@ func (d *DB) CopyEndpointsForVersion(ctx context.Context, apiGroupID, versionID,
 	return wrapErr("CopyEndpointsForVersion", err)
 }
 
-func (d *DB) ListAPIEndpointsForVersion(ctx context.Context, apiGroupID, versionID string) ([]catalog.APIEndpoint, error) {
-	const q = `
+func (d *DB) ListAPIEndpointsForVersion(ctx context.Context, apiGroupID, versionID string, exactOperationID *string) ([]catalog.APIEndpoint, error) {
+	q := `
 		SELECT id, api_group_id, api_group_version_id, service_id, org_id,
 		       operation_id, method, path, summary, description,
 		       tags, token_count, parameters, request_body, responses,
@@ -869,9 +891,14 @@ func (d *DB) ListAPIEndpointsForVersion(ctx context.Context, apiGroupID, version
 		       created_by, updated_by, created_by_commit_hash, updated_by_commit_hash,
 		       created_at, updated_at, deleted_at, deleted_by
 		FROM api_endpoints
-		WHERE api_group_id = $1 AND api_group_version_id = $2 AND deleted_at IS NULL
-		ORDER BY ord ASC, created_at ASC`
-	rows, err := d.db.QueryContext(ctx, q, apiGroupID, versionID)
+		WHERE api_group_id = $1 AND api_group_version_id = $2 AND deleted_at IS NULL`
+	args := []any{apiGroupID, versionID}
+	if exactOperationID != nil {
+		args = append(args, *exactOperationID)
+		q += fmt.Sprintf(" AND operation_id = $%d", len(args))
+	}
+	q += " ORDER BY ord ASC, created_at ASC, id ASC"
+	rows, err := d.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListAPIEndpointsForVersion: %w", err)
 	}

@@ -168,13 +168,14 @@ type Canvas struct {
 }
 
 type ListParams struct {
-	FolderID *string
-	TeamID   *string
-	Search   *string
-	SortBy   string
-	SortDir  string
-	Limit    int
-	Offset   int
+	FolderID  *string
+	TeamID    *string
+	Search    *string
+	ExactName *string
+	SortBy    string
+	SortDir   string
+	Limit     int
+	Offset    int
 }
 
 type Store interface {
@@ -192,7 +193,7 @@ type Store interface {
 
 	CreateFocalPoint(ctx context.Context, fp FocalPoint) error
 	GetFocalPoint(ctx context.Context, id string) (*FocalPoint, error)
-	ListFocalPoints(ctx context.Context, frameID string) ([]FocalPoint, error)
+	ListFocalPoints(ctx context.Context, frameID string, exactName *string) ([]FocalPoint, error)
 	UpdateFocalPoint(ctx context.Context, fp FocalPoint) error
 	SoftDeleteFocalPoint(ctx context.Context, id, deletedBy string) error
 

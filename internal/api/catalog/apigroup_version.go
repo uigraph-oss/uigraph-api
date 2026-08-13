@@ -130,7 +130,7 @@ func (h *Handler) RestoreAPIGroupVersion(w http.ResponseWriter, r *http.Request)
 
 	// Restore the exact endpoint snapshot rather than re-parsing the spec, so
 	// any per-endpoint edits captured in that version are preserved.
-	snapshot, err := h.store.ListAPIEndpointsForVersion(r.Context(), g.ID, v.ID)
+	snapshot, err := h.store.ListAPIEndpointsForVersion(r.Context(), g.ID, v.ID, nil)
 	if err != nil {
 		httputil.Error(w, r, err)
 		return

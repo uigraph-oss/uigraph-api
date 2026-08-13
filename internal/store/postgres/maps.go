@@ -71,6 +71,12 @@ func (d *DB) ListMaps(ctx context.Context, orgID string, p uimap.ListParams) ([]
 		args = append(args, "%"+*p.Search+"%")
 		where += fmt.Sprintf(" AND name ILIKE $%d", len(args))
 	}
+	exactIdx := 0
+	if p.ExactName != nil {
+		args = append(args, *p.ExactName)
+		exactIdx = len(args)
+		where += fmt.Sprintf(" AND LOWER(name) = LOWER($%d)", exactIdx)
+	}
 
 	var total int
 	if err := d.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM maps"+where, args...).Scan(&total); err != nil {
@@ -86,12 +92,16 @@ func (d *DB) ListMaps(ctx context.Context, orgID string, p uimap.ListParams) ([]
 	if strings.EqualFold(p.SortDir, "asc") {
 		dir = "ASC"
 	}
+	order := fmt.Sprintf(" ORDER BY %s %s, id ASC", col, dir)
+	if exactIdx > 0 {
+		order = fmt.Sprintf(" ORDER BY (name = $%d) DESC, %s %s, id ASC", exactIdx, col, dir)
+	}
 
 	q := `
 		SELECT id, org_id, folder_id, team_id, name, description, status,
 		       created_by, updated_by, created_by_commit_hash, updated_by_commit_hash,
 		       created_at, updated_at, deleted_at, deleted_by
-		FROM maps` + where + fmt.Sprintf(" ORDER BY %s %s", col, dir)
+		FROM maps` + where + order
 	if p.Limit > 0 {
 		args = append(args, p.Limit)
 		q += fmt.Sprintf(" LIMIT $%d", len(args))
@@ -211,6 +221,12 @@ func (d *DB) ListFrames(ctx context.Context, mapID string, p uimap.ListParams) (
 		args = append(args, "%"+*p.Search+"%")
 		where += fmt.Sprintf(" AND name ILIKE $%d", len(args))
 	}
+	exactIdx := 0
+	if p.ExactName != nil {
+		args = append(args, *p.ExactName)
+		exactIdx = len(args)
+		where += fmt.Sprintf(" AND LOWER(name) = LOWER($%d)", exactIdx)
+	}
 
 	var total int
 	if err := d.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM frames"+where, args...).Scan(&total); err != nil {
@@ -218,14 +234,18 @@ func (d *DB) ListFrames(ctx context.Context, mapID string, p uimap.ListParams) (
 	}
 
 	sortCols := map[string]string{"name": "name", "created": "created_at", "updated": "updated_at"}
-	order := " ORDER BY ord ASC, created_at ASC"
+	order := "ord ASC, created_at ASC, id ASC"
 	if col, ok := sortCols[p.SortBy]; ok {
 		dir := "DESC"
 		if strings.EqualFold(p.SortDir, "asc") {
 			dir = "ASC"
 		}
-		order = fmt.Sprintf(" ORDER BY %s %s", col, dir)
+		order = fmt.Sprintf("%s %s, id ASC", col, dir)
 	}
+	if exactIdx > 0 {
+		order = fmt.Sprintf("(name = $%d) DESC, ", exactIdx) + order
+	}
+	order = " ORDER BY " + order
 
 	q := `
 		SELECT id, map_id, org_id, parent_frame_id, name, description, template_type,
@@ -349,17 +369,24 @@ func (d *DB) GetFocalPoint(ctx context.Context, id string) (*uimap.FocalPoint, e
 	return &fp, nil
 }
 
-func (d *DB) ListFocalPoints(ctx context.Context, frameID string) ([]uimap.FocalPoint, error) {
-	const q = `
+func (d *DB) ListFocalPoints(ctx context.Context, frameID string, exactName *string) ([]uimap.FocalPoint, error) {
+	q := `
 		SELECT id, frame_id, org_id, name, location_x, location_y,
 		       visibility, is_active, created_by, updated_by,
 		       created_by_commit_hash, updated_by_commit_hash,
 		       created_at, updated_at, deleted_at, deleted_by
 		FROM focal_points
-		WHERE frame_id = $1 AND deleted_at IS NULL
-		ORDER BY created_at ASC`
+		WHERE frame_id = $1 AND deleted_at IS NULL`
+	args := []any{frameID}
+	order := " ORDER BY created_at ASC, id ASC"
+	if exactName != nil {
+		args = append(args, *exactName)
+		q += fmt.Sprintf(" AND LOWER(name) = LOWER($%d)", len(args))
+		order = fmt.Sprintf(" ORDER BY (name = $%d) DESC, created_at ASC, id ASC", len(args))
+	}
+	q += order
 
-	rows, err := d.db.QueryContext(ctx, q, frameID)
+	rows, err := d.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListFocalPoints: %w", err)
 	}

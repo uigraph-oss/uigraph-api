@@ -56,15 +56,22 @@ func (d *DB) GetServiceDB(ctx context.Context, id string) (*catalog.ServiceDB, e
 	return &sd, nil
 }
 
-func (d *DB) ListServiceDBs(ctx context.Context, serviceID string) ([]catalog.ServiceDB, error) {
-	const q = `
+func (d *DB) ListServiceDBs(ctx context.Context, serviceID string, exactDBName *string) ([]catalog.ServiceDB, error) {
+	q := `
 		SELECT id, service_id, org_id, db_name, db_type, dialect, schema_json,
 		       source, source_ts, schema_token_count, created_by, updated_by,
 		       created_by_commit_hash, updated_by_commit_hash, created_at, updated_at, deleted_at, deleted_by
 		FROM service_dbs
-		WHERE service_id = $1 AND deleted_at IS NULL
-		ORDER BY created_at DESC`
-	rows, err := d.db.QueryContext(ctx, q, serviceID)
+		WHERE service_id = $1 AND deleted_at IS NULL`
+	args := []any{serviceID}
+	order := " ORDER BY created_at DESC, id ASC"
+	if exactDBName != nil {
+		args = append(args, *exactDBName)
+		q += fmt.Sprintf(" AND LOWER(db_name) = LOWER($%d)", len(args))
+		order = fmt.Sprintf(" ORDER BY (db_name = $%d) DESC, created_at DESC, id ASC", len(args))
+	}
+	q += order
+	rows, err := d.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListServiceDBs: %w", err)
 	}

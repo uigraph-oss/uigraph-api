@@ -18,6 +18,7 @@ import (
 // @Param    orgID  path  string  true  "orgID"
 // @Param    mapID  path  string  true  "mapID"
 // @Param    frameID  path  string  true  "frameID"
+// @Param    exact_name  query  string  false  "Exact (case-insensitive) name match"
 // @Success  200  {object}  map[string]interface{}
 // @Failure  401  {object}  httputil.errorBody
 // @Failure  403  {object}  httputil.errorBody
@@ -25,7 +26,7 @@ import (
 // @Failure  500  {object}  httputil.errorBody
 // @Router   /orgs/{orgID}/maps/{mapID}/frames/{frameID}/focal-points [get]
 func (h *Handler) ListFocalPoints(w http.ResponseWriter, r *http.Request) {
-	fps, err := h.store.ListFocalPoints(r.Context(), r.PathValue("frameID"))
+	fps, err := h.store.ListFocalPoints(r.Context(), r.PathValue("frameID"), httputil.Exact(r.URL.Query(), "exact_name"))
 	if err != nil {
 		httputil.Error(w, r, err)
 		return

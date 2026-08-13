@@ -56,8 +56,8 @@ func (d *DB) GetServiceDiagram(ctx context.Context, serviceID, diagramID string)
 	return &sd, nil
 }
 
-func (d *DB) ListServiceDiagrams(ctx context.Context, serviceID string) ([]catalog.ServiceDiagram, error) {
-	const q = `
+func (d *DB) ListServiceDiagrams(ctx context.Context, serviceID string, exactName *string) ([]catalog.ServiceDiagram, error) {
+	q := `
 		SELECT
 			sd.service_id, sd.diagram_id, sd.org_id, sd.created_by, sd.updated_by,
 			sd.created_by_commit_hash, sd.updated_by_commit_hash, sd.created_at, sd.updated_at, sd.deleted_at,
@@ -68,9 +68,16 @@ func (d *DB) ListServiceDiagrams(ctx context.Context, serviceID string) ([]catal
 		JOIN diagrams d ON d.id = sd.diagram_id
 		WHERE sd.service_id = $1
 		  AND sd.deleted_at IS NULL
-		  AND d.deleted_at IS NULL
-		ORDER BY sd.created_at DESC`
-	rows, err := d.db.QueryContext(ctx, q, serviceID)
+		  AND d.deleted_at IS NULL`
+	args := []any{serviceID}
+	order := " ORDER BY sd.created_at DESC, sd.diagram_id ASC"
+	if exactName != nil {
+		args = append(args, *exactName)
+		q += fmt.Sprintf(" AND LOWER(d.name) = LOWER($%d)", len(args))
+		order = fmt.Sprintf(" ORDER BY (d.name = $%d) DESC, sd.created_at DESC, sd.diagram_id ASC", len(args))
+	}
+	q += order
+	rows, err := d.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListServiceDiagrams: %w", err)
 	}

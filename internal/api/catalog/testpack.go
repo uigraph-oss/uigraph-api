@@ -19,6 +19,7 @@ import (
 // @Security BearerAuth
 // @Param    orgID  path  string  true  "orgID"
 // @Param    serviceID  path  string  true  "serviceID"
+// @Param    exact_name  query  string  false  "Exact (case-insensitive) name match"
 // @Success  200  {object}  map[string]interface{}
 // @Failure  401  {object}  httputil.errorBody
 // @Failure  403  {object}  httputil.errorBody
@@ -30,7 +31,7 @@ func (h *Handler) ListTestPacks(w http.ResponseWriter, r *http.Request) {
 	if ok := h.ensureServiceInOrg(w, r, serviceID); !ok {
 		return
 	}
-	packs, err := h.store.ListTestPacks(r.Context(), serviceID)
+	packs, err := h.store.ListTestPacks(r.Context(), serviceID, httputil.Exact(r.URL.Query(), "exact_name"))
 	if err != nil {
 		httputil.Error(w, r, err)
 		return
@@ -212,6 +213,8 @@ func (h *Handler) DeleteTestPack(w http.ResponseWriter, r *http.Request) {
 // @Security BearerAuth
 // @Param    orgID  path  string  true  "orgID"
 // @Param    serviceID  path  string  true  "serviceID"
+// @Param    testPackId  query  string  false  "Filter by test pack"
+// @Param    exact_title  query  string  false  "Exact (case-insensitive) title match"
 // @Success  200  {object}  map[string]interface{}
 // @Failure  401  {object}  httputil.errorBody
 // @Failure  403  {object}  httputil.errorBody
@@ -223,11 +226,12 @@ func (h *Handler) ListTestCases(w http.ResponseWriter, r *http.Request) {
 	if ok := h.ensureServiceInOrg(w, r, serviceID); !ok {
 		return
 	}
+	q := r.URL.Query()
 	var testPackID *string
-	if v := r.URL.Query().Get("testPackId"); v != "" {
+	if v := q.Get("testPackId"); v != "" {
 		testPackID = &v
 	}
-	cases, err := h.store.ListTestCases(r.Context(), serviceID, testPackID)
+	cases, err := h.store.ListTestCases(r.Context(), serviceID, testPackID, httputil.Exact(q, "exact_title"))
 	if err != nil {
 		httputil.Error(w, r, err)
 		return

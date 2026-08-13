@@ -1,0 +1,11 @@
+CREATE INDEX IF NOT EXISTS idx_services_org_lower_name       ON services(org_id, LOWER(name))                     WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_maps_org_lower_name           ON maps(org_id, LOWER(name))                         WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_frames_map_lower_name         ON frames(map_id, LOWER(name))                       WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_service_dbs_svc_lower_name    ON service_dbs(service_id, LOWER(db_name))           WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_api_groups_svc_lower_name     ON api_groups(service_id, LOWER(name))               WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_api_endpoints_grp_operation   ON api_endpoints(api_group_id, operation_id)         WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_test_packs_svc_lower_name     ON test_packs(service_id, LOWER(name))               WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_test_cases_svc_lower_title    ON test_cases(service_id, LOWER(title))              WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_focal_points_frame_lower_name ON focal_points(frame_id, LOWER(name))               WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_diagrams_lower_name           ON diagrams(LOWER(name))                             WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_docs_lower_file_name          ON docs(LOWER(file_name))                            WHERE deleted_at IS NULL;

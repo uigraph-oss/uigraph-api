@@ -24,6 +24,12 @@ import (
 // @Security BearerAuth
 // @Param    orgID  path  string  true  "orgID"
 // @Param    mapID  path  string  true  "mapID"
+// @Param    exact_name  query  string  false  "Exact (case-insensitive) name match"
+// @Param    search  query  string  false  "Substring match on name"
+// @Param    sortBy  query  string  false  "name, created or updated"
+// @Param    sortDir  query  string  false  "asc or desc"
+// @Param    limit  query  int  false  "Page size"
+// @Param    offset  query  int  false  "Page offset"
 // @Success  200  {object}  map[string]interface{}
 // @Failure  401  {object}  httputil.errorBody
 // @Failure  403  {object}  httputil.errorBody
@@ -39,6 +45,7 @@ func (h *Handler) ListFrames(w http.ResponseWriter, r *http.Request) {
 	if v := q.Get("search"); v != "" {
 		p.Search = &v
 	}
+	p.ExactName = httputil.Exact(q, "exact_name")
 	if v := q.Get("limit"); v != "" {
 		p.Limit = httputil.ListLimit(v)
 		p.Offset = httputil.ListOffset(q.Get("offset"))

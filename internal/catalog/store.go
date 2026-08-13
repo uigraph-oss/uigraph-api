@@ -5,13 +5,14 @@ package catalog
 import "context"
 
 type ListParams struct {
-	FolderID *string
-	TeamID   *string
-	Search   *string
-	SortBy   string
-	SortDir  string
-	Limit    int
-	Offset   int
+	FolderID  *string
+	TeamID    *string
+	Search    *string
+	ExactName *string
+	SortBy    string
+	SortDir   string
+	Limit     int
+	Offset    int
 }
 
 // Store is the persistence interface for the service catalog.
@@ -31,7 +32,7 @@ type Store interface {
 	// API groups
 	CreateAPIGroup(ctx context.Context, g APIGroup) error
 	GetAPIGroup(ctx context.Context, id string) (*APIGroup, error)
-	ListAPIGroups(ctx context.Context, serviceID string) ([]APIGroup, error)
+	ListAPIGroups(ctx context.Context, serviceID string, exactName *string) ([]APIGroup, error)
 	UpdateAPIGroup(ctx context.Context, g APIGroup) error
 	SoftDeleteAPIGroup(ctx context.Context, id, deletedBy string) error
 
@@ -45,8 +46,8 @@ type Store interface {
 	// API endpoints
 	CreateAPIEndpoint(ctx context.Context, e APIEndpoint) error
 	GetAPIEndpoint(ctx context.Context, id string) (*APIEndpoint, error)
-	ListAPIEndpoints(ctx context.Context, apiGroupID string) ([]APIEndpoint, error)
-	ListAPIEndpointsForVersion(ctx context.Context, apiGroupID, versionID string) ([]APIEndpoint, error)
+	ListAPIEndpoints(ctx context.Context, apiGroupID string, exactOperationID *string) ([]APIEndpoint, error)
+	ListAPIEndpointsForVersion(ctx context.Context, apiGroupID, versionID string, exactOperationID *string) ([]APIEndpoint, error)
 	UpdateAPIEndpoint(ctx context.Context, e APIEndpoint) error
 	SoftDeleteAPIEndpoint(ctx context.Context, id, deletedBy string) error
 	SoftDeleteCurrentAPIEndpoints(ctx context.Context, apiGroupID, deletedBy string) error
@@ -56,20 +57,20 @@ type Store interface {
 	CreateServiceDoc(ctx context.Context, d ServiceDoc) error
 	GetServiceDoc(ctx context.Context, serviceID, docID string) (*ServiceDoc, error)
 	GetServiceDocByID(ctx context.Context, docID string) (*ServiceDoc, error)
-	ListServiceDocs(ctx context.Context, serviceID string) ([]ServiceDoc, error)
+	ListServiceDocs(ctx context.Context, serviceID string, exactFileName *string) ([]ServiceDoc, error)
 	SoftDeleteServiceDoc(ctx context.Context, serviceID, docID, deletedBy string) error
 
 	// Service test packs
 	CreateTestPack(ctx context.Context, p TestPack) error
 	GetTestPack(ctx context.Context, id string) (*TestPack, error)
-	ListTestPacks(ctx context.Context, serviceID string) ([]TestPack, error)
+	ListTestPacks(ctx context.Context, serviceID string, exactName *string) ([]TestPack, error)
 	UpdateTestPack(ctx context.Context, p TestPack) error
 	SoftDeleteTestPack(ctx context.Context, id, deletedBy string) error
 
 	// Service test cases
 	CreateTestCase(ctx context.Context, tc TestCase) error
 	GetTestCase(ctx context.Context, id string) (*TestCase, error)
-	ListTestCases(ctx context.Context, serviceID string, testPackID *string) ([]TestCase, error)
+	ListTestCases(ctx context.Context, serviceID string, testPackID, exactTitle *string) ([]TestCase, error)
 	UpdateTestCase(ctx context.Context, tc TestCase) error
 	SoftDeleteTestCase(ctx context.Context, id, deletedBy string) error
 
@@ -89,13 +90,13 @@ type Store interface {
 	// Service diagrams
 	CreateServiceDiagram(ctx context.Context, d ServiceDiagram) error
 	GetServiceDiagram(ctx context.Context, serviceID, diagramID string) (*ServiceDiagram, error)
-	ListServiceDiagrams(ctx context.Context, serviceID string) ([]ServiceDiagram, error)
+	ListServiceDiagrams(ctx context.Context, serviceID string, exactName *string) ([]ServiceDiagram, error)
 	SoftDeleteServiceDiagram(ctx context.Context, serviceID, diagramID, deletedBy string) error
 
 	// Service DBs
 	CreateServiceDB(ctx context.Context, d ServiceDB) error
 	GetServiceDB(ctx context.Context, id string) (*ServiceDB, error)
-	ListServiceDBs(ctx context.Context, serviceID string) ([]ServiceDB, error)
+	ListServiceDBs(ctx context.Context, serviceID string, exactDBName *string) ([]ServiceDB, error)
 	UpdateServiceDB(ctx context.Context, d ServiceDB) error
 	SoftDeleteServiceDB(ctx context.Context, id, deletedBy string) error
 

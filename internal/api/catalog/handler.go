@@ -30,7 +30,7 @@ type store interface {
 	Impact(ctx context.Context, orgID, serviceID, direction string, maxDepth int) ([]catalogpkg.ServiceDependencyEdge, error)
 
 	// Service docs
-	ListServiceDocs(ctx context.Context, serviceID string) ([]catalogpkg.ServiceDoc, error)
+	ListServiceDocs(ctx context.Context, serviceID string, exactFileName *string) ([]catalogpkg.ServiceDoc, error)
 	GetServiceDoc(ctx context.Context, serviceID, docID string) (*catalogpkg.ServiceDoc, error)
 	GetServiceDocByID(ctx context.Context, docID string) (*catalogpkg.ServiceDoc, error)
 	CreateServiceDoc(ctx context.Context, d catalogpkg.ServiceDoc) error
@@ -41,7 +41,7 @@ type store interface {
 	CreateDoc(ctx context.Context, d docspkg.Doc) error
 
 	// Service diagrams
-	ListServiceDiagrams(ctx context.Context, serviceID string) ([]catalogpkg.ServiceDiagram, error)
+	ListServiceDiagrams(ctx context.Context, serviceID string, exactName *string) ([]catalogpkg.ServiceDiagram, error)
 	GetServiceDiagram(ctx context.Context, serviceID, diagramID string) (*catalogpkg.ServiceDiagram, error)
 	CreateServiceDiagram(ctx context.Context, link catalogpkg.ServiceDiagram) error
 	SoftDeleteServiceDiagram(ctx context.Context, serviceID, diagramID, actorID string) error
@@ -52,7 +52,7 @@ type store interface {
 	CreateDiagramVersion(ctx context.Context, v diagrampkg.Version) error
 
 	// API Groups
-	ListAPIGroups(ctx context.Context, serviceID string) ([]catalogpkg.APIGroup, error)
+	ListAPIGroups(ctx context.Context, serviceID string, exactName *string) ([]catalogpkg.APIGroup, error)
 	GetAPIGroup(ctx context.Context, id string) (*catalogpkg.APIGroup, error)
 	CreateAPIGroup(ctx context.Context, g catalogpkg.APIGroup) error
 	UpdateAPIGroup(ctx context.Context, g catalogpkg.APIGroup) error
@@ -64,8 +64,8 @@ type store interface {
 	PublishAPIGroupVersion(ctx context.Context, in catalogpkg.PublishAPIGroupVersionInput) (catalogpkg.APIGroupVersion, error)
 
 	// API Endpoints
-	ListAPIEndpoints(ctx context.Context, apiGroupID string) ([]catalogpkg.APIEndpoint, error)
-	ListAPIEndpointsForVersion(ctx context.Context, apiGroupID, versionID string) ([]catalogpkg.APIEndpoint, error)
+	ListAPIEndpoints(ctx context.Context, apiGroupID string, exactOperationID *string) ([]catalogpkg.APIEndpoint, error)
+	ListAPIEndpointsForVersion(ctx context.Context, apiGroupID, versionID string, exactOperationID *string) ([]catalogpkg.APIEndpoint, error)
 	GetAPIEndpoint(ctx context.Context, id string) (*catalogpkg.APIEndpoint, error)
 	CreateAPIEndpoint(ctx context.Context, e catalogpkg.APIEndpoint) error
 	UpdateAPIEndpoint(ctx context.Context, e catalogpkg.APIEndpoint) error
@@ -74,7 +74,7 @@ type store interface {
 	CopyEndpointsForVersion(ctx context.Context, apiGroupID, versionID, actorID string) error
 
 	// Service DBs
-	ListServiceDBs(ctx context.Context, serviceID string) ([]catalogpkg.ServiceDB, error)
+	ListServiceDBs(ctx context.Context, serviceID string, exactDBName *string) ([]catalogpkg.ServiceDB, error)
 	GetServiceDB(ctx context.Context, id string) (*catalogpkg.ServiceDB, error)
 	CreateServiceDB(ctx context.Context, db catalogpkg.ServiceDB) error
 	UpdateServiceDB(ctx context.Context, db catalogpkg.ServiceDB) error
@@ -99,14 +99,14 @@ type store interface {
 	UpsertSavedQueryBySourceRef(ctx context.Context, q catalogpkg.SavedQuery) (catalogpkg.SavedQuery, bool, error)
 
 	// Test packs
-	ListTestPacks(ctx context.Context, serviceID string) ([]catalogpkg.TestPack, error)
+	ListTestPacks(ctx context.Context, serviceID string, exactName *string) ([]catalogpkg.TestPack, error)
 	GetTestPack(ctx context.Context, id string) (*catalogpkg.TestPack, error)
 	CreateTestPack(ctx context.Context, p catalogpkg.TestPack) error
 	UpdateTestPack(ctx context.Context, p catalogpkg.TestPack) error
 	SoftDeleteTestPack(ctx context.Context, id, actorID string) error
 
 	// Test cases
-	ListTestCases(ctx context.Context, serviceID string, testPackID *string) ([]catalogpkg.TestCase, error)
+	ListTestCases(ctx context.Context, serviceID string, testPackID, exactTitle *string) ([]catalogpkg.TestCase, error)
 	GetTestCase(ctx context.Context, id string) (*catalogpkg.TestCase, error)
 	CreateTestCase(ctx context.Context, tc catalogpkg.TestCase) error
 	UpdateTestCase(ctx context.Context, tc catalogpkg.TestCase) error

@@ -74,8 +74,8 @@ func (d *DB) GetServiceDocByID(ctx context.Context, docID string) (*catalog.Serv
 	return &sd, nil
 }
 
-func (d *DB) ListServiceDocs(ctx context.Context, serviceID string) ([]catalog.ServiceDoc, error) {
-	const q = `
+func (d *DB) ListServiceDocs(ctx context.Context, serviceID string, exactFileName *string) ([]catalog.ServiceDoc, error) {
+	q := `
 		SELECT
 			sd.service_id, sd.doc_id, sd.org_id, sd.created_by, sd.updated_by,
 			sd.created_by_commit_hash, sd.updated_by_commit_hash, sd.created_at, sd.updated_at, sd.deleted_at,
@@ -86,9 +86,16 @@ func (d *DB) ListServiceDocs(ctx context.Context, serviceID string) ([]catalog.S
 		JOIN docs d ON d.id = sd.doc_id
 		WHERE sd.service_id = $1
 		  AND sd.deleted_at IS NULL
-		  AND d.deleted_at IS NULL
-		ORDER BY sd.created_at DESC`
-	rows, err := d.db.QueryContext(ctx, q, serviceID)
+		  AND d.deleted_at IS NULL`
+	args := []any{serviceID}
+	order := " ORDER BY sd.created_at DESC, sd.doc_id ASC"
+	if exactFileName != nil {
+		args = append(args, *exactFileName)
+		q += fmt.Sprintf(" AND LOWER(d.file_name) = LOWER($%d)", len(args))
+		order = fmt.Sprintf(" ORDER BY (d.file_name = $%d) DESC, sd.created_at DESC, sd.doc_id ASC", len(args))
+	}
+	q += order
+	rows, err := d.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListServiceDocs: %w", err)
 	}
