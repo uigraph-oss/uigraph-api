@@ -166,6 +166,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @Security BearerAuth
 // @Param    orgID  path  string  true  "orgID"
 // @Param    diagramID  path  string  true  "diagramID"
+// @Param    includeContent  query  boolean  false  "inline the ReactFlow JSON content in the response"
 // @Success  200  {object}  map[string]interface{}
 // @Failure  401  {object}  httputil.errorBody
 // @Failure  403  {object}  httputil.errorBody
@@ -182,6 +183,20 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, r, storepkg.ErrNotFound)
 		return
 	}
+
+	if r.URL.Query().Get("includeContent") == "true" {
+		content, err := h.getContent(r.Context(), dg.ID, dg.ContentKey)
+		if err != nil {
+			httputil.Error(w, r, err)
+			return
+		}
+		httputil.JSON(w, http.StatusOK, struct {
+			*diagrampkg.Diagram
+			Content string `json:"content"`
+		}{dg, content})
+		return
+	}
+
 	httputil.JSON(w, http.StatusOK, dg)
 }
 
