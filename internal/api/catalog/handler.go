@@ -12,6 +12,7 @@ import (
 	catalogpkg "github.com/uigraph/app/internal/catalog"
 	diagrampkg "github.com/uigraph/app/internal/diagram"
 	docspkg "github.com/uigraph/app/internal/docs"
+	"github.com/uigraph/app/internal/enterprise"
 	"github.com/uigraph/app/internal/queue"
 )
 
@@ -135,15 +136,16 @@ type objectStore interface {
 
 // Handler serves /api/v1/orgs/{orgID}/services and all nested resources.
 type Handler struct {
-	store   store
-	storage objectStore
-	queue   *queue.Queue // may be nil
-	cache   cache.Client // may be nil
+	store      store
+	storage    objectStore
+	queue      *queue.Queue       // may be nil
+	cache      cache.Client       // may be nil
+	enterprise *enterprise.Client // nil for self-hosted (UIGRAPH_ENTERPRISE unset)
 }
 
 // New constructs a Handler.
-func New(s store, st objectStore, q *queue.Queue, c cache.Client) *Handler {
-	return &Handler{store: s, storage: st, queue: q, cache: c}
+func New(s store, st objectStore, q *queue.Queue, c cache.Client, ent *enterprise.Client) *Handler {
+	return &Handler{store: s, storage: st, queue: q, cache: c, enterprise: ent}
 }
 
 func (h *Handler) enqueueScreenshot(ctx context.Context, orgID, diagramID string) {
@@ -163,9 +165,10 @@ func Register(
 	st objectStore,
 	q *queue.Queue,
 	c cache.Client,
+	ent *enterprise.Client,
 	requireScope func(scope, method, pattern string, h http.HandlerFunc),
 ) {
-	h := New(s, st, q, c)
+	h := New(s, st, q, c, ent)
 	// By-id lookups (resolve a leaf id to its full record incl. parent ids)
 	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/endpoints/{endpointID}", h.GetAPIEndpointByID)
 	requireScope("services:read", "GET", "/api/v1/orgs/{orgID}/test-packs/{testPackID}", h.GetTestPackByID)

@@ -11,6 +11,7 @@ import (
 
 	"github.com/uigraph/app/internal/cache"
 	catalogpkg "github.com/uigraph/app/internal/catalog"
+	"github.com/uigraph/app/internal/enterprise"
 	"github.com/uigraph/app/internal/httputil"
 	authmw "github.com/uigraph/app/internal/middleware"
 	storepkg "github.com/uigraph/app/internal/store"
@@ -162,6 +163,16 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		httputil.BadRequest(w, "team is required")
 		return
 	}
+
+	_, total, err := h.store.ListServices(r.Context(), orgID, catalogpkg.ListParams{Limit: 1})
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if enterprise.ResourceLimitReached(w, r, h.enterprise, orgID, "service", total, func(i enterprise.SeatLimitInfo) int { return i.MaxServices }) {
+		return
+	}
+
 	if body.Status == "" {
 		body.Status = "active"
 	}

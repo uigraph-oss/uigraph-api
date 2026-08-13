@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	chatpkg "github.com/uigraph/app/internal/chat"
+	"github.com/uigraph/app/internal/enterprise"
 	"github.com/uigraph/app/internal/httputil"
 	authmw "github.com/uigraph/app/internal/middleware"
 	storepkg "github.com/uigraph/app/internal/store"
@@ -21,19 +22,21 @@ type store interface {
 }
 
 type Handler struct {
-	store store
+	store      store
+	enterprise *enterprise.Client // nil for self-hosted (UIGRAPH_ENTERPRISE unset)
 }
 
-func New(s store) *Handler {
-	return &Handler{store: s}
+func New(s store, ent *enterprise.Client) *Handler {
+	return &Handler{store: s, enterprise: ent}
 }
 
 func Register(
 	mux *http.ServeMux,
 	s store,
+	ent *enterprise.Client,
 	requireScope func(scope, method, pattern string, h http.HandlerFunc),
 ) {
-	h := New(s)
+	h := New(s, ent)
 	requireScope("chat:read", "GET", "/api/v1/orgs/{orgID}/chat-sessions", h.ListSessions)
 	requireScope("chat:write", "POST", "/api/v1/orgs/{orgID}/chat-sessions", h.CreateSession)
 	requireScope("chat:read", "GET", "/api/v1/orgs/{orgID}/chat-sessions/{sessionID}", h.GetSession)

@@ -12,9 +12,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/uigraph/app/internal/httputil"
 )
 
 type Client struct {
@@ -32,17 +35,25 @@ func New(baseURL, internalToken string) *Client {
 }
 
 // SeatLimitInfo is an org's current plan capacity, as known by
-// uigraph-enterprise's billing state.
+// uigraph-enterprise's billing state. Despite the name (kept for backward
+// compatibility -- this originally only carried the seat cap), it now
+// carries every free-tier cap/gate uigraph-api enforces: resource counts
+// (-1 = unlimited) and feature flags.
 type SeatLimitInfo struct {
-	Limit  int    // -1 = unlimited
-	PlanID string // "" = free
+	Limit         int    // -1 = unlimited
+	PlanID        string // "" = free
+	MaxDiagrams   int    // -1 = unlimited
+	MaxServices   int    // -1 = unlimited
+	MaxMaps       int    // -1 = unlimited
+	AssistEnabled bool
 }
 
-// SeatLimit asks uigraph-enterprise for orgID's current seat limit and plan,
-// called before adding a member (invite or SSO self-join) so uigraph-api can
-// reject the add once the org is at capacity. Callers should treat any
-// non-nil error as "unknown, fail open" -- a billing-service hiccup must
-// never block a core workflow like adding a teammate.
+// SeatLimit asks uigraph-enterprise for orgID's current plan capacity --
+// seat limit plus every other free-tier cap/gate -- called before adding a
+// member or creating a diagram/service/map/chat-session, so uigraph-api can
+// reject the action once the org is at capacity or the feature is gated.
+// Callers should treat any non-nil error as "unknown, fail open" -- a
+// billing-service hiccup must never block a core workflow.
 func (c *Client) SeatLimit(ctx context.Context, orgID string) (SeatLimitInfo, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/internal/v1/orgs/"+orgID+"/seat-limit", nil)
 	if err != nil {
@@ -62,11 +73,52 @@ func (c *Client) SeatLimit(ctx context.Context, orgID string) (SeatLimitInfo, er
 	}
 
 	var out struct {
-		SeatLimit int    `json:"seatLimit"`
-		PlanID    string `json:"planId"`
+		SeatLimit     int    `json:"seatLimit"`
+		PlanID        string `json:"planId"`
+		MaxDiagrams   int    `json:"maxDiagrams"`
+		MaxServices   int    `json:"maxServices"`
+		MaxMaps       int    `json:"maxMaps"`
+		AssistEnabled bool   `json:"assistEnabled"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return SeatLimitInfo{}, fmt.Errorf("enterprise: decode response: %w", err)
 	}
-	return SeatLimitInfo{Limit: out.SeatLimit, PlanID: out.PlanID}, nil
+	return SeatLimitInfo{
+		Limit: out.SeatLimit, PlanID: out.PlanID,
+		MaxDiagrams: out.MaxDiagrams, MaxServices: out.MaxServices, MaxMaps: out.MaxMaps,
+		AssistEnabled: out.AssistEnabled,
+	}, nil
+}
+
+// ResourceLimitReached checks orgID's current count of some resource
+// (diagrams, services, maps) against its plan limit before creating another
+// one, writing a 409 with an upgrade message if at or over capacity.
+// Returns true once it has written a response. A nil c (self-hosted) always
+// returns false without any network call. Any error reaching
+// uigraph-enterprise fails open -- a billing-service hiccup must never block
+// a core workflow like creating a diagram -- and is logged for visibility.
+// limit extracts the relevant cap (e.g. info.MaxDiagrams) from the full
+// entitlement response; a negative value means unlimited.
+func ResourceLimitReached(w http.ResponseWriter, r *http.Request, c *Client, orgID, resourceName string, currentCount int, limit func(SeatLimitInfo) int) bool {
+	if c == nil {
+		return false
+	}
+	info, err := c.SeatLimit(r.Context(), orgID)
+	if err != nil {
+		slog.WarnContext(r.Context(), resourceName+" limit check failed, allowing create (fail open)", "err", err, "orgId", orgID)
+		return false
+	}
+	max := limit(info)
+	if max < 0 || currentCount < max {
+		return false
+	}
+	plan := info.PlanID
+	if plan == "" {
+		plan = "free"
+	}
+	httputil.JSON(w, http.StatusConflict, map[string]string{
+		"code":    resourceName + "_limit_reached",
+		"message": "Your organization has reached its " + resourceName + " limit on the " + plan + " plan. Upgrade to create more.",
+	})
+	return true
 }

@@ -236,7 +236,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 
 	assetapi.Register(mux, st, c, protected)
 
-	diagram.Register(mux, s, st, c, q, scopeFn)
+	diagram.Register(mux, s, st, c, q, enterpriseClient, scopeFn)
 
 	docsapi.Register(mux, s, st, scopeFn)
 
@@ -249,11 +249,11 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 
 	component.Register(mux, s, st, protected, scopeFn)
 
-	catalogapi.Register(mux, s, st, q, c, scopeFn)
+	catalogapi.Register(mux, s, st, q, c, enterpriseClient, scopeFn)
 
-	mapspkg.Register(mux, s, st, scopeFn)
+	mapspkg.Register(mux, s, st, enterpriseClient, scopeFn)
 
-	chatapi.Register(mux, s, scopeFn)
+	chatapi.Register(mux, s, enterpriseClient, scopeFn)
 
 	commentapi.Register(mux, s, scopeFn)
 
