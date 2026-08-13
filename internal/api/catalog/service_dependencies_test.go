@@ -300,7 +300,7 @@ func TestSyncDependencies_success(t *testing.T) {
 			return nil
 		},
 	}
-	h := New(s, nil, nil, nil)
+	h := New(s, nil, nil, nil, nil)
 
 	body := `{"dependencies":[{"name":"payments","service":"Stripe","direction":"downstream","type":"http","criticality":"hard","apiGroupName":"v1"}]}`
 	r := withDepAuth(depRequest(http.MethodPost, "/api/v1/orgs/org-1/services/svc-1/dependencies/sync", []byte(body)))
@@ -328,7 +328,7 @@ func TestSyncDependencies_missingName_returns400(t *testing.T) {
 			return &catalogpkg.Service{ID: id, OrgID: "org-1"}, nil
 		},
 	}
-	h := New(s, nil, nil, nil)
+	h := New(s, nil, nil, nil, nil)
 
 	body := `{"dependencies":[{"service":"Stripe","direction":"downstream","type":"http","criticality":"hard"}]}`
 	r := withDepAuth(depRequest(http.MethodPost, "/api/v1/orgs/org-1/services/svc-1/dependencies/sync", []byte(body)))
@@ -347,7 +347,7 @@ func TestSyncDependencies_duplicateName_returns400(t *testing.T) {
 			return &catalogpkg.Service{ID: id, OrgID: "org-1"}, nil
 		},
 	}
-	h := New(s, nil, nil, nil)
+	h := New(s, nil, nil, nil, nil)
 
 	body := `{"dependencies":[{"name":"dup","service":"S1","direction":"downstream","type":"http","criticality":"hard","apiGroupName":"v1"},{"name":"dup","service":"S2","direction":"upstream","type":"database","criticality":"soft"}]}`
 	r := withDepAuth(depRequest(http.MethodPost, "/api/v1/orgs/org-1/services/svc-1/dependencies/sync", []byte(body)))
@@ -366,7 +366,7 @@ func TestSyncDependencies_invalidType_returns400(t *testing.T) {
 			return &catalogpkg.Service{ID: id, OrgID: "org-1"}, nil
 		},
 	}
-	h := New(s, nil, nil, nil)
+	h := New(s, nil, nil, nil, nil)
 
 	body := `{"dependencies":[{"name":"x","service":"Y","direction":"downstream","type":"rest","criticality":"hard"}]}`
 	r := withDepAuth(depRequest(http.MethodPost, "/api/v1/orgs/org-1/services/svc-1/dependencies/sync", []byte(body)))
@@ -392,7 +392,7 @@ func TestListDependencies_returnsEdges(t *testing.T) {
 			}, nil
 		},
 	}
-	h := New(s, nil, nil, nil)
+	h := New(s, nil, nil, nil, nil)
 
 	r := withDepAuth(depRequest(http.MethodGet, "/api/v1/orgs/org-1/services/svc-1/dependencies", nil))
 	r.SetPathValue("serviceID", "svc-1")
@@ -422,7 +422,7 @@ func TestSyncDependencies_missingDirection_returns400(t *testing.T) {
 			return &catalogpkg.Service{ID: id, OrgID: "org-1"}, nil
 		},
 	}
-	h := New(s, nil, nil, nil)
+	h := New(s, nil, nil, nil, nil)
 
 	body := `{"dependencies":[{"name":"x","service":"Y","type":"http","criticality":"hard"}]}`
 	r := withDepAuth(depRequest(http.MethodPost, "/api/v1/orgs/org-1/services/svc-1/dependencies/sync", []byte(body)))
@@ -441,7 +441,7 @@ func TestSyncDependencies_invalidDirection_returns400(t *testing.T) {
 			return &catalogpkg.Service{ID: id, OrgID: "org-1"}, nil
 		},
 	}
-	h := New(s, nil, nil, nil)
+	h := New(s, nil, nil, nil, nil)
 
 	body := `{"dependencies":[{"name":"x","service":"Y","direction":"sideways","type":"http","criticality":"hard"}]}`
 	r := withDepAuth(depRequest(http.MethodPost, "/api/v1/orgs/org-1/services/svc-1/dependencies/sync", []byte(body)))
@@ -465,7 +465,7 @@ func TestSyncDependencies_directionReachesStore(t *testing.T) {
 			return nil
 		},
 	}
-	h := New(s, nil, nil, nil)
+	h := New(s, nil, nil, nil, nil)
 
 	body := `{"dependencies":[{"name":"calls-payments","service":"Payments","direction":"downstream","criticality":"hard"},{"name":"called-by-storefront","service":"Storefront","direction":"upstream","criticality":"soft"}]}`
 	r := withDepAuth(depRequest(http.MethodPost, "/api/v1/orgs/org-1/services/svc-1/dependencies/sync", []byte(body)))
@@ -493,7 +493,7 @@ func TestListDependencies_invalidDirection_returns400(t *testing.T) {
 			return &catalogpkg.Service{ID: id, OrgID: "org-1"}, nil
 		},
 	}
-	h := New(s, nil, nil, nil)
+	h := New(s, nil, nil, nil, nil)
 
 	r := withDepAuth(depRequest(http.MethodGet, "/api/v1/orgs/org-1/services/svc-1/dependencies?direction=invalid", nil))
 	r.SetPathValue("serviceID", "svc-1")
@@ -511,7 +511,7 @@ func TestListDependencies_invalidCriticality_returns400(t *testing.T) {
 			return &catalogpkg.Service{ID: id, OrgID: "org-1"}, nil
 		},
 	}
-	h := New(s, nil, nil, nil)
+	h := New(s, nil, nil, nil, nil)
 
 	r := withDepAuth(depRequest(http.MethodGet, "/api/v1/orgs/org-1/services/svc-1/dependencies?criticality=maybe", nil))
 	r.SetPathValue("serviceID", "svc-1")
@@ -536,7 +536,7 @@ func TestGetServiceDependencyGraph_returnsGraph(t *testing.T) {
 			}, nil
 		},
 	}
-	h := New(s, nil, nil, nil)
+	h := New(s, nil, nil, nil, nil)
 
 	r := withDepAuth(depRequest(http.MethodGet, "/api/v1/orgs/org-1/services/svc-1/dependency-graph", nil))
 	r.SetPathValue("serviceID", "svc-1")
@@ -571,7 +571,7 @@ func TestGetDependencyGraph_orgWide_returnsGraph(t *testing.T) {
 			}, nil
 		},
 	}
-	h := New(s, nil, nil, nil)
+	h := New(s, nil, nil, nil, nil)
 
 	r := withDepAuth(depRequest(http.MethodGet, "/api/v1/orgs/org-1/dependency-graph", nil))
 	w := httptest.NewRecorder()
@@ -604,7 +604,7 @@ func TestGetImpact_returnsGraph(t *testing.T) {
 			}, nil
 		},
 	}
-	h := New(s, nil, nil, nil)
+	h := New(s, nil, nil, nil, nil)
 
 	r := withDepAuth(depRequest(http.MethodGet, "/api/v1/orgs/org-1/services/svc-1/impact?direction=downstream&maxDepth=5", nil))
 	r.SetPathValue("serviceID", "svc-1")
@@ -631,7 +631,7 @@ func TestGetImpact_missingDirection_returns400(t *testing.T) {
 			return &catalogpkg.Service{ID: id, OrgID: "org-1"}, nil
 		},
 	}
-	h := New(s, nil, nil, nil)
+	h := New(s, nil, nil, nil, nil)
 
 	r := withDepAuth(depRequest(http.MethodGet, "/api/v1/orgs/org-1/services/svc-1/impact", nil))
 	r.SetPathValue("serviceID", "svc-1")
@@ -649,7 +649,7 @@ func TestGetImpact_invalidMaxDepth_returns400(t *testing.T) {
 			return &catalogpkg.Service{ID: id, OrgID: "org-1"}, nil
 		},
 	}
-	h := New(s, nil, nil, nil)
+	h := New(s, nil, nil, nil, nil)
 
 	r := withDepAuth(depRequest(http.MethodGet, "/api/v1/orgs/org-1/services/svc-1/impact?direction=downstream&maxDepth=0", nil))
 	r.SetPathValue("serviceID", "svc-1")
@@ -667,7 +667,7 @@ func TestGetImpact_maxDepthTooHigh_returns400(t *testing.T) {
 			return &catalogpkg.Service{ID: id, OrgID: "org-1"}, nil
 		},
 	}
-	h := New(s, nil, nil, nil)
+	h := New(s, nil, nil, nil, nil)
 
 	r := withDepAuth(depRequest(http.MethodGet, "/api/v1/orgs/org-1/services/svc-1/impact?direction=upstream&maxDepth=101", nil))
 	r.SetPathValue("serviceID", "svc-1")

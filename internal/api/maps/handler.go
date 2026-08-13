@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/uigraph/app/internal/enterprise"
 	"github.com/uigraph/app/internal/uimap"
 )
 
@@ -60,13 +61,14 @@ type objectStore interface {
 
 // Handler serves map, frame, focal-point, canvas, group, link, and meta endpoints.
 type Handler struct {
-	store   store
-	storage objectStore // may be nil (no screenshot upload in some environments)
+	store      store
+	storage    objectStore        // may be nil (no screenshot upload in some environments)
+	enterprise *enterprise.Client // nil for self-hosted (UIGRAPH_ENTERPRISE unset)
 }
 
 // New constructs a Handler.
-func New(s store, st objectStore) *Handler {
-	return &Handler{store: s, storage: st}
+func New(s store, st objectStore, ent *enterprise.Client) *Handler {
+	return &Handler{store: s, storage: st, enterprise: ent}
 }
 
 // Register wires all map-domain routes into mux.
@@ -74,9 +76,10 @@ func Register(
 	mux *http.ServeMux,
 	s store,
 	st objectStore,
+	ent *enterprise.Client,
 	requireScope func(scope, method, pattern string, h http.HandlerFunc),
 ) {
-	h := New(s, st)
+	h := New(s, st, ent)
 
 	// Maps
 	requireScope("maps:read", "GET", "/api/v1/orgs/{orgID}/maps", h.ListMaps)

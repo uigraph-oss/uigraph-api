@@ -16,6 +16,7 @@ import (
 
 	"github.com/uigraph/app/internal/cache"
 	diagrampkg "github.com/uigraph/app/internal/diagram"
+	"github.com/uigraph/app/internal/enterprise"
 	"github.com/uigraph/app/internal/httputil"
 	authmw "github.com/uigraph/app/internal/middleware"
 	"github.com/uigraph/app/internal/queue"
@@ -102,6 +103,17 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	if body.Name == "" || body.Content == "" {
 		httputil.BadRequest(w, "name and content are required")
 		return
+	}
+
+	if h.enterprise != nil {
+		_, total, err := h.store.ListDiagrams(r.Context(), orgID, diagrampkg.ListParams{Limit: 1})
+		if err != nil {
+			httputil.Error(w, r, err)
+			return
+		}
+		if enterprise.ResourceLimitReached(w, r, h.enterprise, orgID, "diagram", total, func(i enterprise.SeatLimitInfo) int { return i.MaxDiagrams }) {
+			return
+		}
 	}
 
 	id := uuid.NewString()
@@ -510,6 +522,17 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create path — no diagramId.
+	if h.enterprise != nil {
+		_, total, err := h.store.ListDiagrams(r.Context(), orgID, diagrampkg.ListParams{Limit: 1})
+		if err != nil {
+			httputil.Error(w, r, err)
+			return
+		}
+		if enterprise.ResourceLimitReached(w, r, h.enterprise, orgID, "diagram", total, func(i enterprise.SeatLimitInfo) int { return i.MaxDiagrams }) {
+			return
+		}
+	}
+
 	id := uuid.NewString()
 	contentKey := storage.DiagramContentKey(orgID, id)
 	if err := h.uploadContent(r.Context(), contentKey, body.Content); err != nil {

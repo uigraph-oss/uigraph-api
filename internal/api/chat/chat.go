@@ -2,6 +2,7 @@ package chat
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -11,6 +12,34 @@ import (
 	"github.com/uigraph/app/internal/httputil"
 	authmw "github.com/uigraph/app/internal/middleware"
 )
+
+// assistGated reports whether orgID's plan disallows the assist/chat
+// feature, writing a 403 with an upgrade message if so. A nil h.enterprise
+// (self-hosted) always returns false without any network call. Any error
+// reaching uigraph-enterprise fails open -- a billing-service hiccup must
+// never block a core workflow like starting a chat.
+func (h *Handler) assistGated(w http.ResponseWriter, r *http.Request, orgID string) bool {
+	if h.enterprise == nil {
+		return false
+	}
+	info, err := h.enterprise.SeatLimit(r.Context(), orgID)
+	if err != nil {
+		slog.WarnContext(r.Context(), "assist gate check failed, allowing chat session (fail open)", "err", err, "orgId", orgID)
+		return false
+	}
+	if info.AssistEnabled {
+		return false
+	}
+	plan := info.PlanID
+	if plan == "" {
+		plan = "free"
+	}
+	httputil.JSON(w, http.StatusForbidden, map[string]string{
+		"code":    "assist_not_available",
+		"message": "AI assist isn't available on the " + plan + " plan. Upgrade to use it.",
+	})
+	return true
+}
 
 // @Summary  ListChatSessions
 // @Tags     chat
@@ -50,6 +79,9 @@ func (h *Handler) CreateSession(w http.ResponseWriter, r *http.Request) {
 	p, ok := authmw.PrincipalFromCtx(r.Context())
 	if !ok {
 		httputil.Unauthorized(w)
+		return
+	}
+	if h.assistGated(w, r, orgID) {
 		return
 	}
 

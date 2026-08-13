@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/uigraph/app/internal/enterprise"
 	"github.com/uigraph/app/internal/httputil"
 	authmw "github.com/uigraph/app/internal/middleware"
 	storepkg "github.com/uigraph/app/internal/store"
@@ -83,6 +84,17 @@ func (h *Handler) CreateMap(w http.ResponseWriter, r *http.Request) {
 	if body.Name == "" {
 		httputil.BadRequest(w, "name is required")
 		return
+	}
+
+	if h.enterprise != nil {
+		_, total, err := h.store.ListMaps(r.Context(), orgID, uimap.ListParams{Limit: 1})
+		if err != nil {
+			httputil.Error(w, r, err)
+			return
+		}
+		if enterprise.ResourceLimitReached(w, r, h.enterprise, orgID, "map", total, func(i enterprise.SeatLimitInfo) int { return i.MaxMaps }) {
+			return
+		}
 	}
 
 	now := time.Now().UTC()

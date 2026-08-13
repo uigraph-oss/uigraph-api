@@ -8,6 +8,7 @@ import (
 
 	"github.com/uigraph/app/internal/cache"
 	diagrampkg "github.com/uigraph/app/internal/diagram"
+	"github.com/uigraph/app/internal/enterprise"
 	"github.com/uigraph/app/internal/queue"
 )
 
@@ -38,15 +39,16 @@ type objectStore interface {
 
 // Handler serves diagram endpoints.
 type Handler struct {
-	store   store
-	storage objectStore
-	cache   cache.Client // may be nil
-	queue   *queue.Queue // may be nil
+	store      store
+	storage    objectStore
+	cache      cache.Client       // may be nil
+	queue      *queue.Queue       // may be nil
+	enterprise *enterprise.Client // nil for self-hosted (UIGRAPH_ENTERPRISE unset)
 }
 
 // New constructs a Handler.
-func New(s store, st objectStore, c cache.Client, q *queue.Queue) *Handler {
-	return &Handler{store: s, storage: st, cache: c, queue: q}
+func New(s store, st objectStore, c cache.Client, q *queue.Queue, ent *enterprise.Client) *Handler {
+	return &Handler{store: s, storage: st, cache: c, queue: q, enterprise: ent}
 }
 
 // Register wires diagram routes into mux.
@@ -56,9 +58,10 @@ func Register(
 	st objectStore,
 	c cache.Client,
 	q *queue.Queue,
+	ent *enterprise.Client,
 	requireScope func(scope, method, pattern string, h http.HandlerFunc),
 ) {
-	h := New(s, st, c, q)
+	h := New(s, st, c, q, ent)
 	requireScope("diagrams:read", "GET", "/api/v1/orgs/{orgID}/diagrams", h.List)
 	requireScope("diagrams:write", "POST", "/api/v1/orgs/{orgID}/diagrams", h.Create)
 	requireScope("diagrams:write", "POST", "/api/v1/orgs/{orgID}/diagrams/sync", h.Sync)
