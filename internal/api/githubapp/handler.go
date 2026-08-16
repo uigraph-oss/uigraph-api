@@ -31,6 +31,7 @@ type githubClient interface {
 	InstallationURL(state string) string
 	ExchangeCode(ctx context.Context, code string) (string, error)
 	AuthenticatedUserID(ctx context.Context, token string) (int64, error)
+	FindUserInstallation(ctx context.Context, token string) (*gh.Installation, error)
 	VerifyUserInstallation(ctx context.Context, token string, installationID int64) (*gh.Installation, error)
 	ListInstallationRepositories(ctx context.Context, installationID int64) ([]domain.Repository, error)
 	DeleteInstallation(ctx context.Context, installationID int64) error
@@ -162,8 +163,16 @@ func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) {
 			httpError(w, r, err)
 			return
 		}
-		http.Redirect(w, r, h.client.InstallationURL(state), http.StatusFound)
-		return
+		existing, err := h.client.FindUserInstallation(r.Context(), token)
+		if err != nil {
+			httpError(w, r, err)
+			return
+		}
+		if existing == nil {
+			http.Redirect(w, r, h.client.InstallationURL(state), http.StatusFound)
+			return
+		}
+		installationID = existing.GetID()
 	}
 	installation, err := h.client.VerifyUserInstallation(r.Context(), token, installationID)
 	if err != nil {

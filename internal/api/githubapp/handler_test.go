@@ -48,6 +48,9 @@ func (pollingClient) ExchangeCode(context.Context, string) (string, error) {
 func (pollingClient) AuthenticatedUserID(context.Context, string) (int64, error) {
 	return 0, nil
 }
+func (pollingClient) FindUserInstallation(context.Context, string) (*gh.Installation, error) {
+	return nil, nil
+}
 func (pollingClient) VerifyUserInstallation(context.Context, string, int64) (*gh.Installation, error) {
 	return nil, nil
 }

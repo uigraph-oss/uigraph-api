@@ -125,26 +125,14 @@ func (c *Client) AuthenticatedUserID(ctx context.Context, token string) (int64, 
 }
 
 func (c *Client) VerifyUserInstallation(ctx context.Context, token string, installationID int64) (*gh.Installation, error) {
-	userClient, err := c.githubClient(token)
+	installations, err := c.userInstallations(ctx, token)
 	if err != nil {
 		return nil, err
 	}
 	accessible := false
-	for page := 1; ; page++ {
-		var response struct {
-			Installations []*gh.Installation `json:"installations"`
-		}
-		path := fmt.Sprintf("user/installations?per_page=100&page=%d", page)
-		if err := c.do(ctx, userClient, http.MethodGet, path, nil, &response); err != nil {
-			return nil, err
-		}
-		for _, installation := range response.Installations {
-			if installation.GetID() == installationID {
-				accessible = true
-				break
-			}
-		}
-		if accessible || len(response.Installations) < 100 {
+	for _, installation := range installations {
+		if installation.GetID() == installationID {
+			accessible = true
 			break
 		}
 	}
@@ -167,6 +155,45 @@ func (c *Client) VerifyUserInstallation(ctx context.Context, token string, insta
 		return nil, errors.New("installation does not belong to configured GitHub App")
 	}
 	return &installation, nil
+}
+
+func (c *Client) FindUserInstallation(ctx context.Context, token string) (*gh.Installation, error) {
+	installations, err := c.userInstallations(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	var match *gh.Installation
+	for _, installation := range installations {
+		if installation.GetAppID() != c.config.AppID {
+			continue
+		}
+		if match != nil {
+			return nil, nil
+		}
+		match = installation
+	}
+	return match, nil
+}
+
+func (c *Client) userInstallations(ctx context.Context, token string) ([]*gh.Installation, error) {
+	client, err := c.githubClient(token)
+	if err != nil {
+		return nil, err
+	}
+	installations := []*gh.Installation{}
+	for page := 1; ; page++ {
+		var response struct {
+			Installations []*gh.Installation `json:"installations"`
+		}
+		path := fmt.Sprintf("user/installations?per_page=100&page=%d", page)
+		if err := c.do(ctx, client, http.MethodGet, path, nil, &response); err != nil {
+			return nil, err
+		}
+		installations = append(installations, response.Installations...)
+		if len(response.Installations) < 100 {
+			return installations, nil
+		}
+	}
 }
 
 func (c *Client) ListInstallationRepositories(ctx context.Context, installationID int64) ([]Repository, error) {
