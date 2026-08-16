@@ -33,8 +33,8 @@ func TestGenerationAndSyncWorkflowBoundaries(t *testing.T) {
 		t.Fatalf("generation workflow is invalid YAML: %v", err)
 	}
 	for _, expected := range []string{
-		"@uigraph/agents@" + AgentsVersion + " artifacts init --seeded",
-		"go install github.com/uigraph-oss/uigraph-cli@" + CLIValidationVersion,
+		"@uigraph/agents@experimental artifacts init --seeded",
+		"go install github.com/uigraph-oss/uigraph-cli@main",
 		"uigraph-cli validate",
 		"AI_PROVIDER_API_KEY: ${{ secrets.AI_PROVIDER_API_KEY }}",
 		"branch: uigraph/generated/onboarding-id",

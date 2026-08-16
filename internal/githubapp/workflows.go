@@ -8,8 +8,6 @@ import (
 )
 
 const (
-	AgentsVersion            = "0.0.6"
-	CLIValidationVersion     = "v1.0.5"
 	CreatePullRequestVersion = "v7"
 )
 
@@ -94,11 +92,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npx --yes @uigraph/agents@%s artifacts init --seeded
+      - run: npx --yes @uigraph/agents@experimental artifacts init --seeded
       - uses: actions/setup-go@v5
         with:
           go-version: stable
-      - run: go install github.com/uigraph-oss/uigraph-cli@%s
+      - run: go install github.com/uigraph-oss/uigraph-cli@main
       - run: uigraph-cli validate
       - name: Restrict generated changes
         run: |
@@ -115,7 +113,7 @@ jobs:
           add-paths: |
             .uigraph.yaml
             .uigraph/**
-`, defaultBranch, AgentsVersion, CLIValidationVersion, CreatePullRequestVersion, ArtifactsBranch(onboardingID), defaultBranch))
+`, defaultBranch, CreatePullRequestVersion, ArtifactsBranch(onboardingID), defaultBranch))
 }
 
 func SyncWorkflow() []byte {
