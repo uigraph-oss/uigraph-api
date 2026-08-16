@@ -348,7 +348,7 @@ func (h *Handler) reconcileBatch(ctx context.Context, batch *domain.Batch) (bool
 		if run.ID == 0 {
 			continue
 		}
-		if err := h.store.ApplyWorkflowRunEvent(ctx, installation.GitHubInstallationID, onboarding.Repository.GitHubID, run.ID, run.Event, run.Status, run.Conclusion, run.HeadBranch, run.HTMLURL); err != nil {
+		if err := h.store.ApplyWorkflowRunEvent(ctx, installation.GitHubInstallationID, onboarding.Repository.GitHubID, run.ID, run.Event, run.Status, run.Conclusion, run.HeadBranch, run.HTMLURL, run.Path); err != nil {
 			return applied, err
 		}
 		applied = true
@@ -467,13 +467,14 @@ func (h *Handler) Webhook(w http.ResponseWriter, r *http.Request) {
 			Conclusion string `json:"conclusion"`
 			HeadBranch string `json:"head_branch"`
 			HTMLURL    string `json:"html_url"`
+			Path       string `json:"path"`
 		} `json:"workflow_run"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
 		httputil.BadRequest(w, "invalid workflow_run payload")
 		return
 	}
-	err = h.store.ApplyWorkflowRunEvent(r.Context(), payload.Installation.ID, payload.Repository.ID, payload.WorkflowRun.ID, payload.WorkflowRun.Event, payload.WorkflowRun.Status, payload.WorkflowRun.Conclusion, payload.WorkflowRun.HeadBranch, payload.WorkflowRun.HTMLURL)
+	err = h.store.ApplyWorkflowRunEvent(r.Context(), payload.Installation.ID, payload.Repository.ID, payload.WorkflowRun.ID, payload.WorkflowRun.Event, payload.WorkflowRun.Status, payload.WorkflowRun.Conclusion, payload.WorkflowRun.HeadBranch, payload.WorkflowRun.HTMLURL, payload.WorkflowRun.Path)
 	if err != nil {
 		httpError(w, r, err)
 		return

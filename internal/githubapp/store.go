@@ -25,6 +25,6 @@ type Store interface {
 	CompleteJob(ctx context.Context, jobID, owner string) error
 	RetryJob(ctx context.Context, job Job, owner string, next time.Time, message string) error
 	RecordWebhook(ctx context.Context, deliveryID, event, action string, installationID int64) (bool, error)
-	ApplyWorkflowRunEvent(ctx context.Context, installationID, repositoryID, runID int64, event, status, conclusion, headBranch, htmlURL string) error
+	ApplyWorkflowRunEvent(ctx context.Context, installationID, repositoryID, runID int64, event, status, conclusion, headBranch, htmlURL, path string) error
 	CreateOnboardingToken(ctx context.Context, orgID string, expiresAt time.Time) (plaintext string, err error)
 }

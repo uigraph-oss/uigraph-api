@@ -43,13 +43,13 @@ type Client struct {
 }
 
 type WorkflowRun struct {
-	ID         int64     `json:"id"`
-	Event      string    `json:"event"`
-	Status     string    `json:"status"`
-	Conclusion string    `json:"conclusion"`
-	HeadBranch string    `json:"head_branch"`
-	HTMLURL    string    `json:"html_url"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID         int64  `json:"id"`
+	Event      string `json:"event"`
+	Status     string `json:"status"`
+	Conclusion string `json:"conclusion"`
+	HeadBranch string `json:"head_branch"`
+	HTMLURL    string `json:"html_url"`
+	Path       string `json:"path"`
 }
 
 func NewClient(config ClientConfig, httpClient *http.Client) (*Client, error) {
@@ -378,10 +378,10 @@ func (c *Client) GetWorkflowRun(ctx context.Context, installationID int64, repos
 	}
 	latest := WorkflowRun{}
 	for _, run := range response.WorkflowRuns {
-		if run.HeadBranch != branch || run.Event != "push" {
+		if run.HeadBranch != branch || run.Event != "push" || run.Path != ArtifactWorkflowPath {
 			continue
 		}
-		if latest.ID == 0 || run.CreatedAt.After(latest.CreatedAt) {
+		if latest.ID == 0 || run.ID > latest.ID {
 			latest = run
 		}
 	}
