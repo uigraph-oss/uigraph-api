@@ -236,8 +236,9 @@ func (c *Client) StartRun(ctx context.Context, installationID int64, onboarding 
 		return err
 	}
 	files := map[string][]byte{
-		WorkflowPath:    Workflow(onboarding.Repository.DefaultBranch),
-		".uigraph.yaml": seed,
+		ArtifactWorkflowPath: ArtifactWorkflow(onboarding.Repository.DefaultBranch),
+		SyncWorkflowPath:     SyncWorkflow(onboarding.Repository.DefaultBranch),
+		".uigraph.yaml":      seed,
 	}
 	return c.createAtomicCommit(ctx, client, owner, repo, onboarding.Repository.DefaultBranch, onboarding.Branch, files)
 }
