@@ -109,7 +109,10 @@ jobs:
         run: |
           git config user.name "uigraph[bot]"
           git config user.email "uigraph[bot]@users.noreply.github.com"
-          git add .uigraph.yaml .uigraph
+          git add .uigraph.yaml
+          if [ -d .uigraph ]; then
+            git add .uigraph
+          fi
           if git diff --cached --quiet; then
             echo "Generation produced no changes to commit"
           else
@@ -121,8 +124,8 @@ jobs:
           UIGRAPH_TOKEN: ${{ secrets.UIGRAPH_ONBOARDING_TOKEN }}
           UIGRAPH_GATEWAY_URL: ${{ vars.UIGRAPH_GATEWAY_URL }}
         run: |
-          if [ ! -d .uigraph ]; then
-            echo "No .uigraph directory in this ref; skipping sync"
+          if [ ! -f .uigraph.yaml ]; then
+            echo "No .uigraph.yaml in this ref; skipping sync"
             exit 0
           fi
           if [ -z "$UIGRAPH_TOKEN" ]; then

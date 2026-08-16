@@ -80,11 +80,9 @@ type Onboarding struct {
 	TeamID                 string     `json:"teamId"`
 	TeamName               string     `json:"team"`
 	Status                 State      `json:"status"`
-	FailedPhase            *State     `json:"failedPhase,omitempty"`
 	Branch                 string     `json:"branch"`
 	RunID                  int64      `json:"-"`
 	RunURL                 string     `json:"runUrl,omitempty"`
-	PRNumber               int        `json:"-"`
 	PRURL                  string     `json:"prUrl,omitempty"`
 	MissingAIConfiguration []string   `json:"missingAIConfiguration"`
 	Error                  string     `json:"error,omitempty"`

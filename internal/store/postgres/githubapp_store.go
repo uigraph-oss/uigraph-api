@@ -248,19 +248,19 @@ func (d *DB) GetBatch(ctx context.Context, orgID, batchID string) (*githubapp.Ba
 			terminal++
 		}
 	}
-	if len(batch.Items) != 0 && completed == len(batch.Items) {
-		batch.Status = "completed"
-	} else if len(batch.Items) != 0 && terminal == len(batch.Items) {
-		batch.Status = "failed"
-	} else {
+	switch {
+	case len(batch.Items) == completed:
+		batch.Status = string(githubapp.StateCompleted)
+	case len(batch.Items) == terminal:
+		batch.Status = string(githubapp.StateFailed)
+	default:
 		batch.Status = "running"
 	}
 	return &batch, nil
 }
 
 const onboardingSelect = `SELECT o.id, o.org_id, o.batch_id, o.repository_id, o.team_id, o.team_name, o.status,
-	o.failed_phase, o.branch, COALESCE(o.run_id,0), COALESCE(o.run_url,''),
-	COALESCE(o.pr_number,0), COALESCE(o.pr_url,''),
+	o.branch, COALESCE(o.run_id,0), COALESCE(o.run_url,''), COALESCE(o.pr_url,''),
 	o.missing_ai_configuration, COALESCE(o.error,''), COALESCE(o.service_id::text,''),
 	o.created_at, o.updated_at, o.completed_at,
 	r.id, r.org_id, r.installation_id, r.github_id, r.name, r.full_name, r.html_url, r.default_branch,
@@ -270,10 +270,9 @@ const onboardingSelect = `SELECT o.id, o.org_id, o.batch_id, o.repository_id, o.
 func scanOnboarding(row interface{ Scan(...any) error }) (*githubapp.Onboarding, error) {
 	var onboarding githubapp.Onboarding
 	var status string
-	var failedPhase sql.NullString
 	err := row.Scan(&onboarding.ID, &onboarding.OrgID, &onboarding.BatchID, &onboarding.RepositoryID,
-		&onboarding.TeamID, &onboarding.TeamName, &status, &failedPhase, &onboarding.Branch,
-		&onboarding.RunID, &onboarding.RunURL, &onboarding.PRNumber, &onboarding.PRURL,
+		&onboarding.TeamID, &onboarding.TeamName, &status, &onboarding.Branch,
+		&onboarding.RunID, &onboarding.RunURL, &onboarding.PRURL,
 		pq.Array(&onboarding.MissingAIConfiguration), &onboarding.Error, &onboarding.ServiceID,
 		&onboarding.CreatedAt, &onboarding.UpdatedAt, &onboarding.CompletedAt,
 		&onboarding.Repository.ID, &onboarding.Repository.OrgID, &onboarding.Repository.InstallationID,
@@ -286,13 +285,6 @@ func scanOnboarding(row interface{ Scan(...any) error }) (*githubapp.Onboarding,
 	onboarding.Status = githubapp.State(status)
 	if err := onboarding.Status.Validate(); err != nil {
 		return nil, err
-	}
-	if failedPhase.Valid {
-		phase := githubapp.State(failedPhase.String)
-		if err := phase.Validate(); err != nil {
-			return nil, err
-		}
-		onboarding.FailedPhase = &phase
 	}
 	return &onboarding, nil
 }
@@ -308,29 +300,25 @@ func (d *DB) GetOnboarding(ctx context.Context, orgID, onboardingID string) (*gi
 	return onboarding, nil
 }
 
-func (d *DB) UpdateOnboarding(ctx context.Context, onboarding githubapp.Onboarding) error {
-	if err := onboarding.Status.Validate(); err != nil {
+func (d *DB) SetOnboardingStatus(ctx context.Context, orgID, onboardingID string, status githubapp.State, missingAIConfiguration []string) error {
+	if err := status.Validate(); err != nil {
 		return err
 	}
 	_, err := d.db.ExecContext(ctx, `
-		UPDATE repository_onboardings SET status=$3, failed_phase=$4, run_id=NULLIF($5,0), run_url=NULLIF($6,''),
-		pr_number=NULLIF($7,0), pr_url=NULLIF($8,''), missing_ai_configuration=$9, error=NULLIF($10,''),
-		service_id=NULLIF($11,'')::uuid, completed_at=$12, updated_at=NOW() WHERE org_id=$1 AND id=$2`,
-		onboarding.OrgID, onboarding.ID, onboarding.Status, onboarding.FailedPhase,
-		onboarding.RunID, onboarding.RunURL, onboarding.PRNumber, onboarding.PRURL,
-		pq.Array(onboarding.MissingAIConfiguration), onboarding.Error, onboarding.ServiceID, onboarding.CompletedAt)
+		UPDATE repository_onboardings SET status=$3, missing_ai_configuration=COALESCE($4::text[],'{}'), updated_at=NOW()
+		WHERE org_id=$1 AND id=$2`, orgID, onboardingID, status, pq.Array(missingAIConfiguration))
 	if err != nil {
-		return fmt.Errorf("postgres: UpdateOnboarding: %w", err)
+		return fmt.Errorf("postgres: SetOnboardingStatus: %w", err)
 	}
 	return nil
 }
 
-func (d *DB) EnqueueJob(ctx context.Context, orgID, onboardingID, kind string) error {
+func (d *DB) SetOnboardingPullRequest(ctx context.Context, orgID, onboardingID, url string) error {
 	_, err := d.db.ExecContext(ctx, `
-		INSERT INTO repository_onboarding_jobs(org_id,onboarding_id,kind) VALUES($1,$2,$3)
-		ON CONFLICT(onboarding_id,kind) WHERE completed_at IS NULL DO NOTHING`, orgID, onboardingID, kind)
+		UPDATE repository_onboardings SET pr_url=NULLIF($3,''), updated_at=NOW()
+		WHERE org_id=$1 AND id=$2`, orgID, onboardingID, url)
 	if err != nil {
-		return fmt.Errorf("postgres: EnqueueJob: %w", err)
+		return fmt.Errorf("postgres: SetOnboardingPullRequest: %w", err)
 	}
 	return nil
 }
@@ -349,17 +337,20 @@ func (d *DB) RetryOnboarding(ctx context.Context, orgID, onboardingID string, re
 	if err != nil {
 		return err
 	}
-	// A retry always restarts the whole run: the AI check runs first and the
-	// onboarding branch is force-updated, which is what produces a new run.
+	if recheck && status != string(githubapp.StateWaitingAI) {
+		return store.ErrConflict
+	}
 	if !recheck && status != string(githubapp.StateWaitingAI) && status != string(githubapp.StateFailed) {
 		return store.ErrConflict
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE repository_onboardings SET status=$3, failed_phase=NULL, error=NULL, updated_at=NOW() WHERE org_id=$1 AND id=$2`, orgID, onboardingID, githubapp.StateCheckingAI); err != nil {
+	if _, err = tx.ExecContext(ctx, `
+		UPDATE repository_onboardings SET status=$3, error=NULL, run_id=NULL, run_url=NULL, completed_at=NULL, updated_at=NOW()
+		WHERE org_id=$1 AND id=$2`, orgID, onboardingID, githubapp.StateCheckingAI); err != nil {
 		return err
 	}
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO repository_onboarding_jobs(org_id,onboarding_id,kind) VALUES($1,$2,$3)
-		ON CONFLICT(onboarding_id,kind) WHERE completed_at IS NULL DO UPDATE SET available_at=NOW(), lease_owner=NULL, lease_expires_at=NULL, last_error=NULL`, orgID, onboardingID, githubapp.JobStart)
+		ON CONFLICT(onboarding_id,kind) WHERE completed_at IS NULL DO UPDATE SET available_at=NOW(), attempts=0, lease_owner=NULL, lease_expires_at=NULL, last_error=NULL`, orgID, onboardingID, githubapp.JobStart)
 	if err != nil {
 		return err
 	}
@@ -402,7 +393,7 @@ func (d *DB) RetryJob(ctx context.Context, job githubapp.Job, owner string, next
 		if _, err = tx.ExecContext(ctx, `UPDATE repository_onboarding_jobs SET completed_at=NOW(), last_error=$3, lease_owner=NULL, lease_expires_at=NULL, updated_at=NOW() WHERE id=$1 AND lease_owner=$2`, job.ID, owner, message); err != nil {
 			return err
 		}
-		_, err = tx.ExecContext(ctx, `UPDATE repository_onboardings SET failed_phase=status, status=$3, error=$4, updated_at=NOW() WHERE org_id=$1 AND id=$2`, job.OrgID, job.OnboardingID, githubapp.StateFailed, message)
+		_, err = tx.ExecContext(ctx, `UPDATE repository_onboardings SET status=$3, error=$4, updated_at=NOW() WHERE org_id=$1 AND id=$2`, job.OrgID, job.OnboardingID, githubapp.StateFailed, message)
 		if err != nil {
 			return err
 		}
@@ -421,9 +412,6 @@ func (d *DB) RecordWebhook(ctx context.Context, deliveryID, event, action string
 	return count == 1, err
 }
 
-// ApplyWorkflowRunEvent advances an onboarding from its run on the onboarding
-// branch. The branch name carries the onboarding ID, so the run is matched by
-// branch rather than by "most recent onboarding for this repository".
 func (d *DB) ApplyWorkflowRunEvent(ctx context.Context, installationID, repositoryID, runID int64, event, status, conclusion, headBranch, htmlURL string) error {
 	if event != "push" {
 		return nil
@@ -433,18 +421,22 @@ func (d *DB) ApplyWorkflowRunEvent(ctx context.Context, installationID, reposito
 		return err
 	}
 	defer tx.Rollback()
-	var orgID, onboardingID, current, repositoryURL string
+	var orgID, onboardingID, repositoryURL string
+	var currentRunID int64
 	err = tx.QueryRowContext(ctx, `
-		SELECT o.org_id,o.id,o.status,r.html_url FROM repository_onboardings o
+		SELECT o.org_id,o.id,COALESCE(o.run_id,0),r.html_url FROM repository_onboardings o
 		JOIN github_repositories r ON r.id=o.repository_id AND r.org_id=o.org_id
 		JOIN github_installations i ON i.id=r.installation_id
 		WHERE i.github_installation_id=$1 AND r.github_id=$2 AND o.branch=$3 FOR UPDATE OF o`, installationID, repositoryID, headBranch).Scan(
-		&orgID, &onboardingID, &current, &repositoryURL)
+		&orgID, &onboardingID, &currentRunID, &repositoryURL)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
 	if err != nil {
 		return err
+	}
+	if runID < currentRunID {
+		return nil
 	}
 	if status != "completed" {
 		_, err = tx.ExecContext(ctx, `UPDATE repository_onboardings SET status=$3,run_id=$4,run_url=$5,updated_at=NOW() WHERE org_id=$1 AND id=$2`, orgID, onboardingID, githubapp.StateRunRunning, runID, htmlURL)
@@ -455,7 +447,7 @@ func (d *DB) ApplyWorkflowRunEvent(ctx context.Context, installationID, reposito
 	}
 	if conclusion != "success" {
 		message := "UiGraph onboarding run failed; verify the repository AI settings and review the run logs"
-		_, err = tx.ExecContext(ctx, `UPDATE repository_onboardings SET failed_phase=status,status=$3,error=$4,run_id=$5,run_url=$6,updated_at=NOW() WHERE org_id=$1 AND id=$2`, orgID, onboardingID, githubapp.StateFailed, message, runID, htmlURL)
+		_, err = tx.ExecContext(ctx, `UPDATE repository_onboardings SET status=$3,error=$4,run_id=$5,run_url=$6,updated_at=NOW() WHERE org_id=$1 AND id=$2`, orgID, onboardingID, githubapp.StateFailed, message, runID, htmlURL)
 		if err != nil {
 			return err
 		}
@@ -464,7 +456,7 @@ func (d *DB) ApplyWorkflowRunEvent(ctx context.Context, installationID, reposito
 	var serviceID string
 	err = tx.QueryRowContext(ctx, `SELECT id FROM services WHERE org_id=$1 AND deleted_at IS NULL AND REGEXP_REPLACE(LOWER(TRIM(TRAILING '/' FROM git_repo_url)), '\.git$', '')=REGEXP_REPLACE(LOWER(TRIM(TRAILING '/' FROM $2)), '\.git$', '') ORDER BY created_at LIMIT 1`, orgID, repositoryURL).Scan(&serviceID)
 	if errors.Is(err, sql.ErrNoRows) {
-		_, err = tx.ExecContext(ctx, `UPDATE repository_onboardings SET failed_phase=$3,status=$4,error='Sync succeeded but no service matched the canonical repository URL',run_id=$5,run_url=$6,updated_at=NOW() WHERE org_id=$1 AND id=$2`, orgID, onboardingID, githubapp.StateRunRunning, githubapp.StateFailed, runID, htmlURL)
+		_, err = tx.ExecContext(ctx, `UPDATE repository_onboardings SET status=$3,error='Sync succeeded but no service matched the canonical repository URL',run_id=$4,run_url=$5,updated_at=NOW() WHERE org_id=$1 AND id=$2`, orgID, onboardingID, githubapp.StateFailed, runID, htmlURL)
 		if err != nil {
 			return err
 		}
@@ -510,17 +502,3 @@ func (d *DB) CreateOnboardingToken(ctx context.Context, orgID string, expiresAt 
 	return plaintext, nil
 }
 
-func (d *DB) LinkServiceByRepositoryURL(ctx context.Context, orgID, onboardingID, repositoryURL string) error {
-	result, err := d.db.ExecContext(ctx, `
-		UPDATE repository_onboardings o SET service_id=s.id,updated_at=NOW() FROM services s
-		WHERE o.org_id=$1 AND o.id=$2 AND s.org_id=o.org_id AND s.deleted_at IS NULL
-		AND REGEXP_REPLACE(LOWER(TRIM(TRAILING '/' FROM s.git_repo_url)), '\.git$', '')=REGEXP_REPLACE(LOWER(TRIM(TRAILING '/' FROM $3)), '\.git$', '')`, orgID, onboardingID, repositoryURL)
-	if err != nil {
-		return err
-	}
-	count, _ := result.RowsAffected()
-	if count == 0 {
-		return store.ErrNotFound
-	}
-	return nil
-}

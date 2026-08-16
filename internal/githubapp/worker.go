@@ -13,7 +13,7 @@ import (
 type APIClient interface {
 	StartRun(ctx context.Context, installationID int64, onboarding Onboarding, orgName string) error
 	MissingAIConfiguration(ctx context.Context, installationID int64, repository Repository, account string) ([]string, error)
-	OpenPullRequest(ctx context.Context, installationID int64, onboarding Onboarding) (PullRequest, error)
+	OpenPullRequest(ctx context.Context, installationID int64, onboarding Onboarding) (string, error)
 	PutOnboardingSecret(ctx context.Context, installationID int64, installation Installation, repositories []Repository, plaintext string) error
 }
 
@@ -72,21 +72,16 @@ func (w *Worker) process(ctx context.Context, job Job) error {
 	}
 	switch job.Kind {
 	case JobStart:
-		onboarding.Status = StateCheckingAI
-		if err := w.store.UpdateOnboarding(ctx, *onboarding); err != nil {
+		if err := w.store.SetOnboardingStatus(ctx, job.OrgID, job.OnboardingID, StateCheckingAI, nil); err != nil {
 			return err
 		}
 		missing, err := w.client.MissingAIConfiguration(ctx, installation.GitHubInstallationID, onboarding.Repository, installation.AccountLogin)
 		if err != nil {
 			return err
 		}
-		onboarding.MissingAIConfiguration = missing
 		if len(missing) != 0 {
-			onboarding.Status = StateWaitingAI
-			return w.store.UpdateOnboarding(ctx, *onboarding)
+			return w.store.SetOnboardingStatus(ctx, job.OrgID, job.OnboardingID, StateWaitingAI, missing)
 		}
-		// The run generates and syncs in one job, so the token has to be
-		// installed before the branch push that starts it.
 		batch, err := w.store.GetBatch(ctx, job.OrgID, onboarding.BatchID)
 		if err != nil {
 			return err
@@ -109,18 +104,14 @@ func (w *Worker) process(ctx context.Context, job Job) error {
 		if err := w.client.StartRun(ctx, installation.GitHubInstallationID, *onboarding, orgName); err != nil {
 			return err
 		}
-		onboarding.Status = StateRunQueued
-		return w.store.UpdateOnboarding(ctx, *onboarding)
+		return w.store.SetOnboardingStatus(ctx, job.OrgID, job.OnboardingID, StateRunQueued, nil)
 	case JobOpenPR:
-		pull, err := w.client.OpenPullRequest(ctx, installation.GitHubInstallationID, *onboarding)
+		url, err := w.client.OpenPullRequest(ctx, installation.GitHubInstallationID, *onboarding)
 		if err != nil {
-			// Onboarding is already complete; the pull request is a convenience.
 			slog.WarnContext(ctx, "GitHub onboarding pull request could not be opened", "onboarding", onboarding.ID, "err", err)
 			return nil
 		}
-		onboarding.PRNumber = pull.Number
-		onboarding.PRURL = pull.URL
-		return w.store.UpdateOnboarding(ctx, *onboarding)
+		return w.store.SetOnboardingPullRequest(ctx, job.OrgID, job.OnboardingID, url)
 	default:
 		return fmt.Errorf("unknown GitHub onboarding job kind %q", job.Kind)
 	}

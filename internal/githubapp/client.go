@@ -14,9 +14,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -40,17 +41,8 @@ type Client struct {
 	http   *http.Client
 }
 
-type PullRequest struct {
-	Number int
-	URL    string
-	Merged bool
-	Closed bool
-}
-
 type WorkflowRun struct {
 	ID         int64     `json:"id"`
-	Name       string    `json:"name"`
-	Path       string    `json:"path"`
 	Event      string    `json:"event"`
 	Status     string    `json:"status"`
 	Conclusion string    `json:"conclusion"`
@@ -162,17 +154,16 @@ func (c *Client) FindUserInstallation(ctx context.Context, token string) (*gh.In
 	if err != nil {
 		return nil, err
 	}
-	var match *gh.Installation
+	matches := []*gh.Installation{}
 	for _, installation := range installations {
-		if installation.GetAppID() != c.config.AppID {
-			continue
+		if installation.GetAppID() == c.config.AppID {
+			matches = append(matches, installation)
 		}
-		if match != nil {
-			return nil, nil
-		}
-		match = installation
 	}
-	return match, nil
+	if len(matches) == 1 {
+		return matches[0], nil
+	}
+	return nil, nil
 }
 
 func (c *Client) userInstallations(ctx context.Context, token string) ([]*gh.Installation, error) {
@@ -230,9 +221,6 @@ func (c *Client) DeleteInstallation(ctx context.Context, installationID int64) e
 	return c.do(ctx, client, http.MethodDelete, fmt.Sprintf("app/installations/%d", installationID), nil, nil)
 }
 
-// StartRun creates or force-updates the onboarding branch with the seed and the
-// UiGraph workflow. The resulting push is what starts the onboarding run, so a
-// retry must always land a new commit rather than silently reuse the branch.
 func (c *Client) StartRun(ctx context.Context, installationID int64, onboarding Onboarding, orgName string) error {
 	client, err := c.installationClient(ctx, installationID)
 	if err != nil {
@@ -253,23 +241,20 @@ func (c *Client) StartRun(ctx context.Context, installationID int64, onboarding 
 	return c.createAtomicCommit(ctx, client, owner, repo, onboarding.Repository.DefaultBranch, onboarding.Branch, files)
 }
 
-// OpenPullRequest proposes the completed onboarding branch to the default
-// branch. Onboarding is already complete when this runs, so the pull request is
-// informational and merging it is the customer's choice.
-func (c *Client) OpenPullRequest(ctx context.Context, installationID int64, onboarding Onboarding) (PullRequest, error) {
+func (c *Client) OpenPullRequest(ctx context.Context, installationID int64, onboarding Onboarding) (string, error) {
 	client, err := c.installationClient(ctx, installationID)
 	if err != nil {
-		return PullRequest{}, err
+		return "", err
 	}
 	owner, repo, err := splitRepository(onboarding.Repository.FullName)
 	if err != nil {
-		return PullRequest{}, err
+		return "", err
 	}
 	existing, err := c.findPullRequest(ctx, client, owner, repo, onboarding.Branch, onboarding.Repository.DefaultBranch)
 	if err != nil {
-		return PullRequest{}, err
+		return "", err
 	}
-	if existing.Number != 0 {
+	if existing != "" {
 		return existing, nil
 	}
 	payload := map[string]string{
@@ -278,13 +263,12 @@ func (c *Client) OpenPullRequest(ctx context.Context, installationID int64, onbo
 		"body": "This repository is already onboarded to UiGraph. Merging keeps the generated artifacts and enables UiGraph checks on future pull requests.",
 	}
 	var created struct {
-		Number  int    `json:"number"`
 		HTMLURL string `json:"html_url"`
 	}
 	if err := c.do(ctx, client, http.MethodPost, fmt.Sprintf("repos/%s/%s/pulls", owner, repo), payload, &created); err != nil {
-		return PullRequest{}, fmt.Errorf("open onboarding pull request: %w", err)
+		return "", fmt.Errorf("open onboarding pull request: %w", err)
 	}
-	return PullRequest{Number: created.Number, URL: created.HTMLURL}, nil
+	return created.HTMLURL, nil
 }
 
 func (c *Client) MissingAIConfiguration(ctx context.Context, installationID int64, repository Repository, account string) ([]string, error) {
@@ -296,55 +280,61 @@ func (c *Client) MissingAIConfiguration(ctx context.Context, installationID int6
 	if err != nil {
 		return nil, err
 	}
-	secretNames := map[string]bool{}
-	variableNames := map[string]bool{}
-	paths := []struct {
-		path string
-		key  string
-		dest map[string]bool
-	}{
-		{fmt.Sprintf("repos/%s/%s/actions/secrets?per_page=100", owner, repo), "secrets", secretNames},
-		{fmt.Sprintf("orgs/%s/actions/secrets?per_page=100", account), "secrets", secretNames},
-		{fmt.Sprintf("repos/%s/%s/actions/variables?per_page=100", owner, repo), "variables", variableNames},
-		{fmt.Sprintf("orgs/%s/actions/variables?per_page=100", account), "variables", variableNames},
+	secrets, err := c.actionsNames(ctx, client, fmt.Sprintf("repos/%s/%s/actions/secrets?per_page=100", owner, repo), "secrets")
+	if err != nil {
+		return nil, err
 	}
-	for _, item := range paths {
-		var response map[string]json.RawMessage
-		if err := c.do(ctx, client, http.MethodGet, item.path, nil, &response); err != nil {
-			var apiError *gh.ErrorResponse
-			if errors.As(err, &apiError) && apiError.Response != nil && apiError.Response.StatusCode == http.StatusNotFound {
-				continue
-			}
-			return nil, err
-		}
-		var values []struct {
-			Name string `json:"name"`
-		}
-		if raw := response[item.key]; raw != nil {
-			if err := json.Unmarshal(raw, &values); err != nil {
-				return nil, err
-			}
-		}
-		for _, value := range values {
-			item.dest[value.Name] = true
-		}
+	orgSecrets, err := c.actionsNames(ctx, client, fmt.Sprintf("orgs/%s/actions/secrets?per_page=100", account), "secrets")
+	if err != nil {
+		return nil, err
+	}
+	variables, err := c.actionsNames(ctx, client, fmt.Sprintf("repos/%s/%s/actions/variables?per_page=100", owner, repo), "variables")
+	if err != nil {
+		return nil, err
+	}
+	orgVariables, err := c.actionsNames(ctx, client, fmt.Sprintf("orgs/%s/actions/variables?per_page=100", account), "variables")
+	if err != nil {
+		return nil, err
 	}
 	missing := make([]string, 0, 3)
-	if !secretNames["AI_PROVIDER_API_KEY"] {
+	if !secrets["AI_PROVIDER_API_KEY"] && !orgSecrets["AI_PROVIDER_API_KEY"] {
 		missing = append(missing, "AI_PROVIDER_API_KEY")
 	}
-	if !variableNames["AI_PROVIDER_MODEL"] {
+	if !variables["AI_PROVIDER_MODEL"] && !orgVariables["AI_PROVIDER_MODEL"] {
 		missing = append(missing, "AI_PROVIDER_MODEL")
 	}
-	if !variableNames["AI_PROVIDER_API_URL"] {
+	if !variables["AI_PROVIDER_API_URL"] && !orgVariables["AI_PROVIDER_API_URL"] {
 		missing = append(missing, "AI_PROVIDER_API_URL")
 	}
 	return missing, nil
 }
 
-// GetWorkflowRun resolves the onboarding run for polling installations. The
-// workflow file only exists on the onboarding branch, so runs are looked up by
-// branch and push event rather than by workflow file.
+func (c *Client) actionsNames(ctx context.Context, client *gh.Client, path, key string) (map[string]bool, error) {
+	names := map[string]bool{}
+	var response map[string]json.RawMessage
+	if err := c.do(ctx, client, http.MethodGet, path, nil, &response); err != nil {
+		var apiError *gh.ErrorResponse
+		if errors.As(err, &apiError) && apiError.Response != nil && apiError.Response.StatusCode == http.StatusNotFound {
+			return names, nil
+		}
+		return nil, err
+	}
+	raw, ok := response[key]
+	if !ok {
+		return names, nil
+	}
+	var values []struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(raw, &values); err != nil {
+		return nil, err
+	}
+	for _, value := range values {
+		names[value.Name] = true
+	}
+	return names, nil
+}
+
 func (c *Client) GetWorkflowRun(ctx context.Context, installationID int64, repository Repository, branch string, runID int64) (WorkflowRun, error) {
 	client, err := c.installationClient(ctx, installationID)
 	if err != nil {
@@ -391,8 +381,6 @@ func (c *Client) PutOnboardingSecret(ctx context.Context, installationID int64, 
 		if err != nil {
 			return err
 		}
-		// Repositories onboarded in earlier batches keep the secret for their
-		// ongoing pull request syncs, so the new selection is a union.
 		selected, err := c.selectedSecretRepositories(ctx, client, installation.AccountLogin)
 		if err != nil {
 			return err
@@ -400,11 +388,7 @@ func (c *Client) PutOnboardingSecret(ctx context.Context, installationID int64, 
 		for _, repository := range repositories {
 			selected[repository.GitHubID] = true
 		}
-		ids := make([]int64, 0, len(selected))
-		for id := range selected {
-			ids = append(ids, id)
-		}
-		sort.Slice(ids, func(a, b int) bool { return ids[a] < ids[b] })
+		ids := slices.Sorted(maps.Keys(selected))
 		payload := map[string]any{"encrypted_value": encrypted, "key_id": keyID, "visibility": "selected", "selected_repository_ids": ids}
 		return c.do(ctx, client, http.MethodPut, fmt.Sprintf("orgs/%s/actions/secrets/UIGRAPH_ONBOARDING_TOKEN", installation.AccountLogin), payload, nil)
 	}
@@ -464,12 +448,7 @@ func (c *Client) createAtomicCommit(ctx context.Context, client *gh.Client, owne
 		return err
 	}
 	treeEntries := make([]map[string]string, 0, len(files))
-	paths := make([]string, 0, len(files))
-	for path := range files {
-		paths = append(paths, path)
-	}
-	sort.Strings(paths)
-	for _, path := range paths {
+	for _, path := range slices.Sorted(maps.Keys(files)) {
 		content := files[path]
 		var blob struct {
 			SHA string `json:"sha"`
@@ -505,14 +484,11 @@ func (c *Client) createAtomicCommit(ctx context.Context, client *gh.Client, owne
 	return err
 }
 
-func (c *Client) findPullRequest(ctx context.Context, client *gh.Client, owner, repo, branch, base string) (PullRequest, error) {
+func (c *Client) findPullRequest(ctx context.Context, client *gh.Client, owner, repo, branch, base string) (string, error) {
 	query := url.Values{"state": {"all"}, "head": {owner + ":" + branch}, "base": {base}, "per_page": {"10"}}
 	var pulls []struct {
-		Number   int     `json:"number"`
-		HTMLURL  string  `json:"html_url"`
-		State    string  `json:"state"`
-		MergedAt *string `json:"merged_at"`
-		Head     struct {
+		HTMLURL string `json:"html_url"`
+		Head    struct {
 			Ref string `json:"ref"`
 		} `json:"head"`
 		Base struct {
@@ -520,14 +496,14 @@ func (c *Client) findPullRequest(ctx context.Context, client *gh.Client, owner, 
 		} `json:"base"`
 	}
 	if err := c.do(ctx, client, http.MethodGet, fmt.Sprintf("repos/%s/%s/pulls?%s", owner, repo, query.Encode()), nil, &pulls); err != nil {
-		return PullRequest{}, err
+		return "", err
 	}
 	for _, pull := range pulls {
 		if pull.Head.Ref == branch && pull.Base.Ref == base {
-			return PullRequest{Number: pull.Number, URL: pull.HTMLURL, Merged: pull.MergedAt != nil, Closed: pull.State == "closed"}, nil
+			return pull.HTMLURL, nil
 		}
 	}
-	return PullRequest{}, nil
+	return "", nil
 }
 
 func (c *Client) encryptSecret(ctx context.Context, client *gh.Client, path, plaintext string) (string, string, error) {

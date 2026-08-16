@@ -26,7 +26,7 @@ import (
 
 const maxWebhookBody = 1 << 20
 
-type githubClient interface {
+type Client interface {
 	AuthorizationURL(state, callback string) string
 	InstallationURL(state string) string
 	ExchangeCode(ctx context.Context, code string) (string, error)
@@ -35,21 +35,18 @@ type githubClient interface {
 	VerifyUserInstallation(ctx context.Context, token string, installationID int64) (*gh.Installation, error)
 	ListInstallationRepositories(ctx context.Context, installationID int64) ([]domain.Repository, error)
 	DeleteInstallation(ctx context.Context, installationID int64) error
-}
-
-type githubPollingClient interface {
 	GetWorkflowRun(ctx context.Context, installationID int64, repository domain.Repository, branch string, runID int64) (domain.WorkflowRun, error)
 }
 
 type Handler struct {
 	store         domain.Store
-	client        githubClient
+	client        Client
 	callbackURL   string
 	frontendURL   string
 	webhookSecret []byte
 }
 
-func New(store domain.Store, client githubClient, callbackURL, frontendURL, webhookSecret string) *Handler {
+func New(store domain.Store, client Client, callbackURL, frontendURL, webhookSecret string) *Handler {
 	return &Handler{store: store, client: client, callbackURL: callbackURL, frontendURL: frontendURL, webhookSecret: []byte(webhookSecret)}
 }
 
@@ -213,8 +210,12 @@ func (h *Handler) DeleteInstallation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	installation, err := h.store.GetInstallation(r.Context(), r.PathValue("orgID"))
-	if err != nil || installation == nil {
-		httpError(w, r, errOrNotFound(err))
+	if err != nil {
+		httpError(w, r, err)
+		return
+	}
+	if installation == nil {
+		httpError(w, r, store.ErrNotFound)
 		return
 	}
 	if err := h.client.DeleteInstallation(r.Context(), installation.GitHubInstallationID); err != nil {
@@ -285,9 +286,11 @@ func (h *Handler) GetBatch(w http.ResponseWriter, r *http.Request) {
 		httpError(w, r, err)
 		return
 	}
-	if err := h.reconcileBatch(r.Context(), batch); err != nil {
+	applied, err := h.reconcileBatch(r.Context(), batch)
+	if err != nil {
 		slog.WarnContext(r.Context(), "GitHub onboarding poll failed", "err", err)
-	} else {
+	}
+	if applied {
 		batch, err = h.store.GetBatch(r.Context(), r.PathValue("orgID"), r.PathValue("batchID"))
 		if err != nil {
 			httpError(w, r, err)
@@ -297,31 +300,35 @@ func (h *Handler) GetBatch(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, batch)
 }
 
-func (h *Handler) reconcileBatch(ctx context.Context, batch *domain.Batch) error {
-	client, ok := h.client.(githubPollingClient)
-	if !ok {
-		return nil
+func (h *Handler) reconcileBatch(ctx context.Context, batch *domain.Batch) (bool, error) {
+	if h.client == nil {
+		return false, nil
 	}
 	installation, err := h.store.GetInstallation(ctx, batch.OrgID)
-	if err != nil || installation == nil {
-		return err
+	if err != nil {
+		return false, err
 	}
+	if installation == nil {
+		return false, nil
+	}
+	applied := false
 	for _, onboarding := range batch.Items {
 		if onboarding.Status != domain.StateRunQueued && onboarding.Status != domain.StateRunRunning {
 			continue
 		}
-		run, err := client.GetWorkflowRun(ctx, installation.GitHubInstallationID, onboarding.Repository, onboarding.Branch, onboarding.RunID)
+		run, err := h.client.GetWorkflowRun(ctx, installation.GitHubInstallationID, onboarding.Repository, onboarding.Branch, onboarding.RunID)
 		if err != nil {
-			return err
+			return applied, err
 		}
 		if run.ID == 0 {
 			continue
 		}
 		if err := h.store.ApplyWorkflowRunEvent(ctx, installation.GitHubInstallationID, onboarding.Repository.GitHubID, run.ID, run.Event, run.Status, run.Conclusion, run.HeadBranch, run.HTMLURL); err != nil {
-			return err
+			return applied, err
 		}
+		applied = true
 	}
-	return nil
+	return applied, nil
 }
 
 // @Summary Recheck repository AI configuration
@@ -417,32 +424,31 @@ func (h *Handler) Webhook(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusAccepted)
 		return
 	}
-	switch event {
-	case "workflow_run":
-		var payload struct {
-			Installation struct {
-				ID int64 `json:"id"`
-			} `json:"installation"`
-			Repository struct {
-				ID int64 `json:"id"`
-			} `json:"repository"`
-			WorkflowRun struct {
-				ID         int64  `json:"id"`
-				Event      string `json:"event"`
-				Status     string `json:"status"`
-				Conclusion string `json:"conclusion"`
-				HeadBranch string `json:"head_branch"`
-				HTMLURL    string `json:"html_url"`
-			} `json:"workflow_run"`
-		}
-		if err := json.Unmarshal(body, &payload); err == nil {
-			err = h.store.ApplyWorkflowRunEvent(r.Context(), payload.Installation.ID, payload.Repository.ID, payload.WorkflowRun.ID, payload.WorkflowRun.Event, payload.WorkflowRun.Status, payload.WorkflowRun.Conclusion, payload.WorkflowRun.HeadBranch, payload.WorkflowRun.HTMLURL)
-		}
-	case "ping", "installation", "installation_repositories", "repository":
-		err = nil
-	default:
-		err = nil
+	if event != "workflow_run" {
+		w.WriteHeader(http.StatusAccepted)
+		return
 	}
+	var payload struct {
+		Installation struct {
+			ID int64 `json:"id"`
+		} `json:"installation"`
+		Repository struct {
+			ID int64 `json:"id"`
+		} `json:"repository"`
+		WorkflowRun struct {
+			ID         int64  `json:"id"`
+			Event      string `json:"event"`
+			Status     string `json:"status"`
+			Conclusion string `json:"conclusion"`
+			HeadBranch string `json:"head_branch"`
+			HTMLURL    string `json:"html_url"`
+		} `json:"workflow_run"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		httputil.BadRequest(w, "invalid workflow_run payload")
+		return
+	}
+	err = h.store.ApplyWorkflowRunEvent(r.Context(), payload.Installation.ID, payload.Repository.ID, payload.WorkflowRun.ID, payload.WorkflowRun.Event, payload.WorkflowRun.Status, payload.WorkflowRun.Conclusion, payload.WorkflowRun.HeadBranch, payload.WorkflowRun.HTMLURL)
 	if err != nil {
 		httpError(w, r, err)
 		return
@@ -473,11 +479,4 @@ func httpError(w http.ResponseWriter, r *http.Request, err error) {
 		return
 	}
 	httputil.Error(w, r, fmt.Errorf("github app: %w", err))
-}
-
-func errOrNotFound(err error) error {
-	if err != nil {
-		return err
-	}
-	return store.ErrNotFound
 }
