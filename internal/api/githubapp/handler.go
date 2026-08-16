@@ -42,12 +42,11 @@ type Handler struct {
 	store         domain.Store
 	client        Client
 	callbackURL   string
-	frontendURL   string
 	webhookSecret []byte
 }
 
-func New(store domain.Store, client Client, callbackURL, frontendURL, webhookSecret string) *Handler {
-	return &Handler{store: store, client: client, callbackURL: callbackURL, frontendURL: frontendURL, webhookSecret: []byte(webhookSecret)}
+func New(store domain.Store, client Client, callbackURL, webhookSecret string) *Handler {
+	return &Handler{store: store, client: client, callbackURL: callbackURL, webhookSecret: []byte(webhookSecret)}
 }
 
 func Register(mux *http.ServeMux, h *Handler, requireScope func(scope, method, pattern string, handler http.HandlerFunc)) {
@@ -120,7 +119,7 @@ func (h *Handler) Install(w http.ResponseWriter, r *http.Request) {
 // @Param state query string true "One-use installation state"
 // @Param code query string false "GitHub OAuth code"
 // @Param installation_id query integer false "GitHub installation ID"
-// @Success 302
+// @Success 200
 // @Router /github-app/callback [get]
 func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) {
 	if h.client == nil {
@@ -195,8 +194,9 @@ func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) {
 		httpError(w, r, err)
 		return
 	}
-	destination := strings.TrimRight(h.frontendURL, "/") + "/integrations/github/installed"
-	http.Redirect(w, r, destination, http.StatusFound)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`<!doctype html><meta charset="utf-8"><script>window.close()</script>`))
 }
 
 // @Summary Delete GitHub App installation

@@ -391,7 +391,7 @@ const (
 	APIVariable     = "UIGRAPH_API_URL"
 )
 
-func (c *Client) PutOnboardingCredentials(ctx context.Context, installationID int64, installation Installation, repositories []Repository, plaintext string) error {
+func (c *Client) PutOnboardingCredentials(ctx context.Context, installationID int64, repositories []Repository, plaintext string) error {
 	if c.config.GatewayURL == "" {
 		return fmt.Errorf("githubapp: UIGRAPH_GATEWAY_URL is not configured on this UiGraph instance")
 	}
@@ -403,50 +403,33 @@ func (c *Client) PutOnboardingCredentials(ctx context.Context, installationID in
 	if err != nil {
 		return err
 	}
-	if strings.EqualFold(installation.TargetType, "Organization") || strings.EqualFold(installation.AccountType, "Organization") {
-		account := installation.AccountLogin
-		keyID, encrypted, err := c.encryptSecret(ctx, client, fmt.Sprintf("orgs/%s/actions/secrets/public-key", account), plaintext)
-		if err != nil {
-			return err
-		}
-		secretRepositories, err := c.selectedRepositories(ctx, client,
-			fmt.Sprintf("orgs/%s/actions/secrets/%s/repositories?per_page=100", account, TokenSecret), repositories)
-		if err != nil {
-			return err
-		}
-		secret := map[string]any{"encrypted_value": encrypted, "key_id": keyID,
-			"visibility": "selected", "selected_repository_ids": secretRepositories}
-		if err := c.do(ctx, client, http.MethodPut, fmt.Sprintf("orgs/%s/actions/secrets/%s", account, TokenSecret), secret, nil); err != nil {
-			return err
-		}
-		for _, name := range []string{GatewayVariable, APIVariable} {
-			variableRepositories, err := c.selectedRepositories(ctx, client,
-				fmt.Sprintf("orgs/%s/actions/variables/%s/repositories?per_page=100", account, name), repositories)
-			if err != nil {
-				return err
-			}
-			variable := map[string]any{"name": name, "value": values[name],
-				"visibility": "selected", "selected_repository_ids": variableRepositories}
-			if err := c.putVariable(ctx, client, fmt.Sprintf("orgs/%s/actions/variables", account), name, variable); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
 	for _, repository := range repositories {
 		owner, repo, err := splitRepository(repository.FullName)
 		if err != nil {
 			return err
 		}
-		keyID, encrypted, err := c.encryptSecret(ctx, client, fmt.Sprintf("repos/%s/%s/actions/secrets/public-key", owner, repo), plaintext)
+		existingSecrets, err := c.actionsNames(ctx, client, fmt.Sprintf("repos/%s/%s/actions/secrets?per_page=100", owner, repo), "secrets")
 		if err != nil {
 			return err
 		}
-		secret := map[string]any{"encrypted_value": encrypted, "key_id": keyID}
-		if err := c.do(ctx, client, http.MethodPut, fmt.Sprintf("repos/%s/%s/actions/secrets/%s", owner, repo, TokenSecret), secret, nil); err != nil {
+		existingVariables, err := c.actionsNames(ctx, client, fmt.Sprintf("repos/%s/%s/actions/variables?per_page=100", owner, repo), "variables")
+		if err != nil {
 			return err
 		}
+		if !existingSecrets[TokenSecret] {
+			keyID, encrypted, err := c.encryptSecret(ctx, client, fmt.Sprintf("repos/%s/%s/actions/secrets/public-key", owner, repo), plaintext)
+			if err != nil {
+				return err
+			}
+			secret := map[string]any{"encrypted_value": encrypted, "key_id": keyID}
+			if err := c.do(ctx, client, http.MethodPut, fmt.Sprintf("repos/%s/%s/actions/secrets/%s", owner, repo, TokenSecret), secret, nil); err != nil {
+				return err
+			}
+		}
 		for _, name := range []string{GatewayVariable, APIVariable} {
+			if existingVariables[name] {
+				continue
+			}
 			variable := map[string]any{"name": name, "value": values[name]}
 			if err := c.putVariable(ctx, client, fmt.Sprintf("repos/%s/%s/actions/variables", owner, repo), name, variable); err != nil {
 				return err
@@ -466,28 +449,6 @@ func (c *Client) putVariable(ctx context.Context, client *gh.Client, collection,
 		return c.do(ctx, client, http.MethodPost, collection, payload, nil)
 	}
 	return err
-}
-
-func (c *Client) selectedRepositories(ctx context.Context, client *gh.Client, path string, repositories []Repository) ([]int64, error) {
-	var response struct {
-		Repositories []struct {
-			ID int64 `json:"id"`
-		} `json:"repositories"`
-	}
-	if err := c.do(ctx, client, http.MethodGet, path, nil, &response); err != nil {
-		var apiError *gh.ErrorResponse
-		if !errors.As(err, &apiError) || apiError.Response == nil || apiError.Response.StatusCode != http.StatusNotFound {
-			return nil, err
-		}
-	}
-	selected := map[int64]bool{}
-	for _, repository := range response.Repositories {
-		selected[repository.ID] = true
-	}
-	for _, repository := range repositories {
-		selected[repository.GitHubID] = true
-	}
-	return slices.Sorted(maps.Keys(selected)), nil
 }
 
 func (c *Client) createAtomicCommit(ctx context.Context, client *gh.Client, owner, repo, base, branch string, files map[string][]byte) error {

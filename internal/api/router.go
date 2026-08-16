@@ -290,16 +290,12 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	timelineapi.Register(mux, s, scopeFn)
 
 	if githubStore, ok := any(s).(githubappdomain.Store); ok {
-		frontendURL := cfg.FrontendURL
-		if frontendURL == "" {
-			frontendURL = cfg.PublicURL
-		}
 		callbackURL := strings.TrimRight(cfg.PublicURL, "/") + "/api/v1/github-app/callback"
 		var client githubappapi.Client
 		if githubClient != nil {
 			client = githubClient
 		}
-		githubHandler := githubappapi.New(githubStore, client, callbackURL, frontendURL, cfg.GitHubWebhookSecret)
+		githubHandler := githubappapi.New(githubStore, client, callbackURL, cfg.GitHubWebhookSecret)
 		githubappapi.Register(mux, githubHandler, scopeFn)
 	}
 
