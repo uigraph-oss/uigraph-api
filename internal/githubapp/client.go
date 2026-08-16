@@ -408,17 +408,23 @@ func (c *Client) PutOnboardingCredentials(ctx context.Context, installationID in
 		if err != nil {
 			return err
 		}
+		existingSecrets, err := c.actionsNames(ctx, client, fmt.Sprintf("repos/%s/%s/actions/secrets?per_page=100", owner, repo), "secrets")
+		if err != nil {
+			return err
+		}
 		existingVariables, err := c.actionsNames(ctx, client, fmt.Sprintf("repos/%s/%s/actions/variables?per_page=100", owner, repo), "variables")
 		if err != nil {
 			return err
 		}
-		keyID, encrypted, err := c.encryptSecret(ctx, client, fmt.Sprintf("repos/%s/%s/actions/secrets/public-key", owner, repo), plaintext)
-		if err != nil {
-			return err
-		}
-		secret := map[string]any{"encrypted_value": encrypted, "key_id": keyID}
-		if err := c.do(ctx, client, http.MethodPut, fmt.Sprintf("repos/%s/%s/actions/secrets/%s", owner, repo, TokenSecret), secret, nil); err != nil {
-			return err
+		if !existingSecrets[TokenSecret] {
+			keyID, encrypted, err := c.encryptSecret(ctx, client, fmt.Sprintf("repos/%s/%s/actions/secrets/public-key", owner, repo), plaintext)
+			if err != nil {
+				return err
+			}
+			secret := map[string]any{"encrypted_value": encrypted, "key_id": keyID}
+			if err := c.do(ctx, client, http.MethodPut, fmt.Sprintf("repos/%s/%s/actions/secrets/%s", owner, repo, TokenSecret), secret, nil); err != nil {
+				return err
+			}
 		}
 		for _, name := range []string{GatewayVariable, APIVariable} {
 			if existingVariables[name] {
