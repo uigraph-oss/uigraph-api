@@ -88,10 +88,10 @@ jobs:
       - if: github.event_name == 'push'
         name: Generate repository artifacts
         env:
-          AI_PROVIDER_API_KEY: ${{ secrets.AI_PROVIDER_API_KEY }}
-          AI_PROVIDER_MODEL: ${{ vars.AI_PROVIDER_MODEL }}
-          AI_PROVIDER_API_URL: ${{ vars.AI_PROVIDER_API_URL }}
-          AI_PROVIDER_NPM: ${{ vars.AI_PROVIDER_NPM }}
+          AI_PROVIDER_API_KEY: ${{ secrets.AI_PROVIDER_API_KEY || vars.AI_PROVIDER_API_KEY }}
+          AI_PROVIDER_MODEL: ${{ secrets.AI_PROVIDER_MODEL || vars.AI_PROVIDER_MODEL }}
+          AI_PROVIDER_API_URL: ${{ secrets.AI_PROVIDER_API_URL || vars.AI_PROVIDER_API_URL }}
+          AI_PROVIDER_NPM: ${{ secrets.AI_PROVIDER_NPM || vars.AI_PROVIDER_NPM }}
         run: npx --yes @uigraph/agents@experimental artifacts init --seeded
       - if: github.event_name == 'push'
         name: Restrict generated changes
@@ -122,7 +122,7 @@ jobs:
       - name: Sync
         env:
           UIGRAPH_TOKEN: ${{ secrets.UIGRAPH_ONBOARDING_TOKEN }}
-          UIGRAPH_GATEWAY_URL: ${{ vars.UIGRAPH_GATEWAY_URL }}
+          UIGRAPH_GATEWAY_URL: ${{ secrets.UIGRAPH_GATEWAY_URL || vars.UIGRAPH_GATEWAY_URL }}
         run: |
           if [ ! -f .uigraph.yaml ]; then
             echo "No .uigraph.yaml in this ref; skipping sync"

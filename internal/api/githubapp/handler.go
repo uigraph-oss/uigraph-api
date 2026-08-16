@@ -195,7 +195,7 @@ func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) {
 		httpError(w, r, err)
 		return
 	}
-	destination := strings.TrimRight(h.frontendURL, "/") + "/settings/integrations/github?installed=true"
+	destination := strings.TrimRight(h.frontendURL, "/") + "/integrations/github/installed"
 	http.Redirect(w, r, destination, http.StatusFound)
 }
 

@@ -296,15 +296,20 @@ func (c *Client) MissingAIConfiguration(ctx context.Context, installationID int6
 	if err != nil {
 		return nil, err
 	}
-	missing := make([]string, 0, 3)
-	if !secrets["AI_PROVIDER_API_KEY"] && !orgSecrets["AI_PROVIDER_API_KEY"] {
-		missing = append(missing, "AI_PROVIDER_API_KEY")
+	configured := map[string]bool{}
+	for _, source := range []map[string]bool{secrets, orgSecrets, variables, orgVariables} {
+		for name := range source {
+			configured[name] = true
+		}
 	}
-	if !variables["AI_PROVIDER_MODEL"] && !orgVariables["AI_PROVIDER_MODEL"] {
-		missing = append(missing, "AI_PROVIDER_MODEL")
+	missing := make([]string, 0, 4)
+	for _, name := range []string{"AI_PROVIDER_API_KEY", "AI_PROVIDER_MODEL"} {
+		if !configured[name] {
+			missing = append(missing, name)
+		}
 	}
-	if !variables["AI_PROVIDER_API_URL"] && !orgVariables["AI_PROVIDER_API_URL"] {
-		missing = append(missing, "AI_PROVIDER_API_URL")
+	if !configured["AI_PROVIDER_API_URL"] && !configured["AI_PROVIDER_NPM"] {
+		missing = append(missing, "AI_PROVIDER_API_URL", "AI_PROVIDER_NPM")
 	}
 	return missing, nil
 }
