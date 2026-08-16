@@ -88,7 +88,7 @@ jobs:
           node-version: 22
       - name: Generate repository artifacts
         env:
-          AI_PROVIDER_API_KEY: ${{ secrets.AI_PROVIDER_API_KEY || vars.AI_PROVIDER_API_KEY }}
+          AI_PROVIDER_API_KEY: ${{ secrets.AI_PROVIDER_API_KEY }}
           AI_PROVIDER_MODEL: ${{ secrets.AI_PROVIDER_MODEL || vars.AI_PROVIDER_MODEL }}
           AI_PROVIDER_API_URL: ${{ secrets.AI_PROVIDER_API_URL || vars.AI_PROVIDER_API_URL }}
           AI_PROVIDER_NPM: ${{ secrets.AI_PROVIDER_NPM || vars.AI_PROVIDER_NPM }}

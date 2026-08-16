@@ -298,6 +298,12 @@ func (c *Client) MissingAIConfiguration(ctx context.Context, installationID int6
 	if err != nil {
 		return nil, err
 	}
+	secret := map[string]bool{}
+	for _, source := range []map[string]bool{secrets, orgSecrets} {
+		for name := range source {
+			secret[name] = true
+		}
+	}
 	configured := map[string]bool{}
 	for _, source := range []map[string]bool{secrets, orgSecrets, variables, orgVariables} {
 		for name := range source {
@@ -305,7 +311,12 @@ func (c *Client) MissingAIConfiguration(ctx context.Context, installationID int6
 		}
 	}
 	missing := make([]string, 0, 6)
-	for _, name := range []string{"AI_PROVIDER_API_KEY", "AI_PROVIDER_MODEL", TokenSecret, GatewayVariable} {
+	for _, name := range []string{"AI_PROVIDER_API_KEY", TokenSecret} {
+		if !secret[name] {
+			missing = append(missing, name)
+		}
+	}
+	for _, name := range []string{"AI_PROVIDER_MODEL", GatewayVariable} {
 		if !configured[name] {
 			missing = append(missing, name)
 		}
