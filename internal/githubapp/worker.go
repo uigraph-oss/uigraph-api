@@ -14,7 +14,7 @@ type APIClient interface {
 	StartRun(ctx context.Context, installationID int64, onboarding Onboarding, orgName string) error
 	MissingAIConfiguration(ctx context.Context, installationID int64, repository Repository, account string) ([]string, error)
 	OpenPullRequest(ctx context.Context, installationID int64, onboarding Onboarding) (string, error)
-	PutOnboardingSecret(ctx context.Context, installationID int64, installation Installation, repositories []Repository, plaintext string) error
+	PutOnboardingCredentials(ctx context.Context, installationID int64, installation Installation, repositories []Repository, plaintext string) error
 }
 
 type Worker struct {
@@ -75,13 +75,6 @@ func (w *Worker) process(ctx context.Context, job Job) error {
 		if err := w.store.SetOnboardingStatus(ctx, job.OrgID, job.OnboardingID, StateCheckingAI, nil); err != nil {
 			return err
 		}
-		missing, err := w.client.MissingAIConfiguration(ctx, installation.GitHubInstallationID, onboarding.Repository, installation.AccountLogin)
-		if err != nil {
-			return err
-		}
-		if len(missing) != 0 {
-			return w.store.SetOnboardingStatus(ctx, job.OrgID, job.OnboardingID, StateWaitingAI, missing)
-		}
 		batch, err := w.store.GetBatch(ctx, job.OrgID, onboarding.BatchID)
 		if err != nil {
 			return err
@@ -94,8 +87,15 @@ func (w *Worker) process(ctx context.Context, job Job) error {
 		if err != nil {
 			return err
 		}
-		if err := w.client.PutOnboardingSecret(ctx, installation.GitHubInstallationID, *installation, repositories, plaintext); err != nil {
+		if err := w.client.PutOnboardingCredentials(ctx, installation.GitHubInstallationID, *installation, repositories, plaintext); err != nil {
 			return err
+		}
+		missing, err := w.client.MissingAIConfiguration(ctx, installation.GitHubInstallationID, onboarding.Repository, installation.AccountLogin)
+		if err != nil {
+			return err
+		}
+		if len(missing) != 0 {
+			return w.store.SetOnboardingStatus(ctx, job.OrgID, job.OnboardingID, StateWaitingAI, missing)
 		}
 		orgName, err := w.store.GetOrgName(ctx, job.OrgID)
 		if err != nil {

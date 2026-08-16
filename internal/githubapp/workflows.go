@@ -103,8 +103,6 @@ jobs:
           go-version: stable
       - run: go install github.com/uigraph-oss/uigraph-cli@main
       - if: github.event_name == 'push'
-        run: uigraph-cli sync --dry-run
-      - if: github.event_name == 'push'
         name: Commit generated artifacts
         run: |
           git config user.name "uigraph[bot]"
@@ -121,15 +119,11 @@ jobs:
           fi
       - name: Sync
         env:
-          UIGRAPH_TOKEN: ${{ secrets.UIGRAPH_ONBOARDING_TOKEN }}
-          UIGRAPH_GATEWAY_URL: ${{ secrets.UIGRAPH_GATEWAY_URL || vars.UIGRAPH_GATEWAY_URL }}
+          UIGRAPH_TOKEN: ${{ secrets.UIGRAPH_TOKEN }}
+          UIGRAPH_GATEWAY_URL: ${{ vars.UIGRAPH_GATEWAY_URL || secrets.UIGRAPH_GATEWAY_URL }}
         run: |
           if [ ! -f .uigraph.yaml ]; then
             echo "No .uigraph.yaml in this ref; skipping sync"
-            exit 0
-          fi
-          if [ -z "$UIGRAPH_TOKEN" ]; then
-            echo "UIGRAPH_ONBOARDING_TOKEN is not available to this run; skipping sync"
             exit 0
           fi
           uigraph-cli sync

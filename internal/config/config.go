@@ -57,6 +57,8 @@ type Config struct {
 	// OAuth callback. When empty it falls back to PublicURL (same-origin prod).
 	FrontendURL string
 
+	GatewayURL string
+
 	// CookieDomain sets the session cookie's Domain attribute, e.g.
 	// ".example.com" to share it across every subdomain (the app, a
 	// marketing/billing site on a different subdomain, etc). Empty (the
@@ -133,6 +135,7 @@ func Load() (*Config, error) {
 		LicenseKey:                env("UIGRAPH_LICENSE_KEY", ""),
 		PublicURL:                 env("UIGRAPH_PUBLIC_URL", "http://localhost:8080"),
 		FrontendURL:               env("UIGRAPH_FRONTEND_URL", ""),
+		GatewayURL:                env("UIGRAPH_GATEWAY_URL", ""),
 		CookieDomain:              env("UIGRAPH_COOKIE_DOMAIN", ""),
 		InternalFrontendURL:       env("UIGRAPH_INTERNAL_FRONTEND_URL", ""),
 		ChromiumPath:              env("UIGRAPH_CHROMIUM_PATH", ""),
