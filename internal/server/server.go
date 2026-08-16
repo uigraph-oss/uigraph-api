@@ -17,6 +17,7 @@ import (
 	"github.com/uigraph/app/internal/cache"
 	"github.com/uigraph/app/internal/config"
 	"github.com/uigraph/app/internal/crypto"
+	"github.com/uigraph/app/internal/githubapp"
 	"github.com/uigraph/app/internal/migrate"
 	"github.com/uigraph/app/internal/queue"
 	"github.com/uigraph/app/internal/screenshot"
@@ -111,8 +112,21 @@ func Run(ctx context.Context, cfg *config.Config) error {
 		slog.WarnContext(ctx, "billing sync worker disabled — requires UIGRAPH_SECRET_KEY", "err", err)
 	}
 
+	var githubClient *githubapp.Client
+	if cfg.GitHubAppEnabled {
+		githubClient, err = githubapp.NewClient(githubapp.ClientConfig{
+			AppID: cfg.GitHubAppID, Slug: cfg.GitHubAppSlug, ClientID: cfg.GitHubAppClientID,
+			ClientSecret: cfg.GitHubAppClientSecret, PrivateKeyBase64: cfg.GitHubAppPrivateKeyBase64,
+			APIURL: cfg.GitHubAPIURL, WebURL: cfg.GitHubWebURL,
+		}, nil)
+		if err != nil {
+			return fmt.Errorf("server: GitHub App client: %w", err)
+		}
+		go githubapp.NewWorker(db, githubClient).Run(ctx)
+	}
+
 	bearer := authmw.NewSessionVerifier(db, db)
-	handler := api.New(db, bearer, cfg, storageClient, cacheClient, jobQueue)
+	handler := api.New(db, bearer, cfg, storageClient, cacheClient, jobQueue, githubClient)
 
 	addr := cfg.Host + ":" + cfg.Port
 	srv := &http.Server{

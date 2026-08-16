@@ -1,0 +1,621 @@
+package postgres
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/lib/pq"
+	"github.com/uigraph/app/internal/githubapp"
+	"github.com/uigraph/app/internal/identity"
+	"github.com/uigraph/app/internal/store"
+)
+
+func (d *DB) GetOrgName(ctx context.Context, orgID string) (string, error) {
+	var name string
+	if err := d.db.QueryRowContext(ctx, `SELECT name FROM orgs WHERE id=$1 AND disabled=FALSE`, orgID).Scan(&name); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", store.ErrNotFound
+		}
+		return "", fmt.Errorf("postgres: GetOrgName: %w", err)
+	}
+	return name, nil
+}
+
+func (d *DB) CreateInstallState(ctx context.Context, orgID, userID, stateHash string, expiresAt time.Time) error {
+	_, err := d.db.ExecContext(ctx, `
+		INSERT INTO github_installation_states(state_hash, org_id, user_id, expires_at)
+		VALUES($1,$2,$3,$4)`, stateHash, orgID, userID, expiresAt)
+	if err != nil {
+		return fmt.Errorf("postgres: CreateInstallState: %w", err)
+	}
+	return nil
+}
+
+func (d *DB) AuthorizeInstallState(ctx context.Context, stateHash string, githubUserID int64) (string, error) {
+	var orgID string
+	err := d.db.QueryRowContext(ctx, `
+		UPDATE github_installation_states
+		SET github_user_id=$2, authorized_at=NOW()
+		WHERE state_hash=$1 AND consumed_at IS NULL AND expires_at>NOW() AND authorized_at IS NULL
+		RETURNING org_id`, stateHash, githubUserID).Scan(&orgID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", store.ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("postgres: AuthorizeInstallState: %w", err)
+	}
+	return orgID, nil
+}
+
+func (d *DB) ConsumeInstallState(ctx context.Context, stateHash string, githubUserID int64) (string, error) {
+	var orgID string
+	err := d.db.QueryRowContext(ctx, `
+		UPDATE github_installation_states
+		SET consumed_at=NOW()
+		WHERE state_hash=$1 AND consumed_at IS NULL AND expires_at>NOW() AND authorized_at IS NOT NULL AND github_user_id=$2
+		RETURNING org_id`, stateHash, githubUserID).Scan(&orgID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", store.ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("postgres: ConsumeInstallState: %w", err)
+	}
+	return orgID, nil
+}
+
+func (d *DB) UpsertInstallation(ctx context.Context, installation githubapp.Installation, repositories []githubapp.Repository) error {
+	tx, err := d.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var installationID string
+	err = tx.QueryRowContext(ctx, `
+		INSERT INTO github_installations(org_id, github_installation_id, account_id, account_login, account_type, target_type, status, suspended_at)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+		ON CONFLICT(org_id) DO UPDATE SET github_installation_id=EXCLUDED.github_installation_id,
+		account_id=EXCLUDED.account_id, account_login=EXCLUDED.account_login, account_type=EXCLUDED.account_type,
+		target_type=EXCLUDED.target_type, status=EXCLUDED.status, suspended_at=EXCLUDED.suspended_at, updated_at=NOW()
+		RETURNING id`, installation.OrgID, installation.GitHubInstallationID, installation.AccountID,
+		installation.AccountLogin, installation.AccountType, installation.TargetType, installation.Status, installation.SuspendedAt).Scan(&installationID)
+	if err != nil {
+		return fmt.Errorf("postgres: UpsertInstallation: %w", err)
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE github_repositories SET selected=FALSE, updated_at=NOW() WHERE org_id=$1`, installation.OrgID); err != nil {
+		return err
+	}
+	for _, repository := range repositories {
+		_, err = tx.ExecContext(ctx, `
+			INSERT INTO github_repositories(org_id, installation_id, github_id, name, full_name, html_url, default_branch, private, archived, selected)
+			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,TRUE)
+			ON CONFLICT(org_id, github_id) DO UPDATE SET installation_id=EXCLUDED.installation_id, name=EXCLUDED.name,
+			full_name=EXCLUDED.full_name, html_url=EXCLUDED.html_url, default_branch=EXCLUDED.default_branch,
+			private=EXCLUDED.private, archived=EXCLUDED.archived, selected=TRUE, updated_at=NOW()`,
+			installation.OrgID, installationID, repository.GitHubID, repository.Name, repository.FullName,
+			repository.URL, repository.DefaultBranch, repository.Private, repository.Archived)
+		if err != nil {
+			return fmt.Errorf("postgres: UpsertInstallation repository: %w", err)
+		}
+	}
+	return tx.Commit()
+}
+
+func scanInstallation(row interface{ Scan(...any) error }) (*githubapp.Installation, error) {
+	var installation githubapp.Installation
+	err := row.Scan(&installation.ID, &installation.OrgID, &installation.GitHubInstallationID, &installation.AccountID,
+		&installation.AccountLogin, &installation.AccountType, &installation.TargetType, &installation.Status,
+		&installation.SuspendedAt, &installation.CreatedAt, &installation.UpdatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return &installation, err
+}
+
+func (d *DB) GetInstallation(ctx context.Context, orgID string) (*githubapp.Installation, error) {
+	installation, err := scanInstallation(d.db.QueryRowContext(ctx, `
+		SELECT id, org_id, github_installation_id, account_id, account_login, account_type, target_type,
+		status, suspended_at, created_at, updated_at FROM github_installations WHERE org_id=$1`, orgID))
+	if err != nil {
+		return nil, fmt.Errorf("postgres: GetInstallation: %w", err)
+	}
+	return installation, nil
+}
+
+func (d *DB) DeleteInstallation(ctx context.Context, orgID string) error {
+	result, err := d.db.ExecContext(ctx, `DELETE FROM github_installations WHERE org_id=$1`, orgID)
+	if err != nil {
+		return fmt.Errorf("postgres: DeleteInstallation: %w", err)
+	}
+	count, _ := result.RowsAffected()
+	if count == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
+func scanRepository(row interface{ Scan(...any) error }) (githubapp.Repository, error) {
+	var repository githubapp.Repository
+	err := row.Scan(&repository.ID, &repository.OrgID, &repository.InstallationID, &repository.GitHubID,
+		&repository.Name, &repository.FullName, &repository.URL, &repository.DefaultBranch, &repository.Private,
+		&repository.Archived, &repository.Selected, &repository.UpdatedAt)
+	return repository, err
+}
+
+func (d *DB) ListRepositories(ctx context.Context, orgID string) ([]githubapp.Repository, error) {
+	rows, err := d.db.QueryContext(ctx, `
+		SELECT id, org_id, installation_id, github_id, name, full_name, html_url, default_branch, private, archived, selected, updated_at
+		FROM github_repositories WHERE org_id=$1 AND selected=TRUE ORDER BY full_name`, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: ListRepositories: %w", err)
+	}
+	defer rows.Close()
+	var repositories []githubapp.Repository
+	for rows.Next() {
+		repository, err := scanRepository(rows)
+		if err != nil {
+			return nil, err
+		}
+		repositories = append(repositories, repository)
+	}
+	return repositories, rows.Err()
+}
+
+func (d *DB) CreateBatch(ctx context.Context, orgID, teamID, teamName, createdBy string, repositoryIDs []string) (*githubapp.Batch, error) {
+	if len(repositoryIDs) == 0 || len(repositoryIDs) > githubapp.MaxRepositoriesPerBatch {
+		return nil, store.ErrConflict
+	}
+	tx, err := d.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	var actualTeamName string
+	if err = tx.QueryRowContext(ctx, `SELECT name FROM teams WHERE id=$1 AND org_id=$2`, teamID, orgID).Scan(&actualTeamName); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, store.ErrTeamNotFound
+		}
+		return nil, err
+	}
+	if teamName != "" && teamName != actualTeamName {
+		return nil, store.ErrConflict
+	}
+	var selectedCount int
+	if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM github_repositories WHERE org_id=$1 AND id=ANY($2::uuid[]) AND selected=TRUE AND archived=FALSE`, orgID, pq.Array(repositoryIDs)).Scan(&selectedCount); err != nil {
+		return nil, err
+	}
+	if selectedCount != len(repositoryIDs) {
+		return nil, store.ErrNotFound
+	}
+	batchID := uuid.NewString()
+	if _, err = tx.ExecContext(ctx, `INSERT INTO repository_onboarding_batches(id, org_id, team_id, team_name, created_by) VALUES($1,$2,$3,$4,$5)`, batchID, orgID, teamID, actualTeamName, createdBy); err != nil {
+		return nil, err
+	}
+	for _, repositoryID := range repositoryIDs {
+		onboardingID := uuid.NewString()
+		if _, err = tx.ExecContext(ctx, `
+			INSERT INTO repository_onboardings(id, org_id, batch_id, repository_id, team_id, team_name, status, setup_branch, artifacts_branch)
+			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, onboardingID, orgID, batchID, repositoryID, teamID, actualTeamName,
+			githubapp.StateSelected, githubapp.SetupBranch(onboardingID), githubapp.ArtifactsBranch(onboardingID)); err != nil {
+			return nil, err
+		}
+		if _, err = tx.ExecContext(ctx, `INSERT INTO repository_onboarding_jobs(org_id, onboarding_id, kind) VALUES($1,$2,$3)`, orgID, onboardingID, githubapp.JobSetupPR); err != nil {
+			return nil, err
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	return d.GetBatch(ctx, orgID, batchID)
+}
+
+func (d *DB) GetBatch(ctx context.Context, orgID, batchID string) (*githubapp.Batch, error) {
+	var batch githubapp.Batch
+	err := d.db.QueryRowContext(ctx, `SELECT id, org_id, team_id, team_name, status, created_at, updated_at FROM repository_onboarding_batches WHERE org_id=$1 AND id=$2`, orgID, batchID).Scan(
+		&batch.ID, &batch.OrgID, &batch.TeamID, &batch.TeamName, &batch.Status, &batch.CreatedAt, &batch.UpdatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, store.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("postgres: GetBatch: %w", err)
+	}
+	rows, err := d.db.QueryContext(ctx, onboardingSelect+` WHERE o.org_id=$1 AND o.batch_id=$2 ORDER BY o.created_at`, orgID, batchID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		onboarding, err := scanOnboarding(rows)
+		if err != nil {
+			return nil, err
+		}
+		batch.Items = append(batch.Items, *onboarding)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	completed := 0
+	terminal := 0
+	for _, onboarding := range batch.Items {
+		if onboarding.Status == githubapp.StateCompleted {
+			completed++
+			terminal++
+		}
+		if onboarding.Status == githubapp.StateFailed || onboarding.Status == githubapp.StateCancelled {
+			terminal++
+		}
+	}
+	if len(batch.Items) != 0 && completed == len(batch.Items) {
+		batch.Status = "completed"
+	} else if len(batch.Items) != 0 && terminal == len(batch.Items) {
+		batch.Status = "failed"
+	} else {
+		batch.Status = "running"
+	}
+	return &batch, nil
+}
+
+const onboardingSelect = `SELECT o.id, o.org_id, o.batch_id, o.repository_id, o.team_id, o.team_name, o.status,
+	o.failed_phase, o.setup_branch, COALESCE(o.setup_pr_number,0), COALESCE(o.setup_pr_url,''),
+	COALESCE(o.generation_run_id,0), COALESCE(o.generation_run_url,''), o.artifacts_branch,
+	COALESCE(o.artifacts_pr_number,0), COALESCE(o.artifacts_pr_url,''), COALESCE(o.sync_run_id,0),
+	COALESCE(o.sync_run_url,''), o.missing_ai_configuration, COALESCE(o.error,''), COALESCE(o.service_id::text,''),
+	o.created_at, o.updated_at, o.completed_at,
+	r.id, r.org_id, r.installation_id, r.github_id, r.name, r.full_name, r.html_url, r.default_branch,
+	r.private, r.archived, r.selected, r.updated_at
+	FROM repository_onboardings o JOIN github_repositories r ON r.org_id=o.org_id AND r.id=o.repository_id`
+
+func scanOnboarding(row interface{ Scan(...any) error }) (*githubapp.Onboarding, error) {
+	var onboarding githubapp.Onboarding
+	var status string
+	var failedPhase sql.NullString
+	err := row.Scan(&onboarding.ID, &onboarding.OrgID, &onboarding.BatchID, &onboarding.RepositoryID,
+		&onboarding.TeamID, &onboarding.TeamName, &status, &failedPhase, &onboarding.SetupBranch,
+		&onboarding.SetupPRNumber, &onboarding.SetupPRURL, &onboarding.GenerationRunID, &onboarding.GenerationRunURL,
+		&onboarding.ArtifactsBranch, &onboarding.ArtifactsPRNumber, &onboarding.ArtifactsPRURL, &onboarding.SyncRunID,
+		&onboarding.SyncRunURL, pq.Array(&onboarding.MissingAIConfiguration), &onboarding.Error, &onboarding.ServiceID,
+		&onboarding.CreatedAt, &onboarding.UpdatedAt, &onboarding.CompletedAt,
+		&onboarding.Repository.ID, &onboarding.Repository.OrgID, &onboarding.Repository.InstallationID,
+		&onboarding.Repository.GitHubID, &onboarding.Repository.Name, &onboarding.Repository.FullName,
+		&onboarding.Repository.URL, &onboarding.Repository.DefaultBranch, &onboarding.Repository.Private,
+		&onboarding.Repository.Archived, &onboarding.Repository.Selected, &onboarding.Repository.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	onboarding.Status = githubapp.State(status)
+	if err := onboarding.Status.Validate(); err != nil {
+		return nil, err
+	}
+	if failedPhase.Valid {
+		phase := githubapp.State(failedPhase.String)
+		if err := phase.Validate(); err != nil {
+			return nil, err
+		}
+		onboarding.FailedPhase = &phase
+	}
+	return &onboarding, nil
+}
+
+func (d *DB) GetOnboarding(ctx context.Context, orgID, onboardingID string) (*githubapp.Onboarding, error) {
+	onboarding, err := scanOnboarding(d.db.QueryRowContext(ctx, onboardingSelect+` WHERE o.org_id=$1 AND o.id=$2`, orgID, onboardingID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, store.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("postgres: GetOnboarding: %w", err)
+	}
+	return onboarding, nil
+}
+
+func (d *DB) UpdateOnboarding(ctx context.Context, onboarding githubapp.Onboarding) error {
+	if err := onboarding.Status.Validate(); err != nil {
+		return err
+	}
+	_, err := d.db.ExecContext(ctx, `
+		UPDATE repository_onboardings SET status=$3, failed_phase=$4, setup_pr_number=NULLIF($5,0), setup_pr_url=NULLIF($6,''),
+		generation_run_id=NULLIF($7,0), generation_run_url=NULLIF($8,''), artifacts_pr_number=NULLIF($9,0),
+		artifacts_pr_url=NULLIF($10,''), sync_run_id=NULLIF($11,0), sync_run_url=NULLIF($12,''),
+		missing_ai_configuration=$13, error=NULLIF($14,''), service_id=NULLIF($15,'')::uuid,
+		completed_at=$16, updated_at=NOW() WHERE org_id=$1 AND id=$2`, onboarding.OrgID, onboarding.ID,
+		onboarding.Status, onboarding.FailedPhase, onboarding.SetupPRNumber, onboarding.SetupPRURL,
+		onboarding.GenerationRunID, onboarding.GenerationRunURL, onboarding.ArtifactsPRNumber, onboarding.ArtifactsPRURL,
+		onboarding.SyncRunID, onboarding.SyncRunURL, pq.Array(onboarding.MissingAIConfiguration), onboarding.Error,
+		onboarding.ServiceID, onboarding.CompletedAt)
+	if err != nil {
+		return fmt.Errorf("postgres: UpdateOnboarding: %w", err)
+	}
+	return nil
+}
+
+func (d *DB) EnqueueJob(ctx context.Context, orgID, onboardingID, kind string) error {
+	_, err := d.db.ExecContext(ctx, `
+		INSERT INTO repository_onboarding_jobs(org_id,onboarding_id,kind) VALUES($1,$2,$3)
+		ON CONFLICT(onboarding_id,kind) WHERE completed_at IS NULL DO NOTHING`, orgID, onboardingID, kind)
+	if err != nil {
+		return fmt.Errorf("postgres: EnqueueJob: %w", err)
+	}
+	return nil
+}
+
+func (d *DB) RetryOnboarding(ctx context.Context, orgID, onboardingID string, recheck bool) error {
+	tx, err := d.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var status string
+	var failedPhase sql.NullString
+	err = tx.QueryRowContext(ctx, `SELECT status, failed_phase FROM repository_onboardings WHERE org_id=$1 AND id=$2 FOR UPDATE`, orgID, onboardingID).Scan(&status, &failedPhase)
+	if errors.Is(err, sql.ErrNoRows) {
+		return store.ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	kind := githubapp.JobSetupPR
+	next := githubapp.StateSetupPRCreating
+	if recheck || status == string(githubapp.StateWaitingAI) {
+		kind = githubapp.JobCheckAI
+		next = githubapp.StateCheckingAI
+	} else if status == string(githubapp.StateFailed) && failedPhase.Valid {
+		switch githubapp.State(failedPhase.String) {
+		case githubapp.StateCheckingAI, githubapp.StateWaitingAI:
+			kind, next = githubapp.JobCheckAI, githubapp.StateCheckingAI
+		case githubapp.StateGenerationQueued, githubapp.StateGenerationRunning, githubapp.StateArtifactsPROpen, githubapp.StateWaitingArtifactsMerge:
+			kind, next = githubapp.JobGeneration, githubapp.StateGenerationQueued
+		case githubapp.StateSyncQueued, githubapp.StateSyncRunning:
+			kind, next = githubapp.JobSync, githubapp.StateSyncQueued
+		case githubapp.StateSelected, githubapp.StateSetupPRCreating, githubapp.StateSetupPROpen, githubapp.StateWaitingSetupMerge:
+			kind, next = githubapp.JobSetupPR, githubapp.StateSetupPRCreating
+		case githubapp.StateCompleted, githubapp.StateFailed, githubapp.StateCancelled:
+			return store.ErrConflict
+		}
+	} else {
+		return store.ErrConflict
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE repository_onboardings SET status=$3, failed_phase=NULL, error=NULL, updated_at=NOW() WHERE org_id=$1 AND id=$2`, orgID, onboardingID, next); err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO repository_onboarding_jobs(org_id,onboarding_id,kind) VALUES($1,$2,$3)
+		ON CONFLICT(onboarding_id,kind) WHERE completed_at IS NULL DO UPDATE SET available_at=NOW(), lease_owner=NULL, lease_expires_at=NULL, last_error=NULL`, orgID, onboardingID, kind)
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (d *DB) ClaimJob(ctx context.Context, owner string, lease time.Duration) (*githubapp.Job, error) {
+	var job githubapp.Job
+	err := d.db.QueryRowContext(ctx, `
+		WITH candidate AS (
+			SELECT id FROM repository_onboarding_jobs
+			WHERE completed_at IS NULL AND available_at<=NOW() AND (lease_expires_at IS NULL OR lease_expires_at<NOW())
+			ORDER BY available_at, created_at FOR UPDATE SKIP LOCKED LIMIT 1
+		)
+		UPDATE repository_onboarding_jobs j SET lease_owner=$1, lease_expires_at=NOW()+$2::interval,
+		attempts=attempts+1, updated_at=NOW() FROM candidate WHERE j.id=candidate.id
+		RETURNING j.id,j.org_id,j.onboarding_id,j.kind,j.attempts,j.max_attempts`, owner, fmt.Sprintf("%f seconds", lease.Seconds())).Scan(
+		&job.ID, &job.OrgID, &job.OnboardingID, &job.Kind, &job.Attempts, &job.MaxAttempts)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("postgres: ClaimJob: %w", err)
+	}
+	return &job, nil
+}
+
+func (d *DB) CompleteJob(ctx context.Context, jobID, owner string) error {
+	_, err := d.db.ExecContext(ctx, `UPDATE repository_onboarding_jobs SET completed_at=NOW(), lease_owner=NULL, lease_expires_at=NULL, updated_at=NOW() WHERE id=$1 AND lease_owner=$2`, jobID, owner)
+	return err
+}
+
+func (d *DB) RetryJob(ctx context.Context, job githubapp.Job, owner string, next time.Time, message string) error {
+	if job.Attempts >= job.MaxAttempts {
+		tx, err := d.db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		if _, err = tx.ExecContext(ctx, `UPDATE repository_onboarding_jobs SET completed_at=NOW(), last_error=$3, lease_owner=NULL, lease_expires_at=NULL, updated_at=NOW() WHERE id=$1 AND lease_owner=$2`, job.ID, owner, message); err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `UPDATE repository_onboardings SET failed_phase=status, status=$3, error=$4, updated_at=NOW() WHERE org_id=$1 AND id=$2`, job.OrgID, job.OnboardingID, githubapp.StateFailed, message)
+		if err != nil {
+			return err
+		}
+		return tx.Commit()
+	}
+	_, err := d.db.ExecContext(ctx, `UPDATE repository_onboarding_jobs SET available_at=$3, last_error=$4, lease_owner=NULL, lease_expires_at=NULL, updated_at=NOW() WHERE id=$1 AND lease_owner=$2`, job.ID, owner, next, message)
+	return err
+}
+
+func (d *DB) RecordWebhook(ctx context.Context, deliveryID, event, action string, installationID int64) (bool, error) {
+	result, err := d.db.ExecContext(ctx, `INSERT INTO github_webhook_deliveries(delivery_id,event,action,installation_id) VALUES($1,$2,$3,NULLIF($4,0)) ON CONFLICT DO NOTHING`, deliveryID, event, action, installationID)
+	if err != nil {
+		return false, err
+	}
+	count, err := result.RowsAffected()
+	return count == 1, err
+}
+
+func (d *DB) ApplyPullRequestEvent(ctx context.Context, installationID, repositoryID int64, number int, action string, merged bool, head, base string) error {
+	tx, err := d.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var orgID, onboardingID, status, setupBranch, artifactsBranch, defaultBranch string
+	var setupNumber, artifactsNumber sql.NullInt64
+	err = tx.QueryRowContext(ctx, `
+		SELECT o.org_id,o.id,o.status,o.setup_branch,o.artifacts_branch,r.default_branch,o.setup_pr_number,o.artifacts_pr_number
+		FROM repository_onboardings o JOIN github_repositories r ON r.id=o.repository_id AND r.org_id=o.org_id
+		JOIN github_installations i ON i.id=r.installation_id
+		WHERE i.github_installation_id=$1 AND r.github_id=$2 AND (o.setup_pr_number=$3 OR o.artifacts_pr_number=$3)
+		ORDER BY o.created_at DESC LIMIT 1 FOR UPDATE OF o`, installationID, repositoryID, number).Scan(
+		&orgID, &onboardingID, &status, &setupBranch, &artifactsBranch, &defaultBranch, &setupNumber, &artifactsNumber)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if head != setupBranch && head != artifactsBranch {
+		return nil
+	}
+	if base != defaultBranch {
+		return nil
+	}
+	if action != "closed" {
+		return nil
+	}
+	if !merged {
+		_, err = tx.ExecContext(ctx, `UPDATE repository_onboardings SET failed_phase=status,status=$3,error='Expected UiGraph pull request was closed without merge',updated_at=NOW() WHERE org_id=$1 AND id=$2`, orgID, onboardingID, githubapp.StateFailed)
+		if err != nil {
+			return err
+		}
+		return tx.Commit()
+	}
+	jobKind := githubapp.JobCheckAI
+	nextState := githubapp.StateCheckingAI
+	if artifactsNumber.Valid && int(artifactsNumber.Int64) == number {
+		jobKind = githubapp.JobSync
+		nextState = githubapp.StateSyncQueued
+	} else if !setupNumber.Valid || int(setupNumber.Int64) != number {
+		return nil
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE repository_onboardings SET status=$3,error=NULL,updated_at=NOW() WHERE org_id=$1 AND id=$2`, orgID, onboardingID, nextState); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO repository_onboarding_jobs(org_id,onboarding_id,kind) VALUES($1,$2,$3) ON CONFLICT(onboarding_id,kind) WHERE completed_at IS NULL DO NOTHING`, orgID, onboardingID, jobKind); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (d *DB) ApplyWorkflowRunEvent(ctx context.Context, installationID, repositoryID, runID int64, workflow, event, status, conclusion, headBranch, htmlURL string) error {
+	if event != "workflow_dispatch" {
+		return nil
+	}
+	tx, err := d.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var orgID, onboardingID, current, defaultBranch, repositoryURL string
+	err = tx.QueryRowContext(ctx, `
+		SELECT o.org_id,o.id,o.status,r.default_branch,r.html_url FROM repository_onboardings o
+		JOIN github_repositories r ON r.id=o.repository_id AND r.org_id=o.org_id
+		JOIN github_installations i ON i.id=r.installation_id
+		WHERE i.github_installation_id=$1 AND r.github_id=$2 ORDER BY o.created_at DESC LIMIT 1 FOR UPDATE OF o`, installationID, repositoryID).Scan(
+		&orgID, &onboardingID, &current, &defaultBranch, &repositoryURL)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil || headBranch != defaultBranch {
+		return err
+	}
+	isGeneration := workflow == "UiGraph Generate" || strings.HasSuffix(workflow, "uigraph-generate.yml")
+	isSync := workflow == "UiGraph Sync" || strings.HasSuffix(workflow, "uigraph-sync.yml")
+	if !isGeneration && !isSync {
+		return nil
+	}
+	if status != "completed" {
+		next := githubapp.StateGenerationRunning
+		columnID, columnURL := "generation_run_id", "generation_run_url"
+		if isSync {
+			next, columnID, columnURL = githubapp.StateSyncRunning, "sync_run_id", "sync_run_url"
+		}
+		query := fmt.Sprintf(`UPDATE repository_onboardings SET status=$3,%s=$4,%s=$5,updated_at=NOW() WHERE org_id=$1 AND id=$2`, columnID, columnURL)
+		_, err = tx.ExecContext(ctx, query, orgID, onboardingID, next, runID, htmlURL)
+		if err != nil {
+			return err
+		}
+		return tx.Commit()
+	}
+	if conclusion != "success" {
+		message := "UiGraph workflow failed"
+		if isGeneration {
+			message = "UiGraph generation failed; verify AI settings and that repository policy allows GitHub Actions to create pull requests"
+		}
+		_, err = tx.ExecContext(ctx, `UPDATE repository_onboardings SET failed_phase=status,status=$3,error=$4,updated_at=NOW() WHERE org_id=$1 AND id=$2`, orgID, onboardingID, githubapp.StateFailed, message)
+		if err != nil {
+			return err
+		}
+		return tx.Commit()
+	}
+	if isGeneration {
+		if _, err = tx.ExecContext(ctx, `UPDATE repository_onboardings SET status=$3,generation_run_id=$4,generation_run_url=$5,updated_at=NOW() WHERE org_id=$1 AND id=$2`, orgID, onboardingID, githubapp.StateGenerationRunning, runID, htmlURL); err != nil {
+			return err
+		}
+		if _, err = tx.ExecContext(ctx, `INSERT INTO repository_onboarding_jobs(org_id,onboarding_id,kind) VALUES($1,$2,$3) ON CONFLICT(onboarding_id,kind) WHERE completed_at IS NULL DO NOTHING`, orgID, onboardingID, githubapp.JobFindArtifacts); err != nil {
+			return err
+		}
+		return tx.Commit()
+	}
+	var serviceID string
+	err = tx.QueryRowContext(ctx, `SELECT id FROM services WHERE org_id=$1 AND deleted_at IS NULL AND REGEXP_REPLACE(LOWER(TRIM(TRAILING '/' FROM git_repo_url)), '\.git$', '')=REGEXP_REPLACE(LOWER(TRIM(TRAILING '/' FROM $2)), '\.git$', '') ORDER BY created_at LIMIT 1`, orgID, repositoryURL).Scan(&serviceID)
+	if errors.Is(err, sql.ErrNoRows) {
+		_, err = tx.ExecContext(ctx, `UPDATE repository_onboardings SET failed_phase=$3,status=$4,error='Sync succeeded but no service matched the canonical repository URL',sync_run_id=$5,sync_run_url=$6,updated_at=NOW() WHERE org_id=$1 AND id=$2`, orgID, onboardingID, githubapp.StateSyncRunning, githubapp.StateFailed, runID, htmlURL)
+		if err != nil {
+			return err
+		}
+		return tx.Commit()
+	}
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `UPDATE repository_onboardings SET status=$3,service_id=$4,sync_run_id=$5,sync_run_url=$6,completed_at=NOW(),updated_at=NOW() WHERE org_id=$1 AND id=$2`, orgID, onboardingID, githubapp.StateCompleted, serviceID, runID, htmlURL)
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (d *DB) CreateOnboardingToken(ctx context.Context, orgID string, expiresAt time.Time) (string, error) {
+	tx, err := d.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+	var serviceAccountID string
+	err = tx.QueryRowContext(ctx, `SELECT id FROM service_accounts WHERE org_id=$1 AND name='GitHub Onboarding' AND is_internal=TRUE AND deleted_at IS NULL FOR UPDATE`, orgID).Scan(&serviceAccountID)
+	if errors.Is(err, sql.ErrNoRows) {
+		serviceAccountID = uuid.NewString()
+		_, err = tx.ExecContext(ctx, `INSERT INTO service_accounts(id,org_id,name,description,scopes,is_internal) VALUES($1,$2,'GitHub Onboarding','Limited token used only by repository onboarding sync workflows',$3,TRUE)`, serviceAccountID, orgID, pq.Array([]string{"diagrams:write", "docs:write", "maps:write", "services:write"}))
+	}
+	if err != nil {
+		return "", err
+	}
+	id, plaintext, hash, err := identity.Generate()
+	if err != nil {
+		return "", err
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO service_account_tokens(id,service_account_id,name,prefix,hash,expires_at) VALUES($1,$2,$3,$4,$5,$6)`, id, serviceAccountID, "GitHub onboarding sync "+id, identity.Prefix(plaintext), hash, expiresAt); err != nil {
+		return "", err
+	}
+	if err = tx.Commit(); err != nil {
+		return "", err
+	}
+	return plaintext, nil
+}
+
+func (d *DB) LinkServiceByRepositoryURL(ctx context.Context, orgID, onboardingID, repositoryURL string) error {
+	result, err := d.db.ExecContext(ctx, `
+		UPDATE repository_onboardings o SET service_id=s.id,updated_at=NOW() FROM services s
+		WHERE o.org_id=$1 AND o.id=$2 AND s.org_id=o.org_id AND s.deleted_at IS NULL
+		AND REGEXP_REPLACE(LOWER(TRIM(TRAILING '/' FROM s.git_repo_url)), '\.git$', '')=REGEXP_REPLACE(LOWER(TRIM(TRAILING '/' FROM $3)), '\.git$', '')`, orgID, onboardingID, repositoryURL)
+	if err != nil {
+		return err
+	}
+	count, _ := result.RowsAffected()
+	if count == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}

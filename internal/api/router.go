@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/uigraph/app/internal/api/diagram"
 	figmaapi "github.com/uigraph/app/internal/api/figma"
 	"github.com/uigraph/app/internal/api/folder"
+	githubappapi "github.com/uigraph/app/internal/api/githubapp"
 	"github.com/uigraph/app/internal/api/health"
 	"github.com/uigraph/app/internal/api/instanceinfo"
 	mapspkg "github.com/uigraph/app/internal/api/maps"
@@ -35,6 +37,7 @@ import (
 	"github.com/uigraph/app/internal/crypto"
 	"github.com/uigraph/app/internal/enterprise"
 	"github.com/uigraph/app/internal/figma"
+	githubappdomain "github.com/uigraph/app/internal/githubapp"
 	"github.com/uigraph/app/internal/identity"
 	"github.com/uigraph/app/internal/modelpricing"
 	"github.com/uigraph/app/internal/queue"
@@ -42,7 +45,29 @@ import (
 	"github.com/uigraph/app/internal/store"
 )
 
-func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st storage.Client, c cache.Client, q *queue.Queue) http.Handler {
+type scopeAuthorizer interface {
+	ScopesForUser(ctx context.Context, userID, orgID string) ([]authz.Scope, error)
+}
+
+func principalScopes(ctx context.Context, authorizer scopeAuthorizer, principal identity.Principal, orgID string) ([]string, bool) {
+	if principal.Kind == identity.PrincipalServiceAccount {
+		if principal.OrgID == "" || principal.OrgID != orgID {
+			return nil, false
+		}
+		return principal.Scopes, true
+	}
+	resolved, err := authorizer.ScopesForUser(ctx, principal.UserID, orgID)
+	if err != nil {
+		return nil, false
+	}
+	scopes := make([]string, len(resolved))
+	for index, scope := range resolved {
+		scopes[index] = string(scope)
+	}
+	return scopes, true
+}
+
+func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st storage.Client, c cache.Client, q *queue.Queue, githubClient *githubappdomain.Client) http.Handler {
 	mux := http.NewServeMux()
 	mw := authmw.New(bearer, s)
 	authorizer := authz.New(s, s)
@@ -86,19 +111,10 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 				http.Error(w, `{"error":"unauthenticated","code":401}`, http.StatusUnauthorized)
 				return
 			}
-			var scopes []string
-			if p.Kind == identity.PrincipalServiceAccount {
-				scopes = p.Scopes
-			} else {
-				resolved, err := authorizer.ScopesForUser(r.Context(), p.UserID, r.PathValue("orgID"))
-				if err != nil {
-					http.Error(w, `{"error":"forbidden","code":403}`, http.StatusForbidden)
-					return
-				}
-				scopes = make([]string, len(resolved))
-				for i, s := range resolved {
-					scopes[i] = string(s)
-				}
+			scopes, authorized := principalScopes(r.Context(), authorizer, p, r.PathValue("orgID"))
+			if !authorized {
+				http.Error(w, `{"error":"forbidden","code":403}`, http.StatusForbidden)
+				return
 			}
 			if !authz.Has(scopes, scope) {
 				http.Error(w, `{"error":"forbidden","code":403}`, http.StatusForbidden)
@@ -272,6 +288,16 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	}
 
 	timelineapi.Register(mux, s, scopeFn)
+
+	if githubStore, ok := any(s).(githubappdomain.Store); ok {
+		frontendURL := cfg.FrontendURL
+		if frontendURL == "" {
+			frontendURL = cfg.PublicURL
+		}
+		callbackURL := strings.TrimRight(cfg.PublicURL, "/") + "/api/v1/github-app/callback"
+		githubHandler := githubappapi.New(githubStore, githubClient, callbackURL, frontendURL, cfg.GitHubWebhookSecret)
+		githubappapi.Register(mux, githubHandler, scopeFn)
+	}
 
 	return authmw.CORS(mux)
 }
