@@ -212,6 +212,18 @@ func (d *DB) CreateBatch(ctx context.Context, orgID, teamID, teamName, createdBy
 	return d.GetBatch(ctx, orgID, batchID)
 }
 
+func (d *DB) GetLatestBatch(ctx context.Context, orgID string) (*githubapp.Batch, error) {
+	var batchID string
+	err := d.db.QueryRowContext(ctx, `SELECT id FROM repository_onboarding_batches WHERE org_id=$1 ORDER BY created_at DESC LIMIT 1`, orgID).Scan(&batchID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("postgres: GetLatestBatch: %w", err)
+	}
+	return d.GetBatch(ctx, orgID, batchID)
+}
+
 func (d *DB) GetBatch(ctx context.Context, orgID, batchID string) (*githubapp.Batch, error) {
 	var batch githubapp.Batch
 	err := d.db.QueryRowContext(ctx, `SELECT id, org_id, team_id, team_name, status, created_at, updated_at FROM repository_onboarding_batches WHERE org_id=$1 AND id=$2`, orgID, batchID).Scan(
@@ -501,4 +513,3 @@ func (d *DB) CreateOnboardingToken(ctx context.Context, orgID string, expiresAt 
 	}
 	return plaintext, nil
 }
-

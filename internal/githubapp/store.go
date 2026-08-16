@@ -16,6 +16,7 @@ type Store interface {
 	ListRepositories(ctx context.Context, orgID string) ([]Repository, error)
 	CreateBatch(ctx context.Context, orgID, teamID, teamName, createdBy string, repositoryIDs []string) (*Batch, error)
 	GetBatch(ctx context.Context, orgID, batchID string) (*Batch, error)
+	GetLatestBatch(ctx context.Context, orgID string) (*Batch, error)
 	GetOnboarding(ctx context.Context, orgID, onboardingID string) (*Onboarding, error)
 	SetOnboardingStatus(ctx context.Context, orgID, onboardingID string, status State, missingAIConfiguration []string) error
 	SetOnboardingPullRequest(ctx context.Context, orgID, onboardingID, url string) error

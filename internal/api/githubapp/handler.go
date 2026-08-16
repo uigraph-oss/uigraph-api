@@ -56,6 +56,7 @@ func Register(mux *http.ServeMux, h *Handler, requireScope func(scope, method, p
 	requireScope("integrations:write", "DELETE", "/api/v1/orgs/{orgID}/github-app", h.DeleteInstallation)
 	requireScope("integrations:read", "GET", "/api/v1/orgs/{orgID}/github-app/repositories", h.ListRepositories)
 	requireScope("integrations:write", "POST", "/api/v1/orgs/{orgID}/repository-onboarding", h.CreateBatch)
+	requireScope("integrations:read", "GET", "/api/v1/orgs/{orgID}/repository-onboarding", h.GetLatestBatch)
 	requireScope("integrations:read", "GET", "/api/v1/orgs/{orgID}/repository-onboarding/{batchID}", h.GetBatch)
 	requireScope("integrations:write", "POST", "/api/v1/orgs/{orgID}/repository-onboarding/{batchID}/repositories/{onboardingID}/recheck", h.Recheck)
 	requireScope("integrations:write", "POST", "/api/v1/orgs/{orgID}/repository-onboarding/{batchID}/repositories/{onboardingID}/retry", h.Retry)
@@ -286,18 +287,42 @@ func (h *Handler) GetBatch(w http.ResponseWriter, r *http.Request) {
 		httpError(w, r, err)
 		return
 	}
-	applied, err := h.reconcileBatch(r.Context(), batch)
+	httputil.JSON(w, http.StatusOK, h.reconciled(r.Context(), batch))
+}
+
+// @Summary Get the latest repository onboarding batch
+// @Tags integrations
+// @Security BearerAuth
+// @Param orgID path string true "Organization ID"
+// @Success 200 {object} domain.Batch
+// @Router /orgs/{orgID}/repository-onboarding [get]
+func (h *Handler) GetLatestBatch(w http.ResponseWriter, r *http.Request) {
+	batch, err := h.store.GetLatestBatch(r.Context(), r.PathValue("orgID"))
 	if err != nil {
-		slog.WarnContext(r.Context(), "GitHub onboarding poll failed", "err", err)
+		httpError(w, r, err)
+		return
 	}
-	if applied {
-		batch, err = h.store.GetBatch(r.Context(), r.PathValue("orgID"), r.PathValue("batchID"))
-		if err != nil {
-			httpError(w, r, err)
-			return
-		}
+	if batch == nil {
+		httputil.JSON(w, http.StatusOK, map[string]any{"batch": nil})
+		return
 	}
-	httputil.JSON(w, http.StatusOK, batch)
+	httputil.JSON(w, http.StatusOK, map[string]any{"batch": h.reconciled(r.Context(), batch)})
+}
+
+func (h *Handler) reconciled(ctx context.Context, batch *domain.Batch) *domain.Batch {
+	applied, err := h.reconcileBatch(ctx, batch)
+	if err != nil {
+		slog.WarnContext(ctx, "GitHub onboarding poll failed", "err", err)
+	}
+	if !applied {
+		return batch
+	}
+	refreshed, err := h.store.GetBatch(ctx, batch.OrgID, batch.ID)
+	if err != nil {
+		slog.WarnContext(ctx, "GitHub onboarding reload failed", "err", err)
+		return batch
+	}
+	return refreshed
 }
 
 func (h *Handler) reconcileBatch(ctx context.Context, batch *domain.Batch) (bool, error) {
