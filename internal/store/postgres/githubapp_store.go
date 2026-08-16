@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
+	"github.com/uigraph/app/internal/authz"
 	"github.com/uigraph/app/internal/githubapp"
 	"github.com/uigraph/app/internal/identity"
 	"github.com/uigraph/app/internal/store"
@@ -499,7 +500,11 @@ func (d *DB) CreateOnboardingToken(ctx context.Context, orgID string, expiresAt 
 	err = tx.QueryRowContext(ctx, `SELECT id FROM service_accounts WHERE org_id=$1 AND name='GitHub Onboarding' AND is_internal=TRUE AND deleted_at IS NULL FOR UPDATE`, orgID).Scan(&serviceAccountID)
 	if errors.Is(err, sql.ErrNoRows) {
 		serviceAccountID = uuid.NewString()
-		_, err = tx.ExecContext(ctx, `INSERT INTO service_accounts(id,org_id,name,description,scopes,is_internal) VALUES($1,$2,'GitHub Onboarding','Limited token used only by repository onboarding sync workflows',$3,TRUE)`, serviceAccountID, orgID, pq.Array([]string{"diagrams:write", "docs:write", "maps:write", "services:write"}))
+		scopes := make([]string, len(authz.AllScopes))
+		for index, scope := range authz.AllScopes {
+			scopes[index] = string(scope)
+		}
+		_, err = tx.ExecContext(ctx, `INSERT INTO service_accounts(id,org_id,name,description,scopes,is_internal) VALUES($1,$2,'GitHub Onboarding','Token used by repository onboarding artifact and sync workflows',$3,TRUE)`, serviceAccountID, orgID, pq.Array(scopes))
 	}
 	if err != nil {
 		return "", err

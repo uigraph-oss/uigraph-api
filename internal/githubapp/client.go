@@ -34,6 +34,7 @@ type ClientConfig struct {
 	APIURL           string
 	WebURL           string
 	GatewayURL       string
+	PublicURL        string
 }
 
 type Client struct {
@@ -310,16 +311,12 @@ func (c *Client) MissingAIConfiguration(ctx context.Context, installationID int6
 			configured[name] = true
 		}
 	}
-	missing := make([]string, 0, 6)
-	for _, name := range []string{"AI_PROVIDER_API_KEY", TokenSecret} {
-		if !secret[name] {
-			missing = append(missing, name)
-		}
+	missing := make([]string, 0, 4)
+	if !secret["AI_PROVIDER_API_KEY"] {
+		missing = append(missing, "AI_PROVIDER_API_KEY")
 	}
-	for _, name := range []string{"AI_PROVIDER_MODEL", GatewayVariable} {
-		if !configured[name] {
-			missing = append(missing, name)
-		}
+	if !configured["AI_PROVIDER_MODEL"] {
+		missing = append(missing, "AI_PROVIDER_MODEL")
 	}
 	if !configured["AI_PROVIDER_API_URL"] && !configured["AI_PROVIDER_NPM"] {
 		missing = append(missing, "AI_PROVIDER_API_URL", "AI_PROVIDER_NPM")
@@ -391,12 +388,17 @@ func (c *Client) GetWorkflowRun(ctx context.Context, installationID int64, repos
 const (
 	TokenSecret     = "UIGRAPH_TOKEN"
 	GatewayVariable = "UIGRAPH_GATEWAY_URL"
+	APIVariable     = "UIGRAPH_API_URL"
 )
 
 func (c *Client) PutOnboardingCredentials(ctx context.Context, installationID int64, installation Installation, repositories []Repository, plaintext string) error {
 	if c.config.GatewayURL == "" {
 		return fmt.Errorf("githubapp: UIGRAPH_GATEWAY_URL is not configured on this UiGraph instance")
 	}
+	if c.config.PublicURL == "" {
+		return fmt.Errorf("githubapp: UIGRAPH_PUBLIC_URL is not configured on this UiGraph instance")
+	}
+	values := map[string]string{GatewayVariable: c.config.GatewayURL, APIVariable: c.config.PublicURL}
 	client, err := c.installationClient(ctx, installationID)
 	if err != nil {
 		return err
@@ -417,14 +419,19 @@ func (c *Client) PutOnboardingCredentials(ctx context.Context, installationID in
 		if err := c.do(ctx, client, http.MethodPut, fmt.Sprintf("orgs/%s/actions/secrets/%s", account, TokenSecret), secret, nil); err != nil {
 			return err
 		}
-		variableRepositories, err := c.selectedRepositories(ctx, client,
-			fmt.Sprintf("orgs/%s/actions/variables/%s/repositories?per_page=100", account, GatewayVariable), repositories)
-		if err != nil {
-			return err
+		for _, name := range []string{GatewayVariable, APIVariable} {
+			variableRepositories, err := c.selectedRepositories(ctx, client,
+				fmt.Sprintf("orgs/%s/actions/variables/%s/repositories?per_page=100", account, name), repositories)
+			if err != nil {
+				return err
+			}
+			variable := map[string]any{"name": name, "value": values[name],
+				"visibility": "selected", "selected_repository_ids": variableRepositories}
+			if err := c.putVariable(ctx, client, fmt.Sprintf("orgs/%s/actions/variables", account), name, variable); err != nil {
+				return err
+			}
 		}
-		variable := map[string]any{"name": GatewayVariable, "value": c.config.GatewayURL,
-			"visibility": "selected", "selected_repository_ids": variableRepositories}
-		return c.putVariable(ctx, client, fmt.Sprintf("orgs/%s/actions/variables", account), GatewayVariable, variable)
+		return nil
 	}
 	for _, repository := range repositories {
 		owner, repo, err := splitRepository(repository.FullName)
@@ -439,9 +446,11 @@ func (c *Client) PutOnboardingCredentials(ctx context.Context, installationID in
 		if err := c.do(ctx, client, http.MethodPut, fmt.Sprintf("repos/%s/%s/actions/secrets/%s", owner, repo, TokenSecret), secret, nil); err != nil {
 			return err
 		}
-		variable := map[string]any{"name": GatewayVariable, "value": c.config.GatewayURL}
-		if err := c.putVariable(ctx, client, fmt.Sprintf("repos/%s/%s/actions/variables", owner, repo), GatewayVariable, variable); err != nil {
-			return err
+		for _, name := range []string{GatewayVariable, APIVariable} {
+			variable := map[string]any{"name": name, "value": values[name]}
+			if err := c.putVariable(ctx, client, fmt.Sprintf("repos/%s/%s/actions/variables", owner, repo), name, variable); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

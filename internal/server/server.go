@@ -117,7 +117,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 		githubClient, err = githubapp.NewClient(githubapp.ClientConfig{
 			AppID: cfg.GitHubAppID, Slug: cfg.GitHubAppSlug, ClientID: cfg.GitHubAppClientID,
 			ClientSecret: cfg.GitHubAppClientSecret, PrivateKeyBase64: cfg.GitHubAppPrivateKeyBase64,
-			APIURL: cfg.GitHubAPIURL, WebURL: cfg.GitHubWebURL, GatewayURL: cfg.GatewayURL,
+			APIURL: cfg.GitHubAPIURL, WebURL: cfg.GitHubWebURL, GatewayURL: cfg.GatewayURL, PublicURL: cfg.PublicURL,
 		}, nil)
 		if err != nil {
 			return fmt.Errorf("server: GitHub App client: %w", err)

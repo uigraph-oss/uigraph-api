@@ -83,19 +83,19 @@ func (w *Worker) process(ctx context.Context, job Job) error {
 		for _, item := range batch.Items {
 			repositories = append(repositories, item.Repository)
 		}
-		plaintext, err := w.store.CreateOnboardingToken(ctx, job.OrgID, time.Now().AddDate(10, 0, 0))
-		if err != nil {
-			return err
-		}
-		if err := w.client.PutOnboardingCredentials(ctx, installation.GitHubInstallationID, *installation, repositories, plaintext); err != nil {
-			return err
-		}
 		missing, err := w.client.MissingAIConfiguration(ctx, installation.GitHubInstallationID, onboarding.Repository, installation.AccountLogin)
 		if err != nil {
 			return err
 		}
 		if len(missing) != 0 {
 			return w.store.SetOnboardingStatus(ctx, job.OrgID, job.OnboardingID, StateWaitingAI, missing)
+		}
+		plaintext, err := w.store.CreateOnboardingToken(ctx, job.OrgID, time.Now().AddDate(10, 0, 0))
+		if err != nil {
+			return err
+		}
+		if err := w.client.PutOnboardingCredentials(ctx, installation.GitHubInstallationID, *installation, repositories, plaintext); err != nil {
+			return err
 		}
 		orgName, err := w.store.GetOrgName(ctx, job.OrgID)
 		if err != nil {
