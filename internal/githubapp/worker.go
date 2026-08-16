@@ -11,10 +11,9 @@ import (
 )
 
 type APIClient interface {
-	CreateSetupPullRequest(ctx context.Context, installationID int64, onboarding Onboarding, orgName string) (PullRequest, error)
+	StartRun(ctx context.Context, installationID int64, onboarding Onboarding, orgName string) error
 	MissingAIConfiguration(ctx context.Context, installationID int64, repository Repository, account string) ([]string, error)
-	DispatchWorkflow(ctx context.Context, installationID int64, repository Repository, workflow string) error
-	FindArtifactsPullRequest(ctx context.Context, installationID int64, onboarding Onboarding) (PullRequest, error)
+	OpenPullRequest(ctx context.Context, installationID int64, onboarding Onboarding) (PullRequest, error)
 	PutOnboardingSecret(ctx context.Context, installationID int64, installation Installation, repositories []Repository, plaintext string) error
 }
 
@@ -72,31 +71,7 @@ func (w *Worker) process(ctx context.Context, job Job) error {
 		return fmt.Errorf("GitHub App installation is not active")
 	}
 	switch job.Kind {
-	case JobSetupPR:
-		onboarding.Status = StateSetupPRCreating
-		if err := w.store.UpdateOnboarding(ctx, *onboarding); err != nil {
-			return err
-		}
-		orgName, err := w.store.GetOrgName(ctx, job.OrgID)
-		if err != nil {
-			return err
-		}
-		pull, err := w.client.CreateSetupPullRequest(ctx, installation.GitHubInstallationID, *onboarding, orgName)
-		if err != nil {
-			return err
-		}
-		onboarding.SetupPRNumber = pull.Number
-		onboarding.SetupPRURL = pull.URL
-		if pull.Merged {
-			onboarding.Status = StateCheckingAI
-			if err := w.store.UpdateOnboarding(ctx, *onboarding); err != nil {
-				return err
-			}
-			return w.store.EnqueueJob(ctx, job.OrgID, onboarding.ID, JobCheckAI)
-		}
-		onboarding.Status = StateWaitingSetupMerge
-		return w.store.UpdateOnboarding(ctx, *onboarding)
-	case JobCheckAI:
+	case JobStart:
 		onboarding.Status = StateCheckingAI
 		if err := w.store.UpdateOnboarding(ctx, *onboarding); err != nil {
 			return err
@@ -110,41 +85,8 @@ func (w *Worker) process(ctx context.Context, job Job) error {
 			onboarding.Status = StateWaitingAI
 			return w.store.UpdateOnboarding(ctx, *onboarding)
 		}
-		onboarding.Status = StateGenerationQueued
-		if err := w.store.UpdateOnboarding(ctx, *onboarding); err != nil {
-			return err
-		}
-		if err := w.client.DispatchWorkflow(ctx, installation.GitHubInstallationID, onboarding.Repository, "uigraph-generate.yml"); err != nil {
-			return err
-		}
-		return nil
-	case JobGeneration:
-		onboarding.Status = StateGenerationQueued
-		onboarding.MissingAIConfiguration = nil
-		if err := w.store.UpdateOnboarding(ctx, *onboarding); err != nil {
-			return err
-		}
-		return w.client.DispatchWorkflow(ctx, installation.GitHubInstallationID, onboarding.Repository, "uigraph-generate.yml")
-	case JobFindArtifacts:
-		pull, err := w.client.FindArtifactsPullRequest(ctx, installation.GitHubInstallationID, *onboarding)
-		if err != nil {
-			return err
-		}
-		if pull.Number == 0 {
-			return fmt.Errorf("generation completed but artifacts pull request is not visible yet")
-		}
-		onboarding.ArtifactsPRNumber = pull.Number
-		onboarding.ArtifactsPRURL = pull.URL
-		if pull.Merged {
-			onboarding.Status = StateSyncQueued
-			if err := w.store.UpdateOnboarding(ctx, *onboarding); err != nil {
-				return err
-			}
-			return w.store.EnqueueJob(ctx, job.OrgID, onboarding.ID, JobSync)
-		}
-		onboarding.Status = StateWaitingArtifactsMerge
-		return w.store.UpdateOnboarding(ctx, *onboarding)
-	case JobSync:
+		// The run generates and syncs in one job, so the token has to be
+		// installed before the branch push that starts it.
 		batch, err := w.store.GetBatch(ctx, job.OrgID, onboarding.BatchID)
 		if err != nil {
 			return err
@@ -160,11 +102,25 @@ func (w *Worker) process(ctx context.Context, job Job) error {
 		if err := w.client.PutOnboardingSecret(ctx, installation.GitHubInstallationID, *installation, repositories, plaintext); err != nil {
 			return err
 		}
-		onboarding.Status = StateSyncQueued
-		if err := w.store.UpdateOnboarding(ctx, *onboarding); err != nil {
+		orgName, err := w.store.GetOrgName(ctx, job.OrgID)
+		if err != nil {
 			return err
 		}
-		return w.client.DispatchWorkflow(ctx, installation.GitHubInstallationID, onboarding.Repository, "uigraph-sync.yml")
+		if err := w.client.StartRun(ctx, installation.GitHubInstallationID, *onboarding, orgName); err != nil {
+			return err
+		}
+		onboarding.Status = StateRunQueued
+		return w.store.UpdateOnboarding(ctx, *onboarding)
+	case JobOpenPR:
+		pull, err := w.client.OpenPullRequest(ctx, installation.GitHubInstallationID, *onboarding)
+		if err != nil {
+			// Onboarding is already complete; the pull request is a convenience.
+			slog.WarnContext(ctx, "GitHub onboarding pull request could not be opened", "onboarding", onboarding.ID, "err", err)
+			return nil
+		}
+		onboarding.PRNumber = pull.Number
+		onboarding.PRURL = pull.URL
+		return w.store.UpdateOnboarding(ctx, *onboarding)
 	default:
 		return fmt.Errorf("unknown GitHub onboarding job kind %q", job.Kind)
 	}

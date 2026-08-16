@@ -8,28 +8,19 @@ import (
 type State string
 
 const (
-	StateSelected              State = "selected"
-	StateSetupPRCreating       State = "setup_pr_creating"
-	StateSetupPROpen           State = "setup_pr_open"
-	StateWaitingSetupMerge     State = "waiting_setup_merge"
-	StateCheckingAI            State = "checking_ai_configuration"
-	StateWaitingAI             State = "waiting_ai_configuration"
-	StateGenerationQueued      State = "generation_queued"
-	StateGenerationRunning     State = "generation_running"
-	StateArtifactsPROpen       State = "artifacts_pr_open"
-	StateWaitingArtifactsMerge State = "waiting_artifacts_merge"
-	StateSyncQueued            State = "sync_queued"
-	StateSyncRunning           State = "sync_running"
-	StateCompleted             State = "completed"
-	StateFailed                State = "failed"
-	StateCancelled             State = "cancelled"
+	StateSelected   State = "selected"
+	StateCheckingAI State = "checking_ai_configuration"
+	StateWaitingAI  State = "waiting_ai_configuration"
+	StateRunQueued  State = "run_queued"
+	StateRunRunning State = "run_running"
+	StateCompleted  State = "completed"
+	StateFailed     State = "failed"
+	StateCancelled  State = "cancelled"
 )
 
 var validStates = map[State]bool{
-	StateSelected: true, StateSetupPRCreating: true, StateSetupPROpen: true,
-	StateWaitingSetupMerge: true, StateCheckingAI: true, StateWaitingAI: true,
-	StateGenerationQueued: true, StateGenerationRunning: true, StateArtifactsPROpen: true,
-	StateWaitingArtifactsMerge: true, StateSyncQueued: true, StateSyncRunning: true,
+	StateSelected: true, StateCheckingAI: true, StateWaitingAI: true,
+	StateRunQueued: true, StateRunRunning: true,
 	StateCompleted: true, StateFailed: true, StateCancelled: true,
 }
 
@@ -90,16 +81,11 @@ type Onboarding struct {
 	TeamName               string     `json:"team"`
 	Status                 State      `json:"status"`
 	FailedPhase            *State     `json:"failedPhase,omitempty"`
-	SetupBranch            string     `json:"-"`
-	SetupPRNumber          int        `json:"-"`
-	SetupPRURL             string     `json:"setupPrUrl,omitempty"`
-	GenerationRunID        int64      `json:"-"`
-	GenerationRunURL       string     `json:"generationRunUrl,omitempty"`
-	ArtifactsBranch        string     `json:"-"`
-	ArtifactsPRNumber      int        `json:"-"`
-	ArtifactsPRURL         string     `json:"artifactsPrUrl,omitempty"`
-	SyncRunID              int64      `json:"-"`
-	SyncRunURL             string     `json:"syncRunUrl,omitempty"`
+	Branch                 string     `json:"branch"`
+	RunID                  int64      `json:"-"`
+	RunURL                 string     `json:"runUrl,omitempty"`
+	PRNumber               int        `json:"-"`
+	PRURL                  string     `json:"prUrl,omitempty"`
 	MissingAIConfiguration []string   `json:"missingAIConfiguration"`
 	Error                  string     `json:"error,omitempty"`
 	ServiceID              string     `json:"serviceId,omitempty"`
@@ -118,11 +104,8 @@ type Job struct {
 }
 
 const (
-	JobSetupPR       = "setup_pr"
-	JobCheckAI       = "check_ai"
-	JobGeneration    = "generation"
-	JobFindArtifacts = "find_artifacts_pr"
-	JobSync          = "sync"
+	JobStart  = "start"
+	JobOpenPR = "open_pr"
 )
 
 const MaxRepositoriesPerBatch = 25

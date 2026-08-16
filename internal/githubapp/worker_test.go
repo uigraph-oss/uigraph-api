@@ -12,8 +12,9 @@ type retryStore struct {
 	job       *Job
 	retried   bool
 	completed bool
-	enqueued  string
 	status    State
+	missing   []string
+	pr        int
 }
 
 func (s *retryStore) ClaimJob(context.Context, string, time.Duration) (*Job, error) {
@@ -23,20 +24,28 @@ func (s *retryStore) ClaimJob(context.Context, string, time.Duration) (*Job, err
 }
 
 func (s *retryStore) GetOnboarding(context.Context, string, string) (*Onboarding, error) {
-	return &Onboarding{ID: "onboarding", OrgID: "org", Status: StateSelected, Repository: Repository{FullName: "acme/repo", DefaultBranch: "main"}}, nil
+	return &Onboarding{
+		ID: "onboarding", OrgID: "org", BatchID: "batch", Status: StateSelected, Branch: Branch("onboarding"),
+		Repository: Repository{FullName: "acme/repo", DefaultBranch: "main"},
+	}, nil
 }
 
 func (s *retryStore) GetInstallation(context.Context, string) (*Installation, error) {
 	return &Installation{GitHubInstallationID: 7, Status: "active"}, nil
 }
 
-func (s *retryStore) UpdateOnboarding(_ context.Context, onboarding Onboarding) error {
-	s.status = onboarding.Status
-	return nil
+func (s *retryStore) GetBatch(context.Context, string, string) (*Batch, error) {
+	return &Batch{ID: "batch", Items: []Onboarding{{Repository: Repository{GitHubID: 11}}}}, nil
 }
 
-func (s *retryStore) EnqueueJob(_ context.Context, _, _, kind string) error {
-	s.enqueued = kind
+func (s *retryStore) CreateOnboardingToken(context.Context, string, time.Time) (string, error) {
+	return "plaintext", nil
+}
+
+func (s *retryStore) UpdateOnboarding(_ context.Context, onboarding Onboarding) error {
+	s.status = onboarding.Status
+	s.missing = onboarding.MissingAIConfiguration
+	s.pr = onboarding.PRNumber
 	return nil
 }
 
@@ -54,17 +63,15 @@ func (s *retryStore) CompleteJob(context.Context, string, string) error {
 
 type failingClient struct{}
 
-func (failingClient) CreateSetupPullRequest(context.Context, int64, Onboarding, string) (PullRequest, error) {
-	return PullRequest{}, errors.New("temporary GitHub failure")
+func (failingClient) StartRun(context.Context, int64, Onboarding, string) error {
+	return errors.New("temporary GitHub failure")
 }
 
 func (failingClient) MissingAIConfiguration(context.Context, int64, Repository, string) ([]string, error) {
 	return nil, nil
 }
 
-func (failingClient) DispatchWorkflow(context.Context, int64, Repository, string) error { return nil }
-
-func (failingClient) FindArtifactsPullRequest(context.Context, int64, Onboarding) (PullRequest, error) {
+func (failingClient) OpenPullRequest(context.Context, int64, Onboarding) (PullRequest, error) {
 	return PullRequest{}, nil
 }
 
@@ -73,7 +80,7 @@ func (failingClient) PutOnboardingSecret(context.Context, int64, Installation, [
 }
 
 func TestWorkerRetriesFailedJobWithoutCompletingIt(t *testing.T) {
-	store := &retryStore{job: &Job{ID: "job", OrgID: "org", OnboardingID: "onboarding", Kind: JobSetupPR, Attempts: 1, MaxAttempts: 8}}
+	store := &retryStore{job: &Job{ID: "job", OrgID: "org", OnboardingID: "onboarding", Kind: JobStart, Attempts: 1, MaxAttempts: 8}}
 	worker := NewWorker(store, failingClient{})
 	if err := worker.runOne(context.Background()); err == nil {
 		t.Fatal("expected worker error")
@@ -83,19 +90,66 @@ func TestWorkerRetriesFailedJobWithoutCompletingIt(t *testing.T) {
 	}
 }
 
-type mergedArtifactsClient struct{ failingClient }
+type missingAIClient struct{ failingClient }
 
-func (mergedArtifactsClient) FindArtifactsPullRequest(context.Context, int64, Onboarding) (PullRequest, error) {
-	return PullRequest{Number: 9, URL: "https://github.test/pr/9", Merged: true}, nil
+func (missingAIClient) MissingAIConfiguration(context.Context, int64, Repository, string) ([]string, error) {
+	return []string{"AI_PROVIDER_API_KEY"}, nil
 }
 
-func TestWorkerReplaysAlreadyMergedArtifactsPullRequest(t *testing.T) {
-	store := &retryStore{job: &Job{ID: "job", OrgID: "org", OnboardingID: "onboarding", Kind: JobFindArtifacts, Attempts: 1, MaxAttempts: 8}}
-	worker := NewWorker(store, mergedArtifactsClient{})
+func TestWorkerParksOnboardingWhenAISettingsAreMissing(t *testing.T) {
+	store := &retryStore{job: &Job{ID: "job", OrgID: "org", OnboardingID: "onboarding", Kind: JobStart, Attempts: 1, MaxAttempts: 8}}
+	worker := NewWorker(store, missingAIClient{})
 	if err := worker.runOne(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if store.status != StateSyncQueued || store.enqueued != JobSync || !store.completed {
-		t.Fatalf("status=%s enqueued=%s completed=%v", store.status, store.enqueued, store.completed)
+	if store.status != StateWaitingAI || len(store.missing) != 1 || !store.completed {
+		t.Fatalf("status=%s missing=%v completed=%v", store.status, store.missing, store.completed)
+	}
+}
+
+type recordingClient struct {
+	failingClient
+	order []string
+}
+
+func (c *recordingClient) PutOnboardingSecret(context.Context, int64, Installation, []Repository, string) error {
+	c.order = append(c.order, "secret")
+	return nil
+}
+
+func (c *recordingClient) StartRun(context.Context, int64, Onboarding, string) error {
+	c.order = append(c.order, "start")
+	return nil
+}
+
+func TestWorkerInstallsTheTokenBeforeStartingTheRun(t *testing.T) {
+	store := &retryStore{job: &Job{ID: "job", OrgID: "org", OnboardingID: "onboarding", Kind: JobStart, Attempts: 1, MaxAttempts: 8}}
+	client := &recordingClient{}
+	worker := NewWorker(store, client)
+	if err := worker.runOne(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(client.order) != 2 || client.order[0] != "secret" || client.order[1] != "start" {
+		t.Fatalf("call order = %v", client.order)
+	}
+	if store.status != StateRunQueued || !store.completed {
+		t.Fatalf("status=%s completed=%v", store.status, store.completed)
+	}
+}
+
+type failingPullRequestClient struct{ failingClient }
+
+func (failingPullRequestClient) OpenPullRequest(context.Context, int64, Onboarding) (PullRequest, error) {
+	return PullRequest{}, errors.New("pull requests are disabled")
+}
+
+func TestWorkerKeepsOnboardingCompleteWhenThePullRequestCannotBeOpened(t *testing.T) {
+	store := &retryStore{job: &Job{ID: "job", OrgID: "org", OnboardingID: "onboarding", Kind: JobOpenPR, Attempts: 1, MaxAttempts: 8}}
+	worker := NewWorker(store, failingPullRequestClient{})
+	if err := worker.runOne(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if store.retried || !store.completed {
+		t.Fatalf("retried=%v completed=%v", store.retried, store.completed)
 	}
 }

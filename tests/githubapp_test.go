@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/uigraph/app/internal/catalog"
 	"github.com/uigraph/app/internal/githubapp"
 	"github.com/uigraph/app/internal/org"
 )
@@ -56,7 +57,40 @@ func TestGitHubOnboardingStoreBatchJobsAndDedupe(t *testing.T) {
 	if err != nil || job == nil {
 		t.Fatalf("job=%+v err=%v", job, err)
 	}
-	if job.OnboardingID != batch.Items[0].ID || job.Kind != githubapp.JobSetupPR {
+	if job.OnboardingID != batch.Items[0].ID || job.Kind != githubapp.JobStart {
+		t.Fatalf("job = %+v", job)
+	}
+	if err := testDB.CompleteJob(ctx, job.ID, "integration-worker"); err != nil {
+		t.Fatal(err)
+	}
+	repositoryURL := repositories[0].URL
+	service := catalog.Service{
+		ID: uuid.NewString(), OrgID: orgID, TeamID: &team.ID, Name: "Payments API " + uuid.NewString(),
+		Status: "active", Tier: "tier-3", Category: "service", Language: "go",
+		GitRepoURL: &repositoryURL, CreatedBy: user.ID,
+	}
+	if err := testDB.CreateService(ctx, service); err != nil {
+		t.Fatal(err)
+	}
+	branch := githubapp.Branch(batch.Items[0].ID)
+	if batch.Items[0].Branch != branch {
+		t.Fatalf("branch = %q", batch.Items[0].Branch)
+	}
+	if err := testDB.ApplyWorkflowRunEvent(ctx, githubInstallationID, repositories[0].GitHubID, 4242, "push", "completed", "success", branch, "https://github.com/acme/payments-api/actions/runs/4242"); err != nil {
+		t.Fatal(err)
+	}
+	onboarding, err := testDB.GetOnboarding(ctx, orgID, batch.Items[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if onboarding.Status != githubapp.StateCompleted || onboarding.ServiceID != service.ID || onboarding.RunID != 4242 {
+		t.Fatalf("onboarding = %+v", onboarding)
+	}
+	job, err = testDB.ClaimJob(ctx, "integration-worker", time.Minute)
+	if err != nil || job == nil {
+		t.Fatalf("job=%+v err=%v", job, err)
+	}
+	if job.OnboardingID != batch.Items[0].ID || job.Kind != githubapp.JobOpenPR {
 		t.Fatalf("job = %+v", job)
 	}
 	if err := testDB.CompleteJob(ctx, job.ID, "integration-worker"); err != nil {

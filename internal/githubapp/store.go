@@ -24,8 +24,7 @@ type Store interface {
 	CompleteJob(ctx context.Context, jobID, owner string) error
 	RetryJob(ctx context.Context, job Job, owner string, next time.Time, message string) error
 	RecordWebhook(ctx context.Context, deliveryID, event, action string, installationID int64) (bool, error)
-	ApplyPullRequestEvent(ctx context.Context, installationID, repositoryID int64, number int, action string, merged bool, head, base string) error
-	ApplyWorkflowRunEvent(ctx context.Context, installationID, repositoryID, runID int64, workflow, event, status, conclusion, headBranch, htmlURL string) error
+	ApplyWorkflowRunEvent(ctx context.Context, installationID, repositoryID, runID int64, event, status, conclusion, headBranch, htmlURL string) error
 	CreateOnboardingToken(ctx context.Context, orgID string, expiresAt time.Time) (plaintext string, err error)
 	LinkServiceByRepositoryURL(ctx context.Context, orgID, onboardingID, repositoryURL string) error
 }

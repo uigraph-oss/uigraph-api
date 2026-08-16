@@ -230,7 +230,33 @@ func (c *Client) DeleteInstallation(ctx context.Context, installationID int64) e
 	return c.do(ctx, client, http.MethodDelete, fmt.Sprintf("app/installations/%d", installationID), nil, nil)
 }
 
-func (c *Client) CreateSetupPullRequest(ctx context.Context, installationID int64, onboarding Onboarding, orgName string) (PullRequest, error) {
+// StartRun creates or force-updates the onboarding branch with the seed and the
+// UiGraph workflow. The resulting push is what starts the onboarding run, so a
+// retry must always land a new commit rather than silently reuse the branch.
+func (c *Client) StartRun(ctx context.Context, installationID int64, onboarding Onboarding, orgName string) error {
+	client, err := c.installationClient(ctx, installationID)
+	if err != nil {
+		return err
+	}
+	owner, repo, err := splitRepository(onboarding.Repository.FullName)
+	if err != nil {
+		return err
+	}
+	seed, err := Seed(orgName, onboarding.Repository.Name, onboarding.Repository.URL, onboarding.TeamName)
+	if err != nil {
+		return err
+	}
+	files := map[string][]byte{
+		WorkflowPath:    Workflow(onboarding.Repository.DefaultBranch),
+		".uigraph.yaml": seed,
+	}
+	return c.createAtomicCommit(ctx, client, owner, repo, onboarding.Repository.DefaultBranch, onboarding.Branch, files)
+}
+
+// OpenPullRequest proposes the completed onboarding branch to the default
+// branch. Onboarding is already complete when this runs, so the pull request is
+// informational and merging it is the customer's choice.
+func (c *Client) OpenPullRequest(ctx context.Context, installationID int64, onboarding Onboarding) (PullRequest, error) {
 	client, err := c.installationClient(ctx, installationID)
 	if err != nil {
 		return PullRequest{}, err
@@ -239,35 +265,24 @@ func (c *Client) CreateSetupPullRequest(ctx context.Context, installationID int6
 	if err != nil {
 		return PullRequest{}, err
 	}
-	existing, err := c.findPullRequest(ctx, client, owner, repo, onboarding.Repository.FullName, onboarding.SetupBranch, onboarding.Repository.DefaultBranch)
+	existing, err := c.findPullRequest(ctx, client, owner, repo, onboarding.Branch, onboarding.Repository.DefaultBranch)
 	if err != nil {
 		return PullRequest{}, err
 	}
 	if existing.Number != 0 {
 		return existing, nil
 	}
-	seed, err := Seed(orgName, onboarding.Repository.Name, onboarding.Repository.URL, onboarding.TeamName)
-	if err != nil {
-		return PullRequest{}, err
-	}
-	files := map[string][]byte{
-		".github/workflows/uigraph-generate.yml": GenerateWorkflow(onboarding.ID, onboarding.Repository.DefaultBranch),
-		".github/workflows/uigraph-sync.yml":     SyncWorkflow(),
-		".uigraph.yaml":                          seed,
-	}
-	if err := c.createAtomicCommit(ctx, client, owner, repo, onboarding.Repository.DefaultBranch, onboarding.SetupBranch, files); err != nil {
-		return PullRequest{}, err
-	}
 	payload := map[string]string{
-		"title": "UiGraph: configure repository onboarding", "head": onboarding.SetupBranch,
-		"base": onboarding.Repository.DefaultBranch, "body": "Adds deterministic UiGraph generation and manual sync workflows plus the initial seed.",
+		"title": "UiGraph: adopt generated repository artifacts", "head": onboarding.Branch,
+		"base": onboarding.Repository.DefaultBranch,
+		"body": "This repository is already onboarded to UiGraph. Merging keeps the generated artifacts and enables UiGraph checks on future pull requests.",
 	}
 	var created struct {
 		Number  int    `json:"number"`
 		HTMLURL string `json:"html_url"`
 	}
 	if err := c.do(ctx, client, http.MethodPost, fmt.Sprintf("repos/%s/%s/pulls", owner, repo), payload, &created); err != nil {
-		return PullRequest{}, fmt.Errorf("create setup pull request: %w", err)
+		return PullRequest{}, fmt.Errorf("open onboarding pull request: %w", err)
 	}
 	return PullRequest{Number: created.Number, URL: created.HTMLURL}, nil
 }
@@ -327,53 +342,10 @@ func (c *Client) MissingAIConfiguration(ctx context.Context, installationID int6
 	return missing, nil
 }
 
-func (c *Client) DispatchWorkflow(ctx context.Context, installationID int64, repository Repository, workflow string) error {
-	client, err := c.installationClient(ctx, installationID)
-	if err != nil {
-		return err
-	}
-	owner, repo, err := splitRepository(repository.FullName)
-	if err != nil {
-		return err
-	}
-	payload := map[string]string{"ref": repository.DefaultBranch}
-	return c.do(ctx, client, http.MethodPost, fmt.Sprintf("repos/%s/%s/actions/workflows/%s/dispatches", owner, repo, workflow), payload, nil)
-}
-
-func (c *Client) FindArtifactsPullRequest(ctx context.Context, installationID int64, onboarding Onboarding) (PullRequest, error) {
-	client, err := c.installationClient(ctx, installationID)
-	if err != nil {
-		return PullRequest{}, err
-	}
-	owner, repo, err := splitRepository(onboarding.Repository.FullName)
-	if err != nil {
-		return PullRequest{}, err
-	}
-	return c.findPullRequest(ctx, client, owner, repo, onboarding.Repository.FullName, onboarding.ArtifactsBranch, onboarding.Repository.DefaultBranch)
-}
-
-func (c *Client) GetPullRequest(ctx context.Context, installationID int64, repository Repository, number int) (PullRequest, error) {
-	client, err := c.installationClient(ctx, installationID)
-	if err != nil {
-		return PullRequest{}, err
-	}
-	owner, repo, err := splitRepository(repository.FullName)
-	if err != nil {
-		return PullRequest{}, err
-	}
-	var pull struct {
-		Number   int     `json:"number"`
-		HTMLURL  string  `json:"html_url"`
-		State    string  `json:"state"`
-		MergedAt *string `json:"merged_at"`
-	}
-	if err := c.do(ctx, client, http.MethodGet, fmt.Sprintf("repos/%s/%s/pulls/%d", owner, repo, number), nil, &pull); err != nil {
-		return PullRequest{}, err
-	}
-	return PullRequest{Number: pull.Number, URL: pull.HTMLURL, Merged: pull.MergedAt != nil, Closed: pull.State == "closed"}, nil
-}
-
-func (c *Client) GetWorkflowRun(ctx context.Context, installationID int64, repository Repository, workflow string, runID int64, createdAfter time.Time) (WorkflowRun, error) {
+// GetWorkflowRun resolves the onboarding run for polling installations. The
+// workflow file only exists on the onboarding branch, so runs are looked up by
+// branch and push event rather than by workflow file.
+func (c *Client) GetWorkflowRun(ctx context.Context, installationID int64, repository Repository, branch string, runID int64) (WorkflowRun, error) {
 	client, err := c.installationClient(ctx, installationID)
 	if err != nil {
 		return WorkflowRun{}, err
@@ -389,20 +361,23 @@ func (c *Client) GetWorkflowRun(ctx context.Context, installationID int64, repos
 		}
 		return run, nil
 	}
-	query := url.Values{"event": {"workflow_dispatch"}, "per_page": {"10"}}
+	query := url.Values{"branch": {branch}, "event": {"push"}, "per_page": {"10"}}
 	var response struct {
 		WorkflowRuns []WorkflowRun `json:"workflow_runs"`
 	}
-	path := fmt.Sprintf("repos/%s/%s/actions/workflows/%s/runs?%s", owner, repo, url.PathEscape(workflow), query.Encode())
-	if err := c.do(ctx, client, http.MethodGet, path, nil, &response); err != nil {
+	if err := c.do(ctx, client, http.MethodGet, fmt.Sprintf("repos/%s/%s/actions/runs?%s", owner, repo, query.Encode()), nil, &response); err != nil {
 		return WorkflowRun{}, err
 	}
+	latest := WorkflowRun{}
 	for _, run := range response.WorkflowRuns {
-		if run.Event == "workflow_dispatch" && run.HeadBranch == repository.DefaultBranch && !run.CreatedAt.Before(createdAfter.Add(-time.Minute)) {
-			return run, nil
+		if run.HeadBranch != branch || run.Event != "push" {
+			continue
+		}
+		if latest.ID == 0 || run.CreatedAt.After(latest.CreatedAt) {
+			latest = run
 		}
 	}
-	return WorkflowRun{}, nil
+	return latest, nil
 }
 
 func (c *Client) PutOnboardingSecret(ctx context.Context, installationID int64, installation Installation, repositories []Repository, plaintext string) error {
@@ -416,10 +391,20 @@ func (c *Client) PutOnboardingSecret(ctx context.Context, installationID int64, 
 		if err != nil {
 			return err
 		}
-		ids := make([]int64, 0, len(repositories))
-		for _, repository := range repositories {
-			ids = append(ids, repository.GitHubID)
+		// Repositories onboarded in earlier batches keep the secret for their
+		// ongoing pull request syncs, so the new selection is a union.
+		selected, err := c.selectedSecretRepositories(ctx, client, installation.AccountLogin)
+		if err != nil {
+			return err
 		}
+		for _, repository := range repositories {
+			selected[repository.GitHubID] = true
+		}
+		ids := make([]int64, 0, len(selected))
+		for id := range selected {
+			ids = append(ids, id)
+		}
+		sort.Slice(ids, func(a, b int) bool { return ids[a] < ids[b] })
 		payload := map[string]any{"encrypted_value": encrypted, "key_id": keyID, "visibility": "selected", "selected_repository_ids": ids}
 		return c.do(ctx, client, http.MethodPut, fmt.Sprintf("orgs/%s/actions/secrets/UIGRAPH_ONBOARDING_TOKEN", installation.AccountLogin), payload, nil)
 	}
@@ -438,6 +423,27 @@ func (c *Client) PutOnboardingSecret(ctx context.Context, installationID int64, 
 		}
 	}
 	return nil
+}
+
+func (c *Client) selectedSecretRepositories(ctx context.Context, client *gh.Client, account string) (map[int64]bool, error) {
+	selected := map[int64]bool{}
+	var response struct {
+		Repositories []struct {
+			ID int64 `json:"id"`
+		} `json:"repositories"`
+	}
+	path := fmt.Sprintf("orgs/%s/actions/secrets/UIGRAPH_ONBOARDING_TOKEN/repositories?per_page=100", account)
+	if err := c.do(ctx, client, http.MethodGet, path, nil, &response); err != nil {
+		var apiError *gh.ErrorResponse
+		if errors.As(err, &apiError) && apiError.Response != nil && apiError.Response.StatusCode == http.StatusNotFound {
+			return selected, nil
+		}
+		return nil, err
+	}
+	for _, repository := range response.Repositories {
+		selected[repository.ID] = true
+	}
+	return selected, nil
 }
 
 func (c *Client) createAtomicCommit(ctx context.Context, client *gh.Client, owner, repo, base, branch string, files map[string][]byte) error {
@@ -493,12 +499,13 @@ func (c *Client) createAtomicCommit(ctx context.Context, client *gh.Client, owne
 	}
 	var apiError *gh.ErrorResponse
 	if errors.As(err, &apiError) && apiError.Response != nil && apiError.Response.StatusCode == http.StatusUnprocessableEntity {
-		return nil
+		payload := map[string]any{"sha": created.SHA, "force": true}
+		return c.do(ctx, client, http.MethodPatch, fmt.Sprintf("repos/%s/%s/git/refs/heads/%s", owner, repo, url.PathEscape(branch)), payload, nil)
 	}
 	return err
 }
 
-func (c *Client) findPullRequest(ctx context.Context, client *gh.Client, owner, repo, fullName, branch, base string) (PullRequest, error) {
+func (c *Client) findPullRequest(ctx context.Context, client *gh.Client, owner, repo, branch, base string) (PullRequest, error) {
 	query := url.Values{"state": {"all"}, "head": {owner + ":" + branch}, "base": {base}, "per_page": {"10"}}
 	var pulls []struct {
 		Number   int     `json:"number"`

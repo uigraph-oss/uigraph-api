@@ -38,8 +38,7 @@ type githubClient interface {
 }
 
 type githubPollingClient interface {
-	GetPullRequest(ctx context.Context, installationID int64, repository domain.Repository, number int) (domain.PullRequest, error)
-	GetWorkflowRun(ctx context.Context, installationID int64, repository domain.Repository, workflow string, runID int64, createdAfter time.Time) (domain.WorkflowRun, error)
+	GetWorkflowRun(ctx context.Context, installationID int64, repository domain.Repository, branch string, runID int64) (domain.WorkflowRun, error)
 }
 
 type Handler struct {
@@ -308,50 +307,21 @@ func (h *Handler) reconcileBatch(ctx context.Context, batch *domain.Batch) error
 		return err
 	}
 	for _, onboarding := range batch.Items {
-		switch onboarding.Status {
-		case domain.StateWaitingSetupMerge:
-			pull, err := client.GetPullRequest(ctx, installation.GitHubInstallationID, onboarding.Repository, onboarding.SetupPRNumber)
-			if err != nil {
-				return err
-			}
-			if pull.Closed {
-				if err := h.store.ApplyPullRequestEvent(ctx, installation.GitHubInstallationID, onboarding.Repository.GitHubID, pull.Number, "closed", pull.Merged, onboarding.SetupBranch, onboarding.Repository.DefaultBranch); err != nil {
-					return err
-				}
-			}
-		case domain.StateWaitingArtifactsMerge:
-			pull, err := client.GetPullRequest(ctx, installation.GitHubInstallationID, onboarding.Repository, onboarding.ArtifactsPRNumber)
-			if err != nil {
-				return err
-			}
-			if pull.Closed {
-				if err := h.store.ApplyPullRequestEvent(ctx, installation.GitHubInstallationID, onboarding.Repository.GitHubID, pull.Number, "closed", pull.Merged, onboarding.ArtifactsBranch, onboarding.Repository.DefaultBranch); err != nil {
-					return err
-				}
-			}
-		case domain.StateGenerationQueued, domain.StateGenerationRunning:
-			if err := h.reconcileWorkflow(ctx, client, *installation, onboarding, "uigraph-generate.yml", onboarding.GenerationRunID); err != nil {
-				return err
-			}
-		case domain.StateSyncQueued, domain.StateSyncRunning:
-			if err := h.reconcileWorkflow(ctx, client, *installation, onboarding, "uigraph-sync.yml", onboarding.SyncRunID); err != nil {
-				return err
-			}
+		if onboarding.Status != domain.StateRunQueued && onboarding.Status != domain.StateRunRunning {
+			continue
+		}
+		run, err := client.GetWorkflowRun(ctx, installation.GitHubInstallationID, onboarding.Repository, onboarding.Branch, onboarding.RunID)
+		if err != nil {
+			return err
+		}
+		if run.ID == 0 {
+			continue
+		}
+		if err := h.store.ApplyWorkflowRunEvent(ctx, installation.GitHubInstallationID, onboarding.Repository.GitHubID, run.ID, run.Event, run.Status, run.Conclusion, run.HeadBranch, run.HTMLURL); err != nil {
+			return err
 		}
 	}
 	return nil
-}
-
-func (h *Handler) reconcileWorkflow(ctx context.Context, client githubPollingClient, installation domain.Installation, onboarding domain.Onboarding, workflow string, runID int64) error {
-	run, err := client.GetWorkflowRun(ctx, installation.GitHubInstallationID, onboarding.Repository, workflow, runID, onboarding.UpdatedAt)
-	if err != nil || run.ID == 0 {
-		return err
-	}
-	name := run.Name
-	if name == "" {
-		name = run.Path
-	}
-	return h.store.ApplyWorkflowRunEvent(ctx, installation.GitHubInstallationID, onboarding.Repository.GitHubID, run.ID, name, run.Event, run.Status, run.Conclusion, run.HeadBranch, run.HTMLURL)
 }
 
 // @Summary Recheck repository AI configuration
@@ -448,29 +418,6 @@ func (h *Handler) Webhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch event {
-	case "pull_request":
-		var payload struct {
-			Action       string `json:"action"`
-			Installation struct {
-				ID int64 `json:"id"`
-			} `json:"installation"`
-			Repository struct {
-				ID int64 `json:"id"`
-			} `json:"repository"`
-			PullRequest struct {
-				Number int  `json:"number"`
-				Merged bool `json:"merged"`
-				Head   struct {
-					Ref string `json:"ref"`
-				} `json:"head"`
-				Base struct {
-					Ref string `json:"ref"`
-				} `json:"base"`
-			} `json:"pull_request"`
-		}
-		if err := json.Unmarshal(body, &payload); err == nil {
-			err = h.store.ApplyPullRequestEvent(r.Context(), payload.Installation.ID, payload.Repository.ID, payload.PullRequest.Number, payload.Action, payload.PullRequest.Merged, payload.PullRequest.Head.Ref, payload.PullRequest.Base.Ref)
-		}
 	case "workflow_run":
 		var payload struct {
 			Installation struct {
@@ -481,8 +428,6 @@ func (h *Handler) Webhook(w http.ResponseWriter, r *http.Request) {
 			} `json:"repository"`
 			WorkflowRun struct {
 				ID         int64  `json:"id"`
-				Name       string `json:"name"`
-				Path       string `json:"path"`
 				Event      string `json:"event"`
 				Status     string `json:"status"`
 				Conclusion string `json:"conclusion"`
@@ -491,11 +436,7 @@ func (h *Handler) Webhook(w http.ResponseWriter, r *http.Request) {
 			} `json:"workflow_run"`
 		}
 		if err := json.Unmarshal(body, &payload); err == nil {
-			workflow := payload.WorkflowRun.Name
-			if workflow == "" {
-				workflow = payload.WorkflowRun.Path
-			}
-			err = h.store.ApplyWorkflowRunEvent(r.Context(), payload.Installation.ID, payload.Repository.ID, payload.WorkflowRun.ID, workflow, payload.WorkflowRun.Event, payload.WorkflowRun.Status, payload.WorkflowRun.Conclusion, payload.WorkflowRun.HeadBranch, payload.WorkflowRun.HTMLURL)
+			err = h.store.ApplyWorkflowRunEvent(r.Context(), payload.Installation.ID, payload.Repository.ID, payload.WorkflowRun.ID, payload.WorkflowRun.Event, payload.WorkflowRun.Status, payload.WorkflowRun.Conclusion, payload.WorkflowRun.HeadBranch, payload.WorkflowRun.HTMLURL)
 		}
 	case "ping", "installation", "installation_repositories", "repository":
 		err = nil

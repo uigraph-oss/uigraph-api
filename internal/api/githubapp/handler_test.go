@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	gh "github.com/google/go-github/v74/github"
 	domain "github.com/uigraph/app/internal/githubapp"
@@ -29,7 +28,7 @@ func (s *webhookStore) RecordWebhook(_ context.Context, deliveryID, event, actio
 	return true, nil
 }
 
-func (s *webhookStore) ApplyPullRequestEvent(context.Context, int64, int64, int, string, bool, string, string) error {
+func (s *webhookStore) ApplyWorkflowRunEvent(context.Context, int64, int64, int64, string, string, string, string, string) error {
 	s.transitions++
 	return nil
 }
@@ -58,11 +57,8 @@ func (pollingClient) ListInstallationRepositories(context.Context, int64) ([]dom
 	return nil, nil
 }
 func (pollingClient) DeleteInstallation(context.Context, int64) error { return nil }
-func (pollingClient) GetPullRequest(context.Context, int64, domain.Repository, int) (domain.PullRequest, error) {
-	return domain.PullRequest{Number: 2, Merged: true, Closed: true}, nil
-}
-func (pollingClient) GetWorkflowRun(context.Context, int64, domain.Repository, string, int64, time.Time) (domain.WorkflowRun, error) {
-	return domain.WorkflowRun{}, nil
+func (pollingClient) GetWorkflowRun(_ context.Context, _ int64, _ domain.Repository, branch string, _ int64) (domain.WorkflowRun, error) {
+	return domain.WorkflowRun{ID: 42, Event: "push", Status: "completed", Conclusion: "success", HeadBranch: branch}, nil
 }
 
 func signedRequest(t *testing.T, body []byte, delivery string) *http.Request {
@@ -72,14 +68,14 @@ func signedRequest(t *testing.T, body []byte, delivery string) *http.Request {
 	_, _ = mac.Write(body)
 	request.Header.Set("X-Hub-Signature-256", "sha256="+hex.EncodeToString(mac.Sum(nil)))
 	request.Header.Set("X-GitHub-Delivery", delivery)
-	request.Header.Set("X-GitHub-Event", "pull_request")
+	request.Header.Set("X-GitHub-Event", "workflow_run")
 	return request
 }
 
 func TestWebhookSignatureDedupeAndTransition(t *testing.T) {
 	store := &webhookStore{deliveries: map[string]bool{}}
 	handler := New(store, nil, "", "", "secret")
-	body := []byte(`{"action":"closed","installation":{"id":7},"repository":{"id":8},"pull_request":{"number":2,"merged":true,"head":{"ref":"uigraph/setup/id"},"base":{"ref":"main"}}}`)
+	body := []byte(`{"installation":{"id":7},"repository":{"id":8},"workflow_run":{"id":42,"event":"push","status":"completed","conclusion":"success","head_branch":"uigraph/onboarding/id"}}`)
 	for range 2 {
 		response := httptest.NewRecorder()
 		handler.Webhook(response, signedRequest(t, body, "delivery-1"))
@@ -113,13 +109,19 @@ func TestRegisterOmitsWebhookWithoutSecret(t *testing.T) {
 	}
 }
 
-func TestReconcileBatchPollsMergedPullRequest(t *testing.T) {
+func TestReconcileBatchPollsTheOnboardingBranchRun(t *testing.T) {
 	store := &webhookStore{}
 	handler := New(store, pollingClient{}, "", "", "")
-	batch := &domain.Batch{OrgID: "org", Items: []domain.Onboarding{{
-		Status: domain.StateWaitingSetupMerge, SetupPRNumber: 2, SetupBranch: "uigraph/setup/id",
-		Repository: domain.Repository{GitHubID: 8, DefaultBranch: "main"},
-	}}}
+	batch := &domain.Batch{OrgID: "org", Items: []domain.Onboarding{
+		{
+			Status: domain.StateRunQueued, Branch: "uigraph/onboarding/id",
+			Repository: domain.Repository{GitHubID: 8, DefaultBranch: "main"},
+		},
+		{
+			Status: domain.StateCompleted, Branch: "uigraph/onboarding/done",
+			Repository: domain.Repository{GitHubID: 9, DefaultBranch: "main"},
+		},
+	}}
 	if err := handler.reconcileBatch(context.Background(), batch); err != nil {
 		t.Fatal(err)
 	}

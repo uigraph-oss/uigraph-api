@@ -62,8 +62,6 @@ Minimum environment variables:
 
 See [uigraph-deploy `.env.example`](../uigraph-deploy/.env.example) for the full configuration reference.
 
-GitHub App multi-repository onboarding configuration, permissions, events, and customer-managed AI settings are documented in [docs/github-app-onboarding.md](docs/github-app-onboarding.md).
-
 ## Testing
 
 ```bash

@@ -26,38 +26,74 @@ func TestSeedIsDeterministicAndExact(t *testing.T) {
 	}
 }
 
-func TestGenerationAndSyncWorkflowBoundaries(t *testing.T) {
-	generation := string(GenerateWorkflow("onboarding-id", "trunk"))
-	var generationYAML map[string]any
-	if err := yaml.Unmarshal([]byte(generation), &generationYAML); err != nil {
-		t.Fatalf("generation workflow is invalid YAML: %v", err)
+func TestWorkflowTriggersOnlyOnTheOnboardingBranchAndPullRequests(t *testing.T) {
+	workflow := string(Workflow("trunk"))
+	var parsed struct {
+		On struct {
+			Push struct {
+				Branches []string `yaml:"branches"`
+			} `yaml:"push"`
+			PullRequest struct {
+				Branches []string `yaml:"branches"`
+			} `yaml:"pull_request"`
+			WorkflowDispatch any `yaml:"workflow_dispatch"`
+		} `yaml:"on"`
+	}
+	if err := yaml.Unmarshal([]byte(workflow), &parsed); err != nil {
+		t.Fatalf("workflow is invalid YAML: %v", err)
+	}
+	if strings.Join(parsed.On.Push.Branches, ",") != "uigraph/onboarding/**" {
+		t.Fatalf("push branches = %v", parsed.On.Push.Branches)
+	}
+	if strings.Join(parsed.On.PullRequest.Branches, ",") != "trunk" {
+		t.Fatalf("pull request branches = %v", parsed.On.PullRequest.Branches)
+	}
+	if parsed.On.WorkflowDispatch != nil {
+		t.Fatal("the workflow file never reaches the default branch, so workflow_dispatch cannot work")
 	}
 	for _, expected := range []string{
 		"@uigraph/agents@experimental artifacts init --seeded",
 		"go install github.com/uigraph-oss/uigraph-cli@main",
 		"uigraph-cli sync --dry-run",
 		"AI_PROVIDER_API_KEY: ${{ secrets.AI_PROVIDER_API_KEY }}",
-		"branch: uigraph/generated/onboarding-id",
-		"base: trunk",
-		".uigraph.yaml",
-		".uigraph/**",
+		"UIGRAPH_TOKEN: ${{ secrets.UIGRAPH_ONBOARDING_TOKEN }}",
+		"Generation changed unsupported paths",
+		"grep -Ev '^(.uigraph.yaml|.uigraph/)'",
 	} {
-		if !strings.Contains(generation, expected) {
-			t.Fatalf("generation workflow does not contain %q", expected)
+		if !strings.Contains(workflow, expected) {
+			t.Fatalf("workflow does not contain %q", expected)
 		}
 	}
-	if strings.Contains(generation, "UIGRAPH_TOKEN") {
-		t.Fatal("generation workflow must not receive UIGRAPH_TOKEN")
+}
+
+func TestWorkflowKeepsTheOnboardingTokenAwayFromGeneration(t *testing.T) {
+	workflow := string(Workflow("main"))
+	var parsed struct {
+		Jobs map[string]struct {
+			Env   map[string]string `yaml:"env"`
+			Steps []struct {
+				Name string            `yaml:"name"`
+				Run  string            `yaml:"run"`
+				Env  map[string]string `yaml:"env"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
 	}
-	sync := string(SyncWorkflow())
-	var syncYAML map[string]any
-	if err := yaml.Unmarshal([]byte(sync), &syncYAML); err != nil {
-		t.Fatalf("sync workflow is invalid YAML: %v", err)
+	if err := yaml.Unmarshal([]byte(workflow), &parsed); err != nil {
+		t.Fatalf("workflow is invalid YAML: %v", err)
 	}
-	if !strings.Contains(sync, "workflow_dispatch:") || !strings.Contains(sync, "push:") || strings.Contains(sync, "pull_request:") {
-		t.Fatal("sync workflow must run after artifact pushes and allow manual retry")
-	}
-	if !strings.Contains(sync, "UIGRAPH_TOKEN: ${{ secrets.UIGRAPH_ONBOARDING_TOKEN }}") {
-		t.Fatal("sync workflow does not map the onboarding token")
+	for name, job := range parsed.Jobs {
+		if len(job.Env) != 0 {
+			t.Fatalf("job %q declares job-wide env, which would expose the onboarding token to generation: %v", name, job.Env)
+		}
+		for _, step := range job.Steps {
+			_, hasAIKey := step.Env["AI_PROVIDER_API_KEY"]
+			_, hasToken := step.Env["UIGRAPH_TOKEN"]
+			if hasAIKey && hasToken {
+				t.Fatalf("step %q receives both the AI key and the onboarding token", step.Name)
+			}
+			if hasToken && strings.Contains(step.Run, "@uigraph/agents") {
+				t.Fatalf("step %q runs the agent with the onboarding token in scope", step.Name)
+			}
+		}
 	}
 }
