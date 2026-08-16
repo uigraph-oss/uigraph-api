@@ -97,7 +97,7 @@ jobs:
         with:
           go-version: stable
       - run: go install github.com/uigraph-oss/uigraph-cli@main
-      - run: uigraph-cli validate
+      - run: uigraph-cli sync --dry-run
       - name: Restrict generated changes
         run: |
           unexpected=$(git status --porcelain | awk '{print $2}' | grep -Ev '^(.uigraph.yaml|.uigraph/)' || true)
@@ -146,7 +146,7 @@ jobs:
         with:
           go-version: stable
       - if: steps.artifacts.outputs.exists == 'true'
-        run: go install github.com/uigraph-oss/uigraph-cli@latest
+        run: go install github.com/uigraph-oss/uigraph-cli@main
       - if: steps.artifacts.outputs.exists == 'true'
         run: uigraph-cli sync
 `)

@@ -35,7 +35,7 @@ func TestGenerationAndSyncWorkflowBoundaries(t *testing.T) {
 	for _, expected := range []string{
 		"@uigraph/agents@experimental artifacts init --seeded",
 		"go install github.com/uigraph-oss/uigraph-cli@main",
-		"uigraph-cli validate",
+		"uigraph-cli sync --dry-run",
 		"AI_PROVIDER_API_KEY: ${{ secrets.AI_PROVIDER_API_KEY }}",
 		"branch: uigraph/generated/onboarding-id",
 		"base: trunk",
