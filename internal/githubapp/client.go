@@ -236,11 +236,11 @@ func (c *Client) StartRun(ctx context.Context, installationID int64, value Impor
 	if err != nil {
 		return err
 	}
-	files := map[string][]byte{
-		ArtifactWorkflowPath: ArtifactWorkflow(value.Repository.DefaultBranch),
-		SyncWorkflowPath:     SyncWorkflow(value.Repository.DefaultBranch),
-		".uigraph.yaml":      seed,
+	files, err := Workflows(value.Repository.DefaultBranch)
+	if err != nil {
+		return err
 	}
+	files[".uigraph.yaml"] = seed
 	return c.createAtomicCommit(ctx, client, owner, repo, value.Repository.DefaultBranch, value.Branch, files)
 }
 
@@ -368,7 +368,7 @@ func (c *Client) GetWorkflowRun(ctx context.Context, installationID int64, repos
 	}
 	latest := WorkflowRun{}
 	for _, run := range response.WorkflowRuns {
-		if run.Path != ArtifactWorkflowPath {
+		if run.Path != OnboardingWorkflowPath {
 			continue
 		}
 		if run.ID > latest.ID {
@@ -525,7 +525,8 @@ func (c *Client) createAtomicCommit(ctx context.Context, client *gh.Client, owne
 	var created struct {
 		SHA string `json:"sha"`
 	}
-	payload := map[string]any{"message": "chore(uigraph): configure repository onboarding", "tree": tree.SHA, "parents": []string{ref.Object.SHA}}
+	payload := map[string]any{"message": "chore(uigraph): configure repository onboarding", "tree": tree.SHA, "parents": []string{ref.Object.SHA},
+		"author": map[string]string{"name": OnboardingAuthorName, "email": OnboardingAuthorEmail}}
 	if err := c.do(ctx, client, http.MethodPost, fmt.Sprintf("repos/%s/%s/git/commits", owner, repo), payload, &created); err != nil {
 		return err
 	}

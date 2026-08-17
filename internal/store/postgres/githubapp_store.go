@@ -385,7 +385,7 @@ func (d *DB) RecordWebhook(ctx context.Context, deliveryID, event, action string
 }
 
 func (d *DB) ApplyWorkflowRunEvent(ctx context.Context, installationID, repositoryID int64, run githubapp.WorkflowRun) error {
-	if run.Event != "push" || run.Path != githubapp.ArtifactWorkflowPath {
+	if run.Event != "push" || run.Path != githubapp.OnboardingWorkflowPath {
 		return nil
 	}
 	tx, err := d.db.BeginTx(ctx, nil)
