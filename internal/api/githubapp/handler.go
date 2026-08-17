@@ -34,6 +34,8 @@ type Client interface {
 	FindUserInstallation(ctx context.Context, token string) (*gh.Installation, error)
 	VerifyUserInstallation(ctx context.Context, token string, installationID int64) (*gh.Installation, error)
 	ListInstallationRepositories(ctx context.Context, installationID int64) ([]domain.Repository, error)
+	GetRepository(ctx context.Context, installationID int64, owner, repo string) (domain.Repository, error)
+	GetInstallationAccount(ctx context.Context, installationID int64) (domain.Installation, error)
 	DeleteInstallation(ctx context.Context, installationID int64) error
 	GetWorkflowRun(ctx context.Context, installationID int64, repository domain.Repository, branch string, runID int64) (domain.WorkflowRun, error)
 	ListWorkflowRunJobs(ctx context.Context, installationID int64, repository domain.Repository, runID int64) ([]domain.Step, error)
@@ -56,7 +58,6 @@ func Register(mux *http.ServeMux, h *Handler, requireScope func(scope, method, p
 	requireScope("integrations:write", "DELETE", "/api/v1/orgs/{orgID}/github-app", h.DeleteInstallation)
 	requireScope("integrations:read", "GET", "/api/v1/orgs/{orgID}/github-app/repositories", h.ListRepositories)
 	requireScope("integrations:write", "POST", "/api/v1/orgs/{orgID}/repository-imports", h.CreateImport)
-	requireScope("integrations:read", "GET", "/api/v1/orgs/{orgID}/repository-imports", h.ListImports)
 	requireScope("integrations:read", "GET", "/api/v1/orgs/{orgID}/repository-imports/latest", h.GetLatestImport)
 	requireScope("integrations:read", "GET", "/api/v1/orgs/{orgID}/repository-imports/{importID}", h.GetImport)
 	requireScope("integrations:write", "POST", "/api/v1/orgs/{orgID}/repository-imports/{importID}/recheck", h.Recheck)
@@ -83,7 +84,27 @@ func (h *Handler) GetInstallation(w http.ResponseWriter, r *http.Request) {
 		httpError(w, r, err)
 		return
 	}
+	if installation == nil {
+		httputil.JSON(w, http.StatusOK, map[string]any{"enabled": true, "installation": nil})
+		return
+	}
+	account, err := h.client.GetInstallationAccount(r.Context(), installation.GitHubInstallationID)
+	if notFound(err) {
+		httputil.JSON(w, http.StatusOK, map[string]any{"enabled": true, "installation": nil})
+		return
+	}
+	if err != nil {
+		httpError(w, r, err)
+		return
+	}
+	installation.AccountID, installation.AccountLogin = account.AccountID, account.AccountLogin
+	installation.AccountType, installation.Suspended = account.AccountType, account.Suspended
 	httputil.JSON(w, http.StatusOK, map[string]any{"enabled": true, "installation": installation})
+}
+
+func notFound(err error) bool {
+	var apiError *gh.ErrorResponse
+	return errors.As(err, &apiError) && apiError.Response != nil && apiError.Response.StatusCode == http.StatusNotFound
 }
 
 // @Summary Start GitHub App installation
@@ -172,8 +193,7 @@ func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) {
 		}
 		installationID = existing.GetID()
 	}
-	installation, err := h.client.VerifyUserInstallation(r.Context(), token, installationID)
-	if err != nil {
+	if _, err := h.client.VerifyUserInstallation(r.Context(), token, installationID); err != nil {
 		httpError(w, r, err)
 		return
 	}
@@ -182,17 +202,7 @@ func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) {
 		httpError(w, r, err)
 		return
 	}
-	repositories, err := h.client.ListInstallationRepositories(r.Context(), installationID)
-	if err != nil {
-		httpError(w, r, err)
-		return
-	}
-	account := installation.GetAccount()
-	value := domain.Installation{
-		OrgID: orgID, GitHubInstallationID: installationID, AccountID: account.GetID(), AccountLogin: account.GetLogin(),
-		AccountType: account.GetType(), TargetType: installation.GetTargetType(), Status: "active",
-	}
-	if err := h.store.UpsertInstallation(r.Context(), value, repositories); err != nil {
+	if err := h.store.UpsertInstallation(r.Context(), orgID, installationID); err != nil {
 		httpError(w, r, err)
 		return
 	}
@@ -225,7 +235,7 @@ func (h *Handler) DeleteInstallation(w http.ResponseWriter, r *http.Request) {
 		httpError(w, r, err)
 		return
 	}
-	if err := h.store.DisconnectInstallation(r.Context(), r.PathValue("orgID")); err != nil {
+	if err := h.store.DeleteInstallation(r.Context(), r.PathValue("orgID")); err != nil {
 		httpError(w, r, err)
 		return
 	}
@@ -239,7 +249,20 @@ func (h *Handler) DeleteInstallation(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} map[string]interface{}
 // @Router /orgs/{orgID}/github-app/repositories [get]
 func (h *Handler) ListRepositories(w http.ResponseWriter, r *http.Request) {
-	repositories, err := h.store.ListRepositories(r.Context(), r.PathValue("orgID"))
+	if h.client == nil {
+		http.Error(w, `{"error":"GitHub App is not configured","code":503}`, http.StatusServiceUnavailable)
+		return
+	}
+	installation, err := h.store.GetInstallation(r.Context(), r.PathValue("orgID"))
+	if err != nil {
+		httpError(w, r, err)
+		return
+	}
+	if installation == nil {
+		httpError(w, r, store.ErrNotFound)
+		return
+	}
+	repositories, err := h.client.ListInstallationRepositories(r.Context(), installation.GitHubInstallationID)
 	if err != nil {
 		httpError(w, r, err)
 		return
@@ -251,19 +274,42 @@ func (h *Handler) ListRepositories(w http.ResponseWriter, r *http.Request) {
 // @Tags integrations
 // @Security BearerAuth
 // @Param orgID path string true "Organization ID"
-// @Param body body object true "teamId and repositoryId"
+// @Param body body object true "teamId, owner and repo"
 // @Success 201 {object} domain.Import
 // @Router /orgs/{orgID}/repository-imports [post]
 func (h *Handler) CreateImport(w http.ResponseWriter, r *http.Request) {
-	var request struct {
-		TeamID       string `json:"teamId"`
-		RepositoryID string `json:"repositoryId"`
-	}
-	if err := httputil.Decode(r, &request); err != nil || request.TeamID == "" || request.RepositoryID == "" {
-		httputil.BadRequest(w, "teamId and repositoryId are required")
+	if h.client == nil {
+		http.Error(w, `{"error":"GitHub App is not configured","code":503}`, http.StatusServiceUnavailable)
 		return
 	}
-	value, err := h.store.CreateImport(r.Context(), r.PathValue("orgID"), request.TeamID, request.RepositoryID)
+	var request struct {
+		TeamID string `json:"teamId"`
+		Owner  string `json:"owner"`
+		Repo   string `json:"repo"`
+	}
+	if err := httputil.Decode(r, &request); err != nil || request.TeamID == "" || request.Owner == "" || request.Repo == "" {
+		httputil.BadRequest(w, "teamId, owner and repo are required")
+		return
+	}
+	installation, err := h.store.GetInstallation(r.Context(), r.PathValue("orgID"))
+	if err != nil {
+		httpError(w, r, err)
+		return
+	}
+	if installation == nil {
+		httpError(w, r, store.ErrNotFound)
+		return
+	}
+	repository, err := h.client.GetRepository(r.Context(), installation.GitHubInstallationID, request.Owner, request.Repo)
+	if notFound(err) {
+		httputil.BadRequest(w, "the GitHub App cannot access this repository")
+		return
+	}
+	if err != nil {
+		httpError(w, r, err)
+		return
+	}
+	value, err := h.store.CreateImport(r.Context(), r.PathValue("orgID"), request.TeamID, repository.OwnerID, repository.Name)
 	if err != nil {
 		httpError(w, r, err)
 		return
@@ -306,21 +352,6 @@ func (h *Handler) GetLatestImport(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"import": h.reconciled(r.Context(), value)})
 }
 
-// @Summary List repository imports
-// @Tags integrations
-// @Security BearerAuth
-// @Param orgID path string true "Organization ID"
-// @Success 200 {object} map[string]interface{}
-// @Router /orgs/{orgID}/repository-imports [get]
-func (h *Handler) ListImports(w http.ResponseWriter, r *http.Request) {
-	values, err := h.store.ListImports(r.Context(), r.PathValue("orgID"))
-	if err != nil {
-		httpError(w, r, err)
-		return
-	}
-	httputil.JSON(w, http.StatusOK, map[string]any{"imports": values})
-}
-
 func (h *Handler) reconciled(ctx context.Context, value *domain.Import) *domain.Import {
 	applied, err := h.reconcileImport(ctx, value)
 	if err != nil {
@@ -348,23 +379,31 @@ func (h *Handler) reconcileImport(ctx context.Context, value *domain.Import) (bo
 	if err != nil || installation == nil {
 		return false, err
 	}
-	run, err := h.client.GetWorkflowRun(ctx, installation.GitHubInstallationID, value.Repository, value.Branch, value.RunID)
+	account, err := h.client.GetInstallationAccount(ctx, installation.GitHubInstallationID)
+	if err != nil {
+		return false, err
+	}
+	repository, err := h.client.GetRepository(ctx, installation.GitHubInstallationID, account.AccountLogin, value.GitHubRepo)
+	if err != nil {
+		return false, err
+	}
+	run, err := h.client.GetWorkflowRun(ctx, installation.GitHubInstallationID, repository, value.Branch, value.RunID)
 	if err != nil {
 		return false, err
 	}
 	if run.ID == 0 {
 		return false, nil
 	}
-	steps, err := h.client.ListWorkflowRunJobs(ctx, installation.GitHubInstallationID, value.Repository, run.ID)
+	steps, err := h.client.ListWorkflowRunJobs(ctx, installation.GitHubInstallationID, repository, run.ID)
 	if err != nil {
 		return false, err
 	}
 	if len(steps) != 0 {
-		if err := h.store.ApplyWorkflowJobEvent(ctx, installation.GitHubInstallationID, value.Repository.GitHubID, run.ID, run.HeadBranch, steps); err != nil {
+		if err := h.store.ApplyWorkflowJobEvent(ctx, run.HeadBranch, run.ID, steps); err != nil {
 			return false, err
 		}
 	}
-	return true, h.store.ApplyWorkflowRunEvent(ctx, installation.GitHubInstallationID, value.Repository.GitHubID, run)
+	return true, h.store.ApplyWorkflowRunEvent(ctx, run, repository.URL)
 }
 
 // @Summary Recheck repository AI configuration
@@ -429,7 +468,7 @@ func (h *Handler) Webhook(w http.ResponseWriter, r *http.Request) {
 			ID int64 `json:"id"`
 		} `json:"installation"`
 		Repository struct {
-			ID int64 `json:"id"`
+			HTMLURL string `json:"html_url"`
 		} `json:"repository"`
 		WorkflowRun domain.WorkflowRun `json:"workflow_run"`
 		WorkflowJob *gh.WorkflowJob    `json:"workflow_job"`
@@ -449,7 +488,7 @@ func (h *Handler) Webhook(w http.ResponseWriter, r *http.Request) {
 	}
 	switch event {
 	case "workflow_run":
-		err = h.store.ApplyWorkflowRunEvent(r.Context(), payload.Installation.ID, payload.Repository.ID, payload.WorkflowRun)
+		err = h.store.ApplyWorkflowRunEvent(r.Context(), payload.WorkflowRun, payload.Repository.HTMLURL)
 		if err != nil {
 			httpError(w, r, err)
 			return
@@ -461,7 +500,7 @@ func (h *Handler) Webhook(w http.ResponseWriter, r *http.Request) {
 		}
 		job := payload.WorkflowJob
 		steps := domain.JobSteps(job.GetID(), job.GetName(), job.Steps)
-		err = h.store.ApplyWorkflowJobEvent(r.Context(), payload.Installation.ID, payload.Repository.ID, job.GetRunID(), job.GetHeadBranch(), steps)
+		err = h.store.ApplyWorkflowJobEvent(r.Context(), job.GetHeadBranch(), job.GetRunID(), steps)
 		if err != nil {
 			httpError(w, r, err)
 			return

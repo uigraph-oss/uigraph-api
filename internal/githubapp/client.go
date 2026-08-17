@@ -202,13 +202,49 @@ func (c *Client) ListInstallationRepositories(ctx context.Context, installationI
 	}
 	repositories := make([]Repository, 0, len(response.Repositories))
 	for _, repository := range response.Repositories {
-		repositories = append(repositories, Repository{
-			GitHubID: repository.GetID(), Name: repository.GetName(), FullName: repository.GetFullName(),
-			URL: repository.GetHTMLURL(), DefaultBranch: repository.GetDefaultBranch(), Private: repository.GetPrivate(),
-			Archived: repository.GetArchived(), Selected: true,
-		})
+		repositories = append(repositories, toRepository(repository))
 	}
 	return repositories, nil
+}
+
+func toRepository(value *gh.Repository) Repository {
+	return Repository{
+		GitHubID: value.GetID(), OwnerID: value.GetOwner().GetID(), Owner: value.GetOwner().GetLogin(),
+		Name: value.GetName(), FullName: value.GetFullName(), URL: value.GetHTMLURL(),
+		DefaultBranch: value.GetDefaultBranch(), Private: value.GetPrivate(), Archived: value.GetArchived(),
+	}
+}
+
+func (c *Client) GetRepository(ctx context.Context, installationID int64, owner, repo string) (Repository, error) {
+	client, err := c.installationClient(ctx, installationID)
+	if err != nil {
+		return Repository{}, err
+	}
+	var value gh.Repository
+	if err := c.do(ctx, client, http.MethodGet, fmt.Sprintf("repos/%s/%s", owner, repo), nil, &value); err != nil {
+		return Repository{}, err
+	}
+	return toRepository(&value), nil
+}
+
+func (c *Client) GetInstallationAccount(ctx context.Context, installationID int64) (Installation, error) {
+	jwt, err := c.appJWT()
+	if err != nil {
+		return Installation{}, err
+	}
+	client, err := c.githubClient(jwt)
+	if err != nil {
+		return Installation{}, err
+	}
+	var value gh.Installation
+	if err := c.do(ctx, client, http.MethodGet, fmt.Sprintf("app/installations/%d", installationID), nil, &value); err != nil {
+		return Installation{}, err
+	}
+	account := value.GetAccount()
+	return Installation{
+		GitHubInstallationID: installationID, AccountID: account.GetID(), AccountLogin: account.GetLogin(),
+		AccountType: account.GetType(), Suspended: value.SuspendedAt != nil,
+	}, nil
 }
 
 func (c *Client) DeleteInstallation(ctx context.Context, installationID int64) error {
@@ -223,37 +259,30 @@ func (c *Client) DeleteInstallation(ctx context.Context, installationID int64) e
 	return c.do(ctx, client, http.MethodDelete, fmt.Sprintf("app/installations/%d", installationID), nil, nil)
 }
 
-func (c *Client) StartRun(ctx context.Context, installationID int64, value Import, orgName string) error {
+func (c *Client) StartRun(ctx context.Context, installationID int64, value Import, repository Repository, orgName string) error {
 	client, err := c.installationClient(ctx, installationID)
 	if err != nil {
 		return err
 	}
-	owner, repo, err := splitRepository(value.Repository.FullName)
+	seed, err := Seed(orgName, repository.Name, repository.URL, value.TeamName)
 	if err != nil {
 		return err
 	}
-	seed, err := Seed(orgName, value.Repository.Name, value.Repository.URL, value.TeamName)
-	if err != nil {
-		return err
-	}
-	files, err := Workflows(value.Repository.DefaultBranch)
+	files, err := Workflows(repository.DefaultBranch)
 	if err != nil {
 		return err
 	}
 	files[".uigraph.yaml"] = seed
-	return c.createAtomicCommit(ctx, client, owner, repo, value.Repository.DefaultBranch, value.Branch, files)
+	return c.createAtomicCommit(ctx, client, repository.Owner, repository.Name, repository.DefaultBranch, value.Branch, files)
 }
 
-func (c *Client) OpenPullRequest(ctx context.Context, installationID int64, value Import) (string, error) {
+func (c *Client) OpenPullRequest(ctx context.Context, installationID int64, value Import, repository Repository) (string, error) {
 	client, err := c.installationClient(ctx, installationID)
 	if err != nil {
 		return "", err
 	}
-	owner, repo, err := splitRepository(value.Repository.FullName)
-	if err != nil {
-		return "", err
-	}
-	existing, err := c.findPullRequest(ctx, client, owner, repo, value.Branch, value.Repository.DefaultBranch)
+	owner, repo := repository.Owner, repository.Name
+	existing, err := c.findPullRequest(ctx, client, owner, repo, value.Branch, repository.DefaultBranch)
 	if err != nil {
 		return "", err
 	}
@@ -262,7 +291,7 @@ func (c *Client) OpenPullRequest(ctx context.Context, installationID int64, valu
 	}
 	payload := map[string]string{
 		"title": "UiGraph: adopt generated repository artifacts", "head": value.Branch,
-		"base": value.Repository.DefaultBranch,
+		"base": repository.DefaultBranch,
 		"body": "This repository is already onboarded to UiGraph. Merging keeps the generated artifacts and enables UiGraph checks on future pull requests.",
 	}
 	var created struct {
@@ -274,15 +303,12 @@ func (c *Client) OpenPullRequest(ctx context.Context, installationID int64, valu
 	return created.HTMLURL, nil
 }
 
-func (c *Client) MissingAIConfiguration(ctx context.Context, installationID int64, repository Repository, account string) ([]string, error) {
+func (c *Client) MissingAIConfiguration(ctx context.Context, installationID int64, repository Repository) ([]string, error) {
 	client, err := c.installationClient(ctx, installationID)
 	if err != nil {
 		return nil, err
 	}
-	owner, repo, err := splitRepository(repository.FullName)
-	if err != nil {
-		return nil, err
-	}
+	owner, repo, account := repository.Owner, repository.Name, repository.Owner
 	secrets, err := c.actionsNames(ctx, client, fmt.Sprintf("repos/%s/%s/actions/secrets?per_page=100", owner, repo), "secrets")
 	if err != nil {
 		return nil, err
@@ -348,10 +374,7 @@ func (c *Client) GetWorkflowRun(ctx context.Context, installationID int64, repos
 	if err != nil {
 		return WorkflowRun{}, err
 	}
-	owner, repo, err := splitRepository(repository.FullName)
-	if err != nil {
-		return WorkflowRun{}, err
-	}
+	owner, repo := repository.Owner, repository.Name
 	if runID != 0 {
 		var run WorkflowRun
 		if err := c.do(ctx, client, http.MethodGet, fmt.Sprintf("repos/%s/%s/actions/runs/%d", owner, repo, runID), nil, &run); err != nil {
@@ -386,10 +409,7 @@ func (c *Client) ListWorkflowRunJobs(ctx context.Context, installationID int64, 
 	if err != nil {
 		return nil, err
 	}
-	owner, repo, err := splitRepository(repository.FullName)
-	if err != nil {
-		return nil, err
-	}
+	owner, repo := repository.Owner, repository.Name
 	var response struct {
 		Jobs []*gh.WorkflowJob `json:"jobs"`
 	}
@@ -441,10 +461,7 @@ func (c *Client) PutImportCredentials(ctx context.Context, installationID int64,
 	if err != nil {
 		return err
 	}
-	owner, repo, err := splitRepository(repository.FullName)
-	if err != nil {
-		return err
-	}
+	owner, repo := repository.Owner, repository.Name
 	existingSecrets, err := c.actionsNames(ctx, client, fmt.Sprintf("repos/%s/%s/actions/secrets?per_page=100", owner, repo), "secrets")
 	if err != nil {
 		return err
@@ -657,14 +674,6 @@ func (c *Client) webRequest(ctx context.Context, method, path string, body, resu
 		return fmt.Errorf("GitHub request failed with %d: %s", response.StatusCode, strings.TrimSpace(string(data)))
 	}
 	return json.NewDecoder(response.Body).Decode(result)
-}
-
-func splitRepository(fullName string) (string, string, error) {
-	owner, repo, ok := strings.Cut(fullName, "/")
-	if !ok || owner == "" || repo == "" || strings.Contains(repo, "/") {
-		return "", "", fmt.Errorf("invalid GitHub repository name %q", fullName)
-	}
-	return owner, repo, nil
 }
 
 func rawBase64(value []byte) string {

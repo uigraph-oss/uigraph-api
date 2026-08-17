@@ -10,10 +10,12 @@ import (
 )
 
 type APIClient interface {
-	StartRun(ctx context.Context, installationID int64, value Import, orgName string) error
-	MissingAIConfiguration(ctx context.Context, installationID int64, repository Repository, account string) ([]string, error)
-	OpenPullRequest(ctx context.Context, installationID int64, value Import) (string, error)
+	StartRun(ctx context.Context, installationID int64, value Import, repository Repository, orgName string) error
+	MissingAIConfiguration(ctx context.Context, installationID int64, repository Repository) ([]string, error)
+	OpenPullRequest(ctx context.Context, installationID int64, value Import, repository Repository) (string, error)
 	PutImportCredentials(ctx context.Context, installationID int64, repository Repository, plaintext string) error
+	GetInstallationAccount(ctx context.Context, installationID int64) (Installation, error)
+	GetRepository(ctx context.Context, installationID int64, owner, repo string) (Repository, error)
 }
 
 type Worker struct {
@@ -57,6 +59,17 @@ func (w *Worker) runOne(ctx context.Context) error {
 	return err
 }
 
+func (w *Worker) resolveRepository(ctx context.Context, installationID int64, value Import) (Repository, error) {
+	account, err := w.client.GetInstallationAccount(ctx, installationID)
+	if err != nil {
+		return Repository{}, err
+	}
+	if account.AccountID != value.GitHubOwnerID {
+		return Repository{}, fmt.Errorf("repository %q is not owned by the connected GitHub account", value.GitHubRepo)
+	}
+	return w.client.GetRepository(ctx, installationID, account.AccountLogin, value.GitHubRepo)
+}
+
 func (w *Worker) process(ctx context.Context, job Job) error {
 	value, err := w.store.GetImport(ctx, job.OrgID, job.ImportID)
 	if err != nil {
@@ -66,15 +79,19 @@ func (w *Worker) process(ctx context.Context, job Job) error {
 	if err != nil {
 		return err
 	}
-	if installation == nil || installation.Status != "active" {
-		return fmt.Errorf("GitHub App installation is not active")
+	if installation == nil {
+		return fmt.Errorf("GitHub App is not connected")
+	}
+	repository, err := w.resolveRepository(ctx, installation.GitHubInstallationID, *value)
+	if err != nil {
+		return err
 	}
 	switch job.Kind {
 	case JobStart:
 		if err := w.store.SetImportStatus(ctx, job.OrgID, job.ImportID, StateCheckingAI, nil); err != nil {
 			return err
 		}
-		missing, err := w.client.MissingAIConfiguration(ctx, installation.GitHubInstallationID, value.Repository, installation.AccountLogin)
+		missing, err := w.client.MissingAIConfiguration(ctx, installation.GitHubInstallationID, repository)
 		if err != nil {
 			return err
 		}
@@ -85,19 +102,19 @@ func (w *Worker) process(ctx context.Context, job Job) error {
 		if err != nil {
 			return err
 		}
-		if err := w.client.PutImportCredentials(ctx, installation.GitHubInstallationID, value.Repository, plaintext); err != nil {
+		if err := w.client.PutImportCredentials(ctx, installation.GitHubInstallationID, repository, plaintext); err != nil {
 			return err
 		}
 		orgName, err := w.store.GetOrgName(ctx, job.OrgID)
 		if err != nil {
 			return err
 		}
-		if err := w.client.StartRun(ctx, installation.GitHubInstallationID, *value, orgName); err != nil {
+		if err := w.client.StartRun(ctx, installation.GitHubInstallationID, *value, repository, orgName); err != nil {
 			return err
 		}
 		return w.store.SetImportStatus(ctx, job.OrgID, job.ImportID, StateRunQueued, nil)
 	case JobOpenPR:
-		url, err := w.client.OpenPullRequest(ctx, installation.GitHubInstallationID, *value)
+		url, err := w.client.OpenPullRequest(ctx, installation.GitHubInstallationID, *value, repository)
 		if err != nil {
 			slog.WarnContext(ctx, "GitHub import pull request could not be opened", "import", value.ID, "err", err)
 			return nil

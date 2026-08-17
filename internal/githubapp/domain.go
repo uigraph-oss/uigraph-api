@@ -27,32 +27,25 @@ func (s State) Validate() error {
 }
 
 type Installation struct {
-	ID                   string     `json:"id"`
-	OrgID                string     `json:"-"`
-	GitHubInstallationID int64      `json:"installationId"`
-	AccountID            int64      `json:"accountId"`
-	AccountLogin         string     `json:"account"`
-	AccountType          string     `json:"accountType"`
-	TargetType           string     `json:"targetType"`
-	Status               string     `json:"status"`
-	SuspendedAt          *time.Time `json:"suspendedAt,omitempty"`
-	CreatedAt            time.Time  `json:"createdAt"`
-	UpdatedAt            time.Time  `json:"updatedAt"`
+	OrgID                string    `json:"-"`
+	GitHubInstallationID int64     `json:"installationId"`
+	CreatedAt            time.Time `json:"createdAt"`
+	AccountID            int64     `json:"accountId,omitempty"`
+	AccountLogin         string    `json:"account,omitempty"`
+	AccountType          string    `json:"accountType,omitempty"`
+	Suspended            bool      `json:"suspended"`
 }
 
 type Repository struct {
-	ID             string    `json:"id"`
-	OrgID          string    `json:"-"`
-	InstallationID string    `json:"-"`
-	GitHubID       int64     `json:"githubId"`
-	Name           string    `json:"name"`
-	FullName       string    `json:"fullName"`
-	URL            string    `json:"url"`
-	DefaultBranch  string    `json:"defaultBranch"`
-	Private        bool      `json:"private"`
-	Archived       bool      `json:"archived"`
-	Selected       bool      `json:"selected"`
-	UpdatedAt      time.Time `json:"updatedAt"`
+	GitHubID      int64  `json:"githubId"`
+	OwnerID       int64  `json:"ownerId"`
+	Owner         string `json:"owner"`
+	Name          string `json:"name"`
+	FullName      string `json:"fullName"`
+	URL           string `json:"url"`
+	DefaultBranch string `json:"defaultBranch"`
+	Private       bool   `json:"private"`
+	Archived      bool   `json:"archived"`
 }
 
 type Step struct {
@@ -69,8 +62,8 @@ type Step struct {
 type Import struct {
 	ID                     string     `json:"id"`
 	OrgID                  string     `json:"-"`
-	RepositoryID           string     `json:"repositoryId"`
-	Repository             Repository `json:"repository"`
+	GitHubOwnerID          int64      `json:"githubOwnerId"`
+	GitHubRepo             string     `json:"githubRepo"`
 	TeamID                 string     `json:"teamId"`
 	TeamName               string     `json:"team"`
 	Status                 State      `json:"status"`
