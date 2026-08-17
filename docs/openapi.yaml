@@ -1411,6 +1411,10 @@ paths:
         name: diagramID
         required: true
         type: string
+      - description: inline the ReactFlow JSON content in the response
+        in: query
+        name: includeContent
+        type: boolean
       responses:
         "200":
           description: OK
