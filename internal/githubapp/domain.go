@@ -15,24 +15,15 @@ const (
 	StateRunRunning State = "run_running"
 	StateCompleted  State = "completed"
 	StateFailed     State = "failed"
-	StateCancelled  State = "cancelled"
 )
 
-var validStates = map[State]bool{
-	StateSelected: true, StateCheckingAI: true, StateWaitingAI: true,
-	StateRunQueued: true, StateRunRunning: true,
-	StateCompleted: true, StateFailed: true, StateCancelled: true,
-}
-
 func (s State) Validate() error {
-	if !validStates[s] {
+	switch s {
+	case StateSelected, StateCheckingAI, StateWaitingAI, StateRunQueued, StateRunRunning, StateCompleted, StateFailed:
+		return nil
+	default:
 		return fmt.Errorf("invalid repository import state %q", s)
 	}
-	return nil
-}
-
-func (s State) Terminal() bool {
-	return s == StateCompleted || s == StateFailed || s == StateCancelled
 }
 
 type Installation struct {
@@ -64,9 +55,6 @@ type Repository struct {
 	UpdatedAt      time.Time `json:"updatedAt"`
 }
 
-// Step mirrors one GitHub Actions job step, as reported by the workflow_job
-// webhook and the run jobs API. Order, timing, and conclusions come straight
-// from GitHub; UiGraph never synthesises them.
 type Step struct {
 	JobID       int64      `json:"jobId"`
 	JobName     string     `json:"jobName"`

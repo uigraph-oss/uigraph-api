@@ -107,25 +107,21 @@ func (d *DB) UpsertInstallation(ctx context.Context, installation githubapp.Inst
 	return tx.Commit()
 }
 
-func scanInstallation(row interface{ Scan(...any) error }) (*githubapp.Installation, error) {
+func (d *DB) GetInstallation(ctx context.Context, orgID string) (*githubapp.Installation, error) {
 	var installation githubapp.Installation
-	err := row.Scan(&installation.ID, &installation.OrgID, &installation.GitHubInstallationID, &installation.AccountID,
+	err := d.db.QueryRowContext(ctx, `
+		SELECT id, org_id, github_installation_id, account_id, account_login, account_type, target_type,
+		status, suspended_at, created_at, updated_at FROM github_installations WHERE org_id=$1`, orgID).Scan(
+		&installation.ID, &installation.OrgID, &installation.GitHubInstallationID, &installation.AccountID,
 		&installation.AccountLogin, &installation.AccountType, &installation.TargetType, &installation.Status,
 		&installation.SuspendedAt, &installation.CreatedAt, &installation.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
-	return &installation, err
-}
-
-func (d *DB) GetInstallation(ctx context.Context, orgID string) (*githubapp.Installation, error) {
-	installation, err := scanInstallation(d.db.QueryRowContext(ctx, `
-		SELECT id, org_id, github_installation_id, account_id, account_login, account_type, target_type,
-		status, suspended_at, created_at, updated_at FROM github_installations WHERE org_id=$1`, orgID))
 	if err != nil {
 		return nil, fmt.Errorf("postgres: GetInstallation: %w", err)
 	}
-	return installation, nil
+	return &installation, nil
 }
 
 // DisconnectInstallation marks the connection as disconnected instead of
@@ -144,14 +140,6 @@ func (d *DB) DisconnectInstallation(ctx context.Context, orgID string) error {
 	return nil
 }
 
-func scanRepository(row interface{ Scan(...any) error }) (githubapp.Repository, error) {
-	var repository githubapp.Repository
-	err := row.Scan(&repository.ID, &repository.OrgID, &repository.InstallationID, &repository.GitHubID,
-		&repository.Name, &repository.FullName, &repository.URL, &repository.DefaultBranch, &repository.Private,
-		&repository.Archived, &repository.Selected, &repository.UpdatedAt)
-	return repository, err
-}
-
 func (d *DB) ListRepositories(ctx context.Context, orgID string) ([]githubapp.Repository, error) {
 	rows, err := d.db.QueryContext(ctx, `
 		SELECT id, org_id, installation_id, github_id, name, full_name, html_url, default_branch, private, archived, selected, updated_at
@@ -162,7 +150,10 @@ func (d *DB) ListRepositories(ctx context.Context, orgID string) ([]githubapp.Re
 	defer rows.Close()
 	var repositories []githubapp.Repository
 	for rows.Next() {
-		repository, err := scanRepository(rows)
+		var repository githubapp.Repository
+		err := rows.Scan(&repository.ID, &repository.OrgID, &repository.InstallationID, &repository.GitHubID,
+			&repository.Name, &repository.FullName, &repository.URL, &repository.DefaultBranch, &repository.Private,
+			&repository.Archived, &repository.Selected, &repository.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -171,8 +162,8 @@ func (d *DB) ListRepositories(ctx context.Context, orgID string) ([]githubapp.Re
 	return repositories, rows.Err()
 }
 
-func (d *DB) CreateImport(ctx context.Context, orgID, teamID, createdBy, repositoryID string) (*githubapp.Import, error) {
-	tx, err := d.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+func (d *DB) CreateImport(ctx context.Context, orgID, teamID, repositoryID string) (*githubapp.Import, error) {
+	tx, err := d.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -207,13 +198,13 @@ func (d *DB) CreateImport(ctx context.Context, orgID, teamID, createdBy, reposit
 	return d.GetImport(ctx, orgID, importID)
 }
 
-const importSelect = `SELECT o.id, o.org_id, o.repository_id, o.team_id, o.team_name, o.status,
-	o.steps, o.branch, COALESCE(o.run_id,0), COALESCE(o.run_url,''), COALESCE(o.pr_url,''),
-	o.missing_ai_configuration, COALESCE(o.error,''), COALESCE(o.service_id::text,''),
-	o.created_at, o.updated_at, o.run_started_at, o.run_completed_at, o.completed_at,
+const importSelect = `SELECT imp.id, imp.org_id, imp.repository_id, imp.team_id, imp.team_name, imp.status,
+	imp.steps, imp.branch, COALESCE(imp.run_id,0), COALESCE(imp.run_url,''), COALESCE(imp.pr_url,''),
+	imp.missing_ai_configuration, COALESCE(imp.error,''), COALESCE(imp.service_id::text,''),
+	imp.created_at, imp.updated_at, imp.run_started_at, imp.run_completed_at, imp.completed_at,
 	r.id, r.org_id, r.installation_id, r.github_id, r.name, r.full_name, r.html_url, r.default_branch,
 	r.private, r.archived, r.selected, r.updated_at
-	FROM repository_imports o JOIN github_repositories r ON r.org_id=o.org_id AND r.id=o.repository_id`
+	FROM repository_imports imp JOIN github_repositories r ON r.org_id=imp.org_id AND r.id=imp.repository_id`
 
 func scanImport(row interface{ Scan(...any) error }) (*githubapp.Import, error) {
 	var value githubapp.Import
@@ -242,7 +233,7 @@ func scanImport(row interface{ Scan(...any) error }) (*githubapp.Import, error) 
 }
 
 func (d *DB) GetImport(ctx context.Context, orgID, importID string) (*githubapp.Import, error) {
-	value, err := scanImport(d.db.QueryRowContext(ctx, importSelect+` WHERE o.org_id=$1 AND o.id=$2`, orgID, importID))
+	value, err := scanImport(d.db.QueryRowContext(ctx, importSelect+` WHERE imp.org_id=$1 AND imp.id=$2`, orgID, importID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
@@ -253,7 +244,7 @@ func (d *DB) GetImport(ctx context.Context, orgID, importID string) (*githubapp.
 }
 
 func (d *DB) GetLatestImport(ctx context.Context, orgID string) (*githubapp.Import, error) {
-	value, err := scanImport(d.db.QueryRowContext(ctx, importSelect+` WHERE o.org_id=$1 ORDER BY o.created_at DESC LIMIT 1`, orgID))
+	value, err := scanImport(d.db.QueryRowContext(ctx, importSelect+` WHERE imp.org_id=$1 ORDER BY imp.created_at DESC LIMIT 1`, orgID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -264,7 +255,7 @@ func (d *DB) GetLatestImport(ctx context.Context, orgID string) (*githubapp.Impo
 }
 
 func (d *DB) ListImports(ctx context.Context, orgID string) ([]githubapp.Import, error) {
-	rows, err := d.db.QueryContext(ctx, importSelect+` WHERE o.org_id=$1 ORDER BY o.created_at DESC`, orgID)
+	rows, err := d.db.QueryContext(ctx, importSelect+` WHERE imp.org_id=$1 ORDER BY imp.created_at DESC`, orgID)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: ListImports: %w", err)
 	}
@@ -393,11 +384,8 @@ func (d *DB) RecordWebhook(ctx context.Context, deliveryID, event, action string
 	return count == 1, err
 }
 
-func (d *DB) ApplyWorkflowRunEvent(ctx context.Context, installationID, repositoryID, runID int64, event, status, conclusion, headBranch, htmlURL, path string) error {
-	if event != "push" {
-		return nil
-	}
-	if path != githubapp.ArtifactWorkflowPath {
+func (d *DB) ApplyWorkflowRunEvent(ctx context.Context, installationID, repositoryID int64, run githubapp.WorkflowRun) error {
+	if run.Event != "push" || run.Path != githubapp.ArtifactWorkflowPath {
 		return nil
 	}
 	tx, err := d.db.BeginTx(ctx, nil)
@@ -405,38 +393,42 @@ func (d *DB) ApplyWorkflowRunEvent(ctx context.Context, installationID, reposito
 		return err
 	}
 	defer tx.Rollback()
-	var orgID, importID, repositoryURL string
+	var orgID, importID string
 	var currentRunID int64
-	err = tx.QueryRowContext(ctx, activeImportSelect+` FOR UPDATE OF o`, installationID, repositoryID, headBranch).Scan(
-		&orgID, &importID, &currentRunID, &repositoryURL)
+	err = tx.QueryRowContext(ctx, activeImportSelect+` FOR UPDATE OF imp`, installationID, repositoryID, run.HeadBranch).Scan(
+		&orgID, &importID, &currentRunID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	if runID < currentRunID {
+	if run.ID < currentRunID {
 		return nil
 	}
-	if status != "completed" {
-		_, err = tx.ExecContext(ctx, `UPDATE repository_imports SET status=$3,run_id=$4,run_url=$5,run_started_at=COALESCE(run_started_at,NOW()),updated_at=NOW() WHERE org_id=$1 AND id=$2`, orgID, importID, githubapp.StateRunRunning, runID, htmlURL)
+	if run.Status != "completed" {
+		_, err = tx.ExecContext(ctx, `UPDATE repository_imports SET status=$3,run_id=$4,run_url=$5,run_started_at=COALESCE(run_started_at,NOW()),updated_at=NOW() WHERE org_id=$1 AND id=$2`, orgID, importID, githubapp.StateRunRunning, run.ID, run.HTMLURL)
 		if err != nil {
 			return err
 		}
 		return tx.Commit()
 	}
-	if conclusion != "success" {
+	if run.Conclusion != "success" {
 		message := "UiGraph import run failed; verify the repository AI settings and review the run logs"
-		_, err = tx.ExecContext(ctx, `UPDATE repository_imports SET status=$3,error=$4,run_id=$5,run_url=$6,run_completed_at=NOW(),updated_at=NOW() WHERE org_id=$1 AND id=$2`, orgID, importID, githubapp.StateFailed, message, runID, htmlURL)
+		_, err = tx.ExecContext(ctx, `UPDATE repository_imports SET status=$3,error=$4,run_id=$5,run_url=$6,run_completed_at=NOW(),updated_at=NOW() WHERE org_id=$1 AND id=$2`, orgID, importID, githubapp.StateFailed, message, run.ID, run.HTMLURL)
 		if err != nil {
 			return err
 		}
 		return tx.Commit()
+	}
+	var repositoryURL string
+	if err = tx.QueryRowContext(ctx, `SELECT html_url FROM github_repositories WHERE org_id=$1 AND github_id=$2`, orgID, repositoryID).Scan(&repositoryURL); err != nil {
+		return err
 	}
 	var serviceID string
 	err = tx.QueryRowContext(ctx, `SELECT id FROM services WHERE org_id=$1 AND deleted_at IS NULL AND REGEXP_REPLACE(LOWER(TRIM(TRAILING '/' FROM git_repo_url)), '\.git$', '')=REGEXP_REPLACE(LOWER(TRIM(TRAILING '/' FROM $2)), '\.git$', '') ORDER BY created_at LIMIT 1`, orgID, repositoryURL).Scan(&serviceID)
 	if errors.Is(err, sql.ErrNoRows) {
-		_, err = tx.ExecContext(ctx, `UPDATE repository_imports SET status=$3,error='Sync succeeded but no service matched the canonical repository URL',run_id=$4,run_url=$5,run_completed_at=NOW(),updated_at=NOW() WHERE org_id=$1 AND id=$2`, orgID, importID, githubapp.StateFailed, runID, htmlURL)
+		_, err = tx.ExecContext(ctx, `UPDATE repository_imports SET status=$3,error='Sync succeeded but no service matched the canonical repository URL',run_id=$4,run_url=$5,run_completed_at=NOW(),updated_at=NOW() WHERE org_id=$1 AND id=$2`, orgID, importID, githubapp.StateFailed, run.ID, run.HTMLURL)
 		if err != nil {
 			return err
 		}
@@ -445,7 +437,7 @@ func (d *DB) ApplyWorkflowRunEvent(ctx context.Context, installationID, reposito
 	if err != nil {
 		return err
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE repository_imports SET status=$3,service_id=$4,run_id=$5,run_url=$6,run_completed_at=NOW(),completed_at=NOW(),updated_at=NOW() WHERE org_id=$1 AND id=$2`, orgID, importID, githubapp.StateCompleted, serviceID, runID, htmlURL); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE repository_imports SET status=$3,service_id=$4,run_id=$5,run_url=$6,run_completed_at=NOW(),completed_at=NOW(),updated_at=NOW() WHERE org_id=$1 AND id=$2`, orgID, importID, githubapp.StateCompleted, serviceID, run.ID, run.HTMLURL); err != nil {
 		return err
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO repository_import_jobs(org_id,import_id,kind) VALUES($1,$2,$3) ON CONFLICT(import_id,kind) WHERE completed_at IS NULL DO NOTHING`, orgID, importID, githubapp.JobOpenPR); err != nil {
@@ -459,11 +451,11 @@ func (d *DB) ApplyWorkflowRunEvent(ctx context.Context, installationID, reposito
 // imports match nothing, so runs the repository triggers afterwards — including
 // every later uigraph-sync run — are ignored outright.
 const activeImportSelect = `
-	SELECT o.org_id,o.id,COALESCE(o.run_id,0),r.html_url FROM repository_imports o
-	JOIN github_repositories r ON r.id=o.repository_id AND r.org_id=o.org_id
+	SELECT imp.org_id,imp.id,COALESCE(imp.run_id,0) FROM repository_imports imp
+	JOIN github_repositories r ON r.id=imp.repository_id AND r.org_id=imp.org_id
 	JOIN github_installations i ON i.id=r.installation_id
-	WHERE i.github_installation_id=$1 AND r.github_id=$2 AND o.branch=$3
-	AND o.status NOT IN ('completed','failed','cancelled')`
+	WHERE i.github_installation_id=$1 AND r.github_id=$2 AND imp.branch=$3
+	AND imp.status NOT IN ('completed','failed')`
 
 func (d *DB) ApplyWorkflowJobEvent(ctx context.Context, installationID, repositoryID, runID int64, headBranch string, steps []githubapp.Step) error {
 	if len(steps) == 0 {
@@ -474,10 +466,10 @@ func (d *DB) ApplyWorkflowJobEvent(ctx context.Context, installationID, reposito
 		return err
 	}
 	defer tx.Rollback()
-	var orgID, importID, repositoryURL string
+	var orgID, importID string
 	var currentRunID int64
-	err = tx.QueryRowContext(ctx, activeImportSelect+` FOR UPDATE OF o`, installationID, repositoryID, headBranch).Scan(
-		&orgID, &importID, &currentRunID, &repositoryURL)
+	err = tx.QueryRowContext(ctx, activeImportSelect+` FOR UPDATE OF imp`, installationID, repositoryID, headBranch).Scan(
+		&orgID, &importID, &currentRunID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
@@ -495,11 +487,13 @@ func (d *DB) ApplyWorkflowJobEvent(ctx context.Context, installationID, reposito
 	if err = json.Unmarshal(existing, &current); err != nil {
 		return fmt.Errorf("postgres: decode import steps: %w", err)
 	}
-	// A run has several jobs and each webhook carries one of them, so replace
-	// only the steps of the job that reported and keep the rest.
+	incoming := make(map[int64]bool, len(steps))
+	for _, step := range steps {
+		incoming[step.JobID] = true
+	}
 	merged := make([]githubapp.Step, 0, len(current)+len(steps))
 	for _, step := range current {
-		if step.JobID == steps[0].JobID {
+		if incoming[step.JobID] {
 			continue
 		}
 		merged = append(merged, step)
@@ -524,7 +518,7 @@ func (d *DB) ApplyWorkflowJobEvent(ctx context.Context, installationID, reposito
 	return tx.Commit()
 }
 
-func (d *DB) CreateOnboardingToken(ctx context.Context, orgID string, expiresAt time.Time) (string, error) {
+func (d *DB) CreateImportToken(ctx context.Context, orgID string, expiresAt time.Time) (string, error) {
 	tx, err := d.db.BeginTx(ctx, nil)
 	if err != nil {
 		return "", err

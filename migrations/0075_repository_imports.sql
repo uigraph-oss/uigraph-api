@@ -1,7 +1,5 @@
 DELETE FROM repository_onboarding_jobs;
 DELETE FROM repository_onboardings;
-DELETE FROM repository_onboarding_batches;
-DELETE FROM github_repositories;
 DELETE FROM github_installations;
 
 DROP TABLE repository_onboarding_batches CASCADE;

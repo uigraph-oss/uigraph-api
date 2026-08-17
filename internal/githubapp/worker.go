@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,7 +13,7 @@ type APIClient interface {
 	StartRun(ctx context.Context, installationID int64, value Import, orgName string) error
 	MissingAIConfiguration(ctx context.Context, installationID int64, repository Repository, account string) ([]string, error)
 	OpenPullRequest(ctx context.Context, installationID int64, value Import) (string, error)
-	PutOnboardingCredentials(ctx context.Context, installationID int64, repository Repository, plaintext string) error
+	PutImportCredentials(ctx context.Context, installationID int64, repository Repository, plaintext string) error
 }
 
 type Worker struct {
@@ -32,7 +31,7 @@ func (w *Worker) Run(ctx context.Context) {
 	defer ticker.Stop()
 	for {
 		if err := w.runOne(ctx); err != nil {
-			slog.ErrorContext(ctx, "GitHub onboarding job failed", "err", err)
+			slog.ErrorContext(ctx, "GitHub import job failed", "err", err)
 		}
 		select {
 		case <-ctx.Done():
@@ -51,7 +50,7 @@ func (w *Worker) runOne(ctx context.Context) error {
 	if err == nil {
 		return w.store.CompleteJob(ctx, job.ID, w.owner)
 	}
-	delay := time.Duration(math.Min(math.Pow(2, float64(job.Attempts)), 300)) * time.Second
+	delay := min(time.Duration(1<<job.Attempts), 300) * time.Second
 	if retryErr := w.store.RetryJob(ctx, *job, w.owner, time.Now().Add(delay), err.Error()); retryErr != nil {
 		return fmt.Errorf("process: %v; persist retry: %w", err, retryErr)
 	}
@@ -82,11 +81,11 @@ func (w *Worker) process(ctx context.Context, job Job) error {
 		if len(missing) != 0 {
 			return w.store.SetImportStatus(ctx, job.OrgID, job.ImportID, StateWaitingAI, missing)
 		}
-		plaintext, err := w.store.CreateOnboardingToken(ctx, job.OrgID, time.Now().AddDate(10, 0, 0))
+		plaintext, err := w.store.CreateImportToken(ctx, job.OrgID, time.Now().AddDate(10, 0, 0))
 		if err != nil {
 			return err
 		}
-		if err := w.client.PutOnboardingCredentials(ctx, installation.GitHubInstallationID, value.Repository, plaintext); err != nil {
+		if err := w.client.PutImportCredentials(ctx, installation.GitHubInstallationID, value.Repository, plaintext); err != nil {
 			return err
 		}
 		orgName, err := w.store.GetOrgName(ctx, job.OrgID)

@@ -12,8 +12,8 @@ const (
 	SyncWorkflowPath     = ".github/workflows/uigraph-sync.yml"
 )
 
-func Branch(onboardingID string) string {
-	return "uigraph/onboarding/" + onboardingID
+func Branch(importID string) string {
+	return "uigraph/onboarding/" + importID
 }
 
 func Seed(orgName, repoName, repoURL, teamName string) ([]byte, error) {

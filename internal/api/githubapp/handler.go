@@ -263,12 +263,7 @@ func (h *Handler) CreateImport(w http.ResponseWriter, r *http.Request) {
 		httputil.BadRequest(w, "teamId and repositoryId are required")
 		return
 	}
-	principal, ok := middleware.PrincipalFromCtx(r.Context())
-	if !ok {
-		httputil.Forbidden(w)
-		return
-	}
-	value, err := h.store.CreateImport(r.Context(), r.PathValue("orgID"), request.TeamID, principal.UserID, request.RepositoryID)
+	value, err := h.store.CreateImport(r.Context(), r.PathValue("orgID"), request.TeamID, request.RepositoryID)
 	if err != nil {
 		httpError(w, r, err)
 		return
@@ -346,10 +341,7 @@ func (h *Handler) reconciled(ctx context.Context, value *domain.Import) *domain.
 // only ever touches an import that is still running, so once an import is
 // terminal UiGraph stops asking GitHub about that repository entirely.
 func (h *Handler) reconcileImport(ctx context.Context, value *domain.Import) (bool, error) {
-	if h.client == nil || value.Status.Terminal() {
-		return false, nil
-	}
-	if value.Status != domain.StateRunQueued && value.Status != domain.StateRunRunning {
+	if h.client == nil || (value.Status != domain.StateRunQueued && value.Status != domain.StateRunRunning) {
 		return false, nil
 	}
 	installation, err := h.store.GetInstallation(ctx, value.OrgID)
@@ -372,11 +364,7 @@ func (h *Handler) reconcileImport(ctx context.Context, value *domain.Import) (bo
 			return false, err
 		}
 	}
-	err = h.store.ApplyWorkflowRunEvent(ctx, installation.GitHubInstallationID, value.Repository.GitHubID, run.ID, run.Event, run.Status, run.Conclusion, run.HeadBranch, run.HTMLURL, run.Path)
-	if err != nil {
-		return true, err
-	}
-	return true, nil
+	return true, h.store.ApplyWorkflowRunEvent(ctx, installation.GitHubInstallationID, value.Repository.GitHubID, run)
 }
 
 // @Summary Recheck repository AI configuration
@@ -435,17 +423,22 @@ func (h *Handler) Webhook(w http.ResponseWriter, r *http.Request) {
 		httputil.BadRequest(w, "GitHub delivery and event headers are required")
 		return
 	}
-	var envelope struct {
+	var payload struct {
 		Action       string `json:"action"`
 		Installation struct {
 			ID int64 `json:"id"`
 		} `json:"installation"`
+		Repository struct {
+			ID int64 `json:"id"`
+		} `json:"repository"`
+		WorkflowRun domain.WorkflowRun `json:"workflow_run"`
+		WorkflowJob *gh.WorkflowJob    `json:"workflow_job"`
 	}
-	if err := json.Unmarshal(body, &envelope); err != nil {
+	if err := json.Unmarshal(body, &payload); err != nil {
 		httputil.BadRequest(w, "invalid webhook JSON")
 		return
 	}
-	created, err := h.store.RecordWebhook(r.Context(), delivery, event, envelope.Action, envelope.Installation.ID)
+	created, err := h.store.RecordWebhook(r.Context(), delivery, event, payload.Action, payload.Installation.ID)
 	if err != nil {
 		httpError(w, r, err)
 		return
@@ -454,37 +447,15 @@ func (h *Handler) Webhook(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusAccepted)
 		return
 	}
-	var payload struct {
-		Installation struct {
-			ID int64 `json:"id"`
-		} `json:"installation"`
-		Repository struct {
-			ID int64 `json:"id"`
-		} `json:"repository"`
-		WorkflowRun struct {
-			ID         int64  `json:"id"`
-			Event      string `json:"event"`
-			Status     string `json:"status"`
-			Conclusion string `json:"conclusion"`
-			HeadBranch string `json:"head_branch"`
-			HTMLURL    string `json:"html_url"`
-			Path       string `json:"path"`
-		} `json:"workflow_run"`
-		WorkflowJob *gh.WorkflowJob `json:"workflow_job"`
-	}
 	switch event {
 	case "workflow_run":
-		if err := json.Unmarshal(body, &payload); err != nil {
-			httputil.BadRequest(w, "invalid workflow_run payload")
-			return
-		}
-		err = h.store.ApplyWorkflowRunEvent(r.Context(), payload.Installation.ID, payload.Repository.ID, payload.WorkflowRun.ID, payload.WorkflowRun.Event, payload.WorkflowRun.Status, payload.WorkflowRun.Conclusion, payload.WorkflowRun.HeadBranch, payload.WorkflowRun.HTMLURL, payload.WorkflowRun.Path)
+		err = h.store.ApplyWorkflowRunEvent(r.Context(), payload.Installation.ID, payload.Repository.ID, payload.WorkflowRun)
 		if err != nil {
 			httpError(w, r, err)
 			return
 		}
 	case "workflow_job":
-		if err := json.Unmarshal(body, &payload); err != nil || payload.WorkflowJob == nil {
+		if payload.WorkflowJob == nil {
 			httputil.BadRequest(w, "invalid workflow_job payload")
 			return
 		}

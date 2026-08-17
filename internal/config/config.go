@@ -79,8 +79,6 @@ type Config struct {
 	FigmaClientID     string
 	FigmaClientSecret string
 
-	// GitHubAppConfigured is derived, not read from the environment: the GitHub
-	// App is enabled exactly when its credentials are all present.
 	GitHubAppConfigured       bool
 	GitHubAppID               int64
 	GitHubAppSlug             string
@@ -169,23 +167,13 @@ func Load() (*Config, error) {
 	if c.Enterprise && c.EnterpriseServiceURL == "" {
 		return nil, fmt.Errorf("config: UIGRAPH_ENTERPRISE_SERVICE_URL is required when UIGRAPH_ENTERPRISE is true")
 	}
-	githubValues := []bool{
-		c.GitHubAppID != 0,
-		c.GitHubAppSlug != "",
-		c.GitHubAppClientID != "",
-		c.GitHubAppClientSecret != "",
-		c.GitHubAppPrivateKeyBase64 != "",
-	}
-	githubConfigured := c.GitHubWebhookSecret != ""
-	githubComplete := true
-	for _, set := range githubValues {
-		githubConfigured = githubConfigured || set
-		githubComplete = githubComplete && set
-	}
-	if githubConfigured && !githubComplete {
+	c.GitHubAppConfigured = c.GitHubAppID != 0 && c.GitHubAppSlug != "" && c.GitHubAppClientID != "" &&
+		c.GitHubAppClientSecret != "" && c.GitHubAppPrivateKeyBase64 != ""
+	githubPartial := c.GitHubAppID != 0 || c.GitHubAppSlug != "" || c.GitHubAppClientID != "" ||
+		c.GitHubAppClientSecret != "" || c.GitHubAppPrivateKeyBase64 != "" || c.GitHubWebhookSecret != ""
+	if !c.GitHubAppConfigured && githubPartial {
 		return nil, fmt.Errorf("config: partial GitHub App configuration; GITHUB_APP_ID, GITHUB_APP_SLUG, GITHUB_APP_CLIENT_ID, GITHUB_APP_CLIENT_SECRET, and GITHUB_APP_PRIVATE_KEY_BASE64 are all required")
 	}
-	c.GitHubAppConfigured = githubComplete
 
 	return c, nil
 }

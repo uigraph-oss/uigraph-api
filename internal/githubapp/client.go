@@ -269,7 +269,7 @@ func (c *Client) OpenPullRequest(ctx context.Context, installationID int64, valu
 		HTMLURL string `json:"html_url"`
 	}
 	if err := c.do(ctx, client, http.MethodPost, fmt.Sprintf("repos/%s/%s/pulls", owner, repo), payload, &created); err != nil {
-		return "", fmt.Errorf("open onboarding pull request: %w", err)
+		return "", fmt.Errorf("open import pull request: %w", err)
 	}
 	return created.HTMLURL, nil
 }
@@ -299,18 +299,11 @@ func (c *Client) MissingAIConfiguration(ctx context.Context, installationID int6
 	if err != nil {
 		return nil, err
 	}
-	secret := map[string]bool{}
-	for _, source := range []map[string]bool{secrets, orgSecrets} {
-		for name := range source {
-			secret[name] = true
-		}
-	}
-	configured := map[string]bool{}
-	for _, source := range []map[string]bool{secrets, orgSecrets, variables, orgVariables} {
-		for name := range source {
-			configured[name] = true
-		}
-	}
+	secret := maps.Clone(secrets)
+	maps.Copy(secret, orgSecrets)
+	configured := maps.Clone(secret)
+	maps.Copy(configured, variables)
+	maps.Copy(configured, orgVariables)
 	missing := make([]string, 0, 4)
 	if !secret["AI_PROVIDER_API_KEY"] {
 		missing = append(missing, "AI_PROVIDER_API_KEY")
@@ -375,19 +368,16 @@ func (c *Client) GetWorkflowRun(ctx context.Context, installationID int64, repos
 	}
 	latest := WorkflowRun{}
 	for _, run := range response.WorkflowRuns {
-		if run.HeadBranch != branch || run.Event != "push" || run.Path != ArtifactWorkflowPath {
+		if run.Path != ArtifactWorkflowPath {
 			continue
 		}
-		if latest.ID == 0 || run.ID > latest.ID {
+		if run.ID > latest.ID {
 			latest = run
 		}
 	}
 	return latest, nil
 }
 
-// ListWorkflowRunJobs returns every step of every job in a run, flattened in
-// job then step order. Steps carry their job so a workflow_job webhook covering
-// one job can be merged without discarding the others.
 func (c *Client) ListWorkflowRunJobs(ctx context.Context, installationID int64, repository Repository, runID int64) ([]Step, error) {
 	if runID == 0 {
 		return nil, nil
@@ -439,7 +429,7 @@ const (
 	APIVariable     = "UIGRAPH_API_URL"
 )
 
-func (c *Client) PutOnboardingCredentials(ctx context.Context, installationID int64, repository Repository, plaintext string) error {
+func (c *Client) PutImportCredentials(ctx context.Context, installationID int64, repository Repository, plaintext string) error {
 	if c.config.GatewayURL == "" {
 		return fmt.Errorf("githubapp: UIGRAPH_GATEWAY_URL is not configured on this UiGraph instance")
 	}
@@ -614,7 +604,7 @@ func (c *Client) installationClient(ctx context.Context, installationID int64) (
 
 func (c *Client) githubClient(token string) (*gh.Client, error) {
 	client := gh.NewClient(c.http).WithAuthToken(token)
-	base, err := url.Parse(ensureTrailingSlash(c.config.APIURL))
+	base, err := url.Parse(strings.TrimRight(c.config.APIURL, "/") + "/")
 	if err != nil {
 		return nil, err
 	}
@@ -674,13 +664,6 @@ func splitRepository(fullName string) (string, string, error) {
 		return "", "", fmt.Errorf("invalid GitHub repository name %q", fullName)
 	}
 	return owner, repo, nil
-}
-
-func ensureTrailingSlash(value string) string {
-	if strings.HasSuffix(value, "/") {
-		return value
-	}
-	return value + "/"
 }
 
 func rawBase64(value []byte) string {

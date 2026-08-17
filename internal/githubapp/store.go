@@ -14,7 +14,7 @@ type Store interface {
 	GetInstallation(ctx context.Context, orgID string) (*Installation, error)
 	DisconnectInstallation(ctx context.Context, orgID string) error
 	ListRepositories(ctx context.Context, orgID string) ([]Repository, error)
-	CreateImport(ctx context.Context, orgID, teamID, createdBy, repositoryID string) (*Import, error)
+	CreateImport(ctx context.Context, orgID, teamID, repositoryID string) (*Import, error)
 	GetImport(ctx context.Context, orgID, importID string) (*Import, error)
 	GetLatestImport(ctx context.Context, orgID string) (*Import, error)
 	ListImports(ctx context.Context, orgID string) ([]Import, error)
@@ -25,7 +25,7 @@ type Store interface {
 	CompleteJob(ctx context.Context, jobID, owner string) error
 	RetryJob(ctx context.Context, job Job, owner string, next time.Time, message string) error
 	RecordWebhook(ctx context.Context, deliveryID, event, action string, installationID int64) (bool, error)
-	ApplyWorkflowRunEvent(ctx context.Context, installationID, repositoryID, runID int64, event, status, conclusion, headBranch, htmlURL, path string) error
+	ApplyWorkflowRunEvent(ctx context.Context, installationID, repositoryID int64, run WorkflowRun) error
 	ApplyWorkflowJobEvent(ctx context.Context, installationID, repositoryID, runID int64, headBranch string, steps []Step) error
-	CreateOnboardingToken(ctx context.Context, orgID string, expiresAt time.Time) (plaintext string, err error)
+	CreateImportToken(ctx context.Context, orgID string, expiresAt time.Time) (plaintext string, err error)
 }
