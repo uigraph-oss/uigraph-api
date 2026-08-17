@@ -26,9 +26,13 @@ var validStates = map[State]bool{
 
 func (s State) Validate() error {
 	if !validStates[s] {
-		return fmt.Errorf("invalid repository onboarding state %q", s)
+		return fmt.Errorf("invalid repository import state %q", s)
 	}
 	return nil
+}
+
+func (s State) Terminal() bool {
+	return s == StateCompleted || s == StateFailed || s == StateCancelled
 }
 
 type Installation struct {
@@ -60,26 +64,29 @@ type Repository struct {
 	UpdatedAt      time.Time `json:"updatedAt"`
 }
 
-type Batch struct {
-	ID        string       `json:"id"`
-	OrgID     string       `json:"-"`
-	TeamID    string       `json:"teamId"`
-	TeamName  string       `json:"team"`
-	Status    string       `json:"status"`
-	Items     []Onboarding `json:"repositories"`
-	CreatedAt time.Time    `json:"createdAt"`
-	UpdatedAt time.Time    `json:"updatedAt"`
+// Step mirrors one GitHub Actions job step, as reported by the workflow_job
+// webhook and the run jobs API. Order, timing, and conclusions come straight
+// from GitHub; UiGraph never synthesises them.
+type Step struct {
+	JobID       int64      `json:"jobId"`
+	JobName     string     `json:"jobName"`
+	Number      int        `json:"number"`
+	Name        string     `json:"name"`
+	Status      string     `json:"status"`
+	Conclusion  string     `json:"conclusion,omitempty"`
+	StartedAt   *time.Time `json:"startedAt,omitempty"`
+	CompletedAt *time.Time `json:"completedAt,omitempty"`
 }
 
-type Onboarding struct {
+type Import struct {
 	ID                     string     `json:"id"`
 	OrgID                  string     `json:"-"`
-	BatchID                string     `json:"-"`
 	RepositoryID           string     `json:"repositoryId"`
 	Repository             Repository `json:"repository"`
 	TeamID                 string     `json:"teamId"`
 	TeamName               string     `json:"team"`
 	Status                 State      `json:"status"`
+	Steps                  []Step     `json:"steps"`
 	Branch                 string     `json:"branch"`
 	RunID                  int64      `json:"-"`
 	RunURL                 string     `json:"runUrl,omitempty"`
@@ -89,21 +96,21 @@ type Onboarding struct {
 	ServiceID              string     `json:"serviceId,omitempty"`
 	CreatedAt              time.Time  `json:"createdAt"`
 	UpdatedAt              time.Time  `json:"updatedAt"`
+	RunStartedAt           *time.Time `json:"runStartedAt,omitempty"`
+	RunCompletedAt         *time.Time `json:"runCompletedAt,omitempty"`
 	CompletedAt            *time.Time `json:"completedAt,omitempty"`
 }
 
 type Job struct {
-	ID           string
-	OrgID        string
-	OnboardingID string
-	Kind         string
-	Attempts     int
-	MaxAttempts  int
+	ID          string
+	OrgID       string
+	ImportID    string
+	Kind        string
+	Attempts    int
+	MaxAttempts int
 }
 
 const (
 	JobStart  = "start"
 	JobOpenPR = "open_pr"
 )
-
-const MaxRepositoriesPerBatch = 25

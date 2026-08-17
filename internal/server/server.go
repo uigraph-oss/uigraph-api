@@ -113,7 +113,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	}
 
 	var githubClient *githubapp.Client
-	if cfg.GitHubAppEnabled {
+	if cfg.GitHubAppConfigured {
 		githubClient, err = githubapp.NewClient(githubapp.ClientConfig{
 			AppID: cfg.GitHubAppID, Slug: cfg.GitHubAppSlug, ClientID: cfg.GitHubAppClientID,
 			ClientSecret: cfg.GitHubAppClientSecret, PrivateKeyBase64: cfg.GitHubAppPrivateKeyBase64,

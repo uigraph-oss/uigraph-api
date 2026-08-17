@@ -36,6 +36,7 @@ type Client interface {
 	ListInstallationRepositories(ctx context.Context, installationID int64) ([]domain.Repository, error)
 	DeleteInstallation(ctx context.Context, installationID int64) error
 	GetWorkflowRun(ctx context.Context, installationID int64, repository domain.Repository, branch string, runID int64) (domain.WorkflowRun, error)
+	ListWorkflowRunJobs(ctx context.Context, installationID int64, repository domain.Repository, runID int64) ([]domain.Step, error)
 }
 
 type Handler struct {
@@ -54,11 +55,12 @@ func Register(mux *http.ServeMux, h *Handler, requireScope func(scope, method, p
 	requireScope("integrations:write", "POST", "/api/v1/orgs/{orgID}/github-app/install", h.Install)
 	requireScope("integrations:write", "DELETE", "/api/v1/orgs/{orgID}/github-app", h.DeleteInstallation)
 	requireScope("integrations:read", "GET", "/api/v1/orgs/{orgID}/github-app/repositories", h.ListRepositories)
-	requireScope("integrations:write", "POST", "/api/v1/orgs/{orgID}/repository-onboarding", h.CreateBatch)
-	requireScope("integrations:read", "GET", "/api/v1/orgs/{orgID}/repository-onboarding", h.GetLatestBatch)
-	requireScope("integrations:read", "GET", "/api/v1/orgs/{orgID}/repository-onboarding/{batchID}", h.GetBatch)
-	requireScope("integrations:write", "POST", "/api/v1/orgs/{orgID}/repository-onboarding/{batchID}/repositories/{onboardingID}/recheck", h.Recheck)
-	requireScope("integrations:write", "POST", "/api/v1/orgs/{orgID}/repository-onboarding/{batchID}/repositories/{onboardingID}/retry", h.Retry)
+	requireScope("integrations:write", "POST", "/api/v1/orgs/{orgID}/repository-imports", h.CreateImport)
+	requireScope("integrations:read", "GET", "/api/v1/orgs/{orgID}/repository-imports", h.ListImports)
+	requireScope("integrations:read", "GET", "/api/v1/orgs/{orgID}/repository-imports/latest", h.GetLatestImport)
+	requireScope("integrations:read", "GET", "/api/v1/orgs/{orgID}/repository-imports/{importID}", h.GetImport)
+	requireScope("integrations:write", "POST", "/api/v1/orgs/{orgID}/repository-imports/{importID}/recheck", h.Recheck)
+	requireScope("integrations:write", "POST", "/api/v1/orgs/{orgID}/repository-imports/{importID}/retry", h.Retry)
 	mux.HandleFunc("GET /api/v1/github-app/callback", h.Callback)
 	if len(h.webhookSecret) != 0 {
 		mux.HandleFunc("POST /api/v1/github-app/webhooks", h.Webhook)
@@ -223,7 +225,7 @@ func (h *Handler) DeleteInstallation(w http.ResponseWriter, r *http.Request) {
 		httpError(w, r, err)
 		return
 	}
-	if err := h.store.DeleteInstallation(r.Context(), r.PathValue("orgID")); err != nil {
+	if err := h.store.DisconnectInstallation(r.Context(), r.PathValue("orgID")); err != nil {
 		httpError(w, r, err)
 		return
 	}
@@ -245,20 +247,20 @@ func (h *Handler) ListRepositories(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"repositories": repositories})
 }
 
-// @Summary Create a repository onboarding batch
+// @Summary Start a repository import
 // @Tags integrations
 // @Security BearerAuth
 // @Param orgID path string true "Organization ID"
-// @Param body body object true "teamId and repositoryIds"
-// @Success 201 {object} domain.Batch
-// @Router /orgs/{orgID}/repository-onboarding [post]
-func (h *Handler) CreateBatch(w http.ResponseWriter, r *http.Request) {
+// @Param body body object true "teamId and repositoryId"
+// @Success 201 {object} domain.Import
+// @Router /orgs/{orgID}/repository-imports [post]
+func (h *Handler) CreateImport(w http.ResponseWriter, r *http.Request) {
 	var request struct {
-		TeamID        string   `json:"teamId"`
-		RepositoryIDs []string `json:"repositoryIds"`
+		TeamID       string `json:"teamId"`
+		RepositoryID string `json:"repositoryId"`
 	}
-	if err := httputil.Decode(r, &request); err != nil || request.TeamID == "" || len(request.RepositoryIDs) == 0 {
-		httputil.BadRequest(w, "teamId and repositoryIds are required")
+	if err := httputil.Decode(r, &request); err != nil || request.TeamID == "" || request.RepositoryID == "" {
+		httputil.BadRequest(w, "teamId and repositoryId are required")
 		return
 	}
 	principal, ok := middleware.PrincipalFromCtx(r.Context())
@@ -266,147 +268,150 @@ func (h *Handler) CreateBatch(w http.ResponseWriter, r *http.Request) {
 		httputil.Forbidden(w)
 		return
 	}
-	batch, err := h.store.CreateBatch(r.Context(), r.PathValue("orgID"), request.TeamID, "", principal.UserID, request.RepositoryIDs)
+	value, err := h.store.CreateImport(r.Context(), r.PathValue("orgID"), request.TeamID, principal.UserID, request.RepositoryID)
 	if err != nil {
 		httpError(w, r, err)
 		return
 	}
-	httputil.JSON(w, http.StatusCreated, batch)
+	httputil.JSON(w, http.StatusCreated, value)
 }
 
-// @Summary Get a repository onboarding batch
+// @Summary Get a repository import
 // @Tags integrations
 // @Security BearerAuth
 // @Param orgID path string true "Organization ID"
-// @Param batchID path string true "Batch ID"
-// @Success 200 {object} domain.Batch
-// @Router /orgs/{orgID}/repository-onboarding/{batchID} [get]
-func (h *Handler) GetBatch(w http.ResponseWriter, r *http.Request) {
-	batch, err := h.store.GetBatch(r.Context(), r.PathValue("orgID"), r.PathValue("batchID"))
+// @Param importID path string true "Import ID"
+// @Success 200 {object} domain.Import
+// @Router /orgs/{orgID}/repository-imports/{importID} [get]
+func (h *Handler) GetImport(w http.ResponseWriter, r *http.Request) {
+	value, err := h.store.GetImport(r.Context(), r.PathValue("orgID"), r.PathValue("importID"))
 	if err != nil {
 		httpError(w, r, err)
 		return
 	}
-	httputil.JSON(w, http.StatusOK, h.reconciled(r.Context(), batch))
+	httputil.JSON(w, http.StatusOK, h.reconciled(r.Context(), value))
 }
 
-// @Summary Get the latest repository onboarding batch
+// @Summary Get the latest repository import
 // @Tags integrations
 // @Security BearerAuth
 // @Param orgID path string true "Organization ID"
-// @Success 200 {object} domain.Batch
-// @Router /orgs/{orgID}/repository-onboarding [get]
-func (h *Handler) GetLatestBatch(w http.ResponseWriter, r *http.Request) {
-	batch, err := h.store.GetLatestBatch(r.Context(), r.PathValue("orgID"))
+// @Success 200 {object} map[string]interface{}
+// @Router /orgs/{orgID}/repository-imports/latest [get]
+func (h *Handler) GetLatestImport(w http.ResponseWriter, r *http.Request) {
+	value, err := h.store.GetLatestImport(r.Context(), r.PathValue("orgID"))
 	if err != nil {
 		httpError(w, r, err)
 		return
 	}
-	if batch == nil {
-		httputil.JSON(w, http.StatusOK, map[string]any{"batch": nil})
+	if value == nil {
+		httputil.JSON(w, http.StatusOK, map[string]any{"import": nil})
 		return
 	}
-	httputil.JSON(w, http.StatusOK, map[string]any{"batch": h.reconciled(r.Context(), batch)})
+	httputil.JSON(w, http.StatusOK, map[string]any{"import": h.reconciled(r.Context(), value)})
 }
 
-func (h *Handler) reconciled(ctx context.Context, batch *domain.Batch) *domain.Batch {
-	applied, err := h.reconcileBatch(ctx, batch)
+// @Summary List repository imports
+// @Tags integrations
+// @Security BearerAuth
+// @Param orgID path string true "Organization ID"
+// @Success 200 {object} map[string]interface{}
+// @Router /orgs/{orgID}/repository-imports [get]
+func (h *Handler) ListImports(w http.ResponseWriter, r *http.Request) {
+	values, err := h.store.ListImports(r.Context(), r.PathValue("orgID"))
 	if err != nil {
-		slog.WarnContext(ctx, "GitHub onboarding poll failed", "err", err)
+		httpError(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{"imports": values})
+}
+
+func (h *Handler) reconciled(ctx context.Context, value *domain.Import) *domain.Import {
+	applied, err := h.reconcileImport(ctx, value)
+	if err != nil {
+		slog.WarnContext(ctx, "GitHub import poll failed", "err", err)
 	}
 	if !applied {
-		return batch
+		return value
 	}
-	refreshed, err := h.store.GetBatch(ctx, batch.OrgID, batch.ID)
+	refreshed, err := h.store.GetImport(ctx, value.OrgID, value.ID)
 	if err != nil {
-		slog.WarnContext(ctx, "GitHub onboarding reload failed", "err", err)
-		return batch
+		slog.WarnContext(ctx, "GitHub import reload failed", "err", err)
+		return value
 	}
 	return refreshed
 }
 
-func (h *Handler) reconcileBatch(ctx context.Context, batch *domain.Batch) (bool, error) {
-	if h.client == nil {
+// reconcileImport is the polling safety net for missed or delayed webhooks. It
+// only ever touches an import that is still running, so once an import is
+// terminal UiGraph stops asking GitHub about that repository entirely.
+func (h *Handler) reconcileImport(ctx context.Context, value *domain.Import) (bool, error) {
+	if h.client == nil || value.Status.Terminal() {
 		return false, nil
 	}
-	installation, err := h.store.GetInstallation(ctx, batch.OrgID)
+	if value.Status != domain.StateRunQueued && value.Status != domain.StateRunRunning {
+		return false, nil
+	}
+	installation, err := h.store.GetInstallation(ctx, value.OrgID)
+	if err != nil || installation == nil {
+		return false, err
+	}
+	run, err := h.client.GetWorkflowRun(ctx, installation.GitHubInstallationID, value.Repository, value.Branch, value.RunID)
 	if err != nil {
 		return false, err
 	}
-	if installation == nil {
+	if run.ID == 0 {
 		return false, nil
 	}
-	applied := false
-	for _, onboarding := range batch.Items {
-		if onboarding.Status != domain.StateRunQueued && onboarding.Status != domain.StateRunRunning {
-			continue
-		}
-		run, err := h.client.GetWorkflowRun(ctx, installation.GitHubInstallationID, onboarding.Repository, onboarding.Branch, onboarding.RunID)
-		if err != nil {
-			return applied, err
-		}
-		if run.ID == 0 {
-			continue
-		}
-		if err := h.store.ApplyWorkflowRunEvent(ctx, installation.GitHubInstallationID, onboarding.Repository.GitHubID, run.ID, run.Event, run.Status, run.Conclusion, run.HeadBranch, run.HTMLURL, run.Path); err != nil {
-			return applied, err
-		}
-		applied = true
+	steps, err := h.client.ListWorkflowRunJobs(ctx, installation.GitHubInstallationID, value.Repository, run.ID)
+	if err != nil {
+		return false, err
 	}
-	return applied, nil
+	if len(steps) != 0 {
+		if err := h.store.ApplyWorkflowJobEvent(ctx, installation.GitHubInstallationID, value.Repository.GitHubID, run.ID, run.HeadBranch, steps); err != nil {
+			return false, err
+		}
+	}
+	err = h.store.ApplyWorkflowRunEvent(ctx, installation.GitHubInstallationID, value.Repository.GitHubID, run.ID, run.Event, run.Status, run.Conclusion, run.HeadBranch, run.HTMLURL, run.Path)
+	if err != nil {
+		return true, err
+	}
+	return true, nil
 }
 
 // @Summary Recheck repository AI configuration
 // @Tags integrations
 // @Security BearerAuth
 // @Param orgID path string true "Organization ID"
-// @Param batchID path string true "Batch ID"
-// @Param onboardingID path string true "Onboarding ID"
+// @Param importID path string true "Import ID"
 // @Success 202
-// @Router /orgs/{orgID}/repository-onboarding/{batchID}/repositories/{onboardingID}/recheck [post]
+// @Router /orgs/{orgID}/repository-imports/{importID}/recheck [post]
 func (h *Handler) Recheck(w http.ResponseWriter, r *http.Request) {
 	h.retry(w, r, true)
 }
 
-// @Summary Retry failed repository onboarding
+// @Summary Retry a failed repository import
 // @Tags integrations
 // @Security BearerAuth
 // @Param orgID path string true "Organization ID"
-// @Param batchID path string true "Batch ID"
-// @Param onboardingID path string true "Onboarding ID"
+// @Param importID path string true "Import ID"
 // @Success 202
-// @Router /orgs/{orgID}/repository-onboarding/{batchID}/repositories/{onboardingID}/retry [post]
+// @Router /orgs/{orgID}/repository-imports/{importID}/retry [post]
 func (h *Handler) Retry(w http.ResponseWriter, r *http.Request) {
 	h.retry(w, r, false)
 }
 
 func (h *Handler) retry(w http.ResponseWriter, r *http.Request, recheck bool) {
-	batch, err := h.store.GetBatch(r.Context(), r.PathValue("orgID"), r.PathValue("batchID"))
+	if err := h.store.RetryImport(r.Context(), r.PathValue("orgID"), r.PathValue("importID"), recheck); err != nil {
+		httpError(w, r, err)
+		return
+	}
+	value, err := h.store.GetImport(r.Context(), r.PathValue("orgID"), r.PathValue("importID"))
 	if err != nil {
 		httpError(w, r, err)
 		return
 	}
-	found := false
-	for _, item := range batch.Items {
-		if item.ID == r.PathValue("onboardingID") {
-			found = true
-			break
-		}
-	}
-	if !found {
-		httpError(w, r, store.ErrNotFound)
-		return
-	}
-	if err := h.store.RetryOnboarding(r.Context(), r.PathValue("orgID"), r.PathValue("onboardingID"), recheck); err != nil {
-		httpError(w, r, err)
-		return
-	}
-	onboarding, err := h.store.GetOnboarding(r.Context(), r.PathValue("orgID"), r.PathValue("onboardingID"))
-	if err != nil {
-		httpError(w, r, err)
-		return
-	}
-	httputil.JSON(w, http.StatusAccepted, onboarding)
+	httputil.JSON(w, http.StatusAccepted, value)
 }
 
 // @Summary Receive signed GitHub App webhooks
@@ -449,10 +454,6 @@ func (h *Handler) Webhook(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusAccepted)
 		return
 	}
-	if event != "workflow_run" {
-		w.WriteHeader(http.StatusAccepted)
-		return
-	}
 	var payload struct {
 		Installation struct {
 			ID int64 `json:"id"`
@@ -469,15 +470,31 @@ func (h *Handler) Webhook(w http.ResponseWriter, r *http.Request) {
 			HTMLURL    string `json:"html_url"`
 			Path       string `json:"path"`
 		} `json:"workflow_run"`
+		WorkflowJob *gh.WorkflowJob `json:"workflow_job"`
 	}
-	if err := json.Unmarshal(body, &payload); err != nil {
-		httputil.BadRequest(w, "invalid workflow_run payload")
-		return
-	}
-	err = h.store.ApplyWorkflowRunEvent(r.Context(), payload.Installation.ID, payload.Repository.ID, payload.WorkflowRun.ID, payload.WorkflowRun.Event, payload.WorkflowRun.Status, payload.WorkflowRun.Conclusion, payload.WorkflowRun.HeadBranch, payload.WorkflowRun.HTMLURL, payload.WorkflowRun.Path)
-	if err != nil {
-		httpError(w, r, err)
-		return
+	switch event {
+	case "workflow_run":
+		if err := json.Unmarshal(body, &payload); err != nil {
+			httputil.BadRequest(w, "invalid workflow_run payload")
+			return
+		}
+		err = h.store.ApplyWorkflowRunEvent(r.Context(), payload.Installation.ID, payload.Repository.ID, payload.WorkflowRun.ID, payload.WorkflowRun.Event, payload.WorkflowRun.Status, payload.WorkflowRun.Conclusion, payload.WorkflowRun.HeadBranch, payload.WorkflowRun.HTMLURL, payload.WorkflowRun.Path)
+		if err != nil {
+			httpError(w, r, err)
+			return
+		}
+	case "workflow_job":
+		if err := json.Unmarshal(body, &payload); err != nil || payload.WorkflowJob == nil {
+			httputil.BadRequest(w, "invalid workflow_job payload")
+			return
+		}
+		job := payload.WorkflowJob
+		steps := domain.JobSteps(job.GetID(), job.GetName(), job.Steps)
+		err = h.store.ApplyWorkflowJobEvent(r.Context(), payload.Installation.ID, payload.Repository.ID, job.GetRunID(), job.GetHeadBranch(), steps)
+		if err != nil {
+			httpError(w, r, err)
+			return
+		}
 	}
 	w.WriteHeader(http.StatusAccepted)
 }

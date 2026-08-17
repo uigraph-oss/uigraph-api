@@ -223,37 +223,37 @@ func (c *Client) DeleteInstallation(ctx context.Context, installationID int64) e
 	return c.do(ctx, client, http.MethodDelete, fmt.Sprintf("app/installations/%d", installationID), nil, nil)
 }
 
-func (c *Client) StartRun(ctx context.Context, installationID int64, onboarding Onboarding, orgName string) error {
+func (c *Client) StartRun(ctx context.Context, installationID int64, value Import, orgName string) error {
 	client, err := c.installationClient(ctx, installationID)
 	if err != nil {
 		return err
 	}
-	owner, repo, err := splitRepository(onboarding.Repository.FullName)
+	owner, repo, err := splitRepository(value.Repository.FullName)
 	if err != nil {
 		return err
 	}
-	seed, err := Seed(orgName, onboarding.Repository.Name, onboarding.Repository.URL, onboarding.TeamName)
+	seed, err := Seed(orgName, value.Repository.Name, value.Repository.URL, value.TeamName)
 	if err != nil {
 		return err
 	}
 	files := map[string][]byte{
-		ArtifactWorkflowPath: ArtifactWorkflow(onboarding.Repository.DefaultBranch),
-		SyncWorkflowPath:     SyncWorkflow(onboarding.Repository.DefaultBranch),
+		ArtifactWorkflowPath: ArtifactWorkflow(value.Repository.DefaultBranch),
+		SyncWorkflowPath:     SyncWorkflow(value.Repository.DefaultBranch),
 		".uigraph.yaml":      seed,
 	}
-	return c.createAtomicCommit(ctx, client, owner, repo, onboarding.Repository.DefaultBranch, onboarding.Branch, files)
+	return c.createAtomicCommit(ctx, client, owner, repo, value.Repository.DefaultBranch, value.Branch, files)
 }
 
-func (c *Client) OpenPullRequest(ctx context.Context, installationID int64, onboarding Onboarding) (string, error) {
+func (c *Client) OpenPullRequest(ctx context.Context, installationID int64, value Import) (string, error) {
 	client, err := c.installationClient(ctx, installationID)
 	if err != nil {
 		return "", err
 	}
-	owner, repo, err := splitRepository(onboarding.Repository.FullName)
+	owner, repo, err := splitRepository(value.Repository.FullName)
 	if err != nil {
 		return "", err
 	}
-	existing, err := c.findPullRequest(ctx, client, owner, repo, onboarding.Branch, onboarding.Repository.DefaultBranch)
+	existing, err := c.findPullRequest(ctx, client, owner, repo, value.Branch, value.Repository.DefaultBranch)
 	if err != nil {
 		return "", err
 	}
@@ -261,8 +261,8 @@ func (c *Client) OpenPullRequest(ctx context.Context, installationID int64, onbo
 		return existing, nil
 	}
 	payload := map[string]string{
-		"title": "UiGraph: adopt generated repository artifacts", "head": onboarding.Branch,
-		"base": onboarding.Repository.DefaultBranch,
+		"title": "UiGraph: adopt generated repository artifacts", "head": value.Branch,
+		"base": value.Repository.DefaultBranch,
 		"body": "This repository is already onboarded to UiGraph. Merging keeps the generated artifacts and enables UiGraph checks on future pull requests.",
 	}
 	var created struct {
@@ -385,13 +385,61 @@ func (c *Client) GetWorkflowRun(ctx context.Context, installationID int64, repos
 	return latest, nil
 }
 
+// ListWorkflowRunJobs returns every step of every job in a run, flattened in
+// job then step order. Steps carry their job so a workflow_job webhook covering
+// one job can be merged without discarding the others.
+func (c *Client) ListWorkflowRunJobs(ctx context.Context, installationID int64, repository Repository, runID int64) ([]Step, error) {
+	if runID == 0 {
+		return nil, nil
+	}
+	client, err := c.installationClient(ctx, installationID)
+	if err != nil {
+		return nil, err
+	}
+	owner, repo, err := splitRepository(repository.FullName)
+	if err != nil {
+		return nil, err
+	}
+	var response struct {
+		Jobs []*gh.WorkflowJob `json:"jobs"`
+	}
+	if err := c.do(ctx, client, http.MethodGet, fmt.Sprintf("repos/%s/%s/actions/runs/%d/jobs?per_page=100&filter=latest", owner, repo, runID), nil, &response); err != nil {
+		return nil, err
+	}
+	steps := []Step{}
+	for _, job := range response.Jobs {
+		steps = append(steps, JobSteps(job.GetID(), job.GetName(), job.Steps)...)
+	}
+	return steps, nil
+}
+
+func JobSteps(jobID int64, jobName string, steps []*gh.TaskStep) []Step {
+	out := make([]Step, 0, len(steps))
+	for _, step := range steps {
+		value := Step{
+			JobID: jobID, JobName: jobName, Number: int(step.GetNumber()),
+			Name: step.GetName(), Status: step.GetStatus(), Conclusion: step.GetConclusion(),
+		}
+		if step.StartedAt != nil {
+			started := step.StartedAt.Time
+			value.StartedAt = &started
+		}
+		if step.CompletedAt != nil {
+			completed := step.CompletedAt.Time
+			value.CompletedAt = &completed
+		}
+		out = append(out, value)
+	}
+	return out
+}
+
 const (
 	TokenSecret     = "UIGRAPH_TOKEN"
 	GatewayVariable = "UIGRAPH_GATEWAY_URL"
 	APIVariable     = "UIGRAPH_API_URL"
 )
 
-func (c *Client) PutOnboardingCredentials(ctx context.Context, installationID int64, repositories []Repository, plaintext string) error {
+func (c *Client) PutOnboardingCredentials(ctx context.Context, installationID int64, repository Repository, plaintext string) error {
 	if c.config.GatewayURL == "" {
 		return fmt.Errorf("githubapp: UIGRAPH_GATEWAY_URL is not configured on this UiGraph instance")
 	}
@@ -403,37 +451,35 @@ func (c *Client) PutOnboardingCredentials(ctx context.Context, installationID in
 	if err != nil {
 		return err
 	}
-	for _, repository := range repositories {
-		owner, repo, err := splitRepository(repository.FullName)
+	owner, repo, err := splitRepository(repository.FullName)
+	if err != nil {
+		return err
+	}
+	existingSecrets, err := c.actionsNames(ctx, client, fmt.Sprintf("repos/%s/%s/actions/secrets?per_page=100", owner, repo), "secrets")
+	if err != nil {
+		return err
+	}
+	existingVariables, err := c.actionsNames(ctx, client, fmt.Sprintf("repos/%s/%s/actions/variables?per_page=100", owner, repo), "variables")
+	if err != nil {
+		return err
+	}
+	if !existingSecrets[TokenSecret] {
+		keyID, encrypted, err := c.encryptSecret(ctx, client, fmt.Sprintf("repos/%s/%s/actions/secrets/public-key", owner, repo), plaintext)
 		if err != nil {
 			return err
 		}
-		existingSecrets, err := c.actionsNames(ctx, client, fmt.Sprintf("repos/%s/%s/actions/secrets?per_page=100", owner, repo), "secrets")
-		if err != nil {
+		secret := map[string]any{"encrypted_value": encrypted, "key_id": keyID}
+		if err := c.do(ctx, client, http.MethodPut, fmt.Sprintf("repos/%s/%s/actions/secrets/%s", owner, repo, TokenSecret), secret, nil); err != nil {
 			return err
 		}
-		existingVariables, err := c.actionsNames(ctx, client, fmt.Sprintf("repos/%s/%s/actions/variables?per_page=100", owner, repo), "variables")
-		if err != nil {
+	}
+	for _, name := range []string{GatewayVariable, APIVariable} {
+		if existingVariables[name] {
+			continue
+		}
+		variable := map[string]any{"name": name, "value": values[name]}
+		if err := c.putVariable(ctx, client, fmt.Sprintf("repos/%s/%s/actions/variables", owner, repo), name, variable); err != nil {
 			return err
-		}
-		if !existingSecrets[TokenSecret] {
-			keyID, encrypted, err := c.encryptSecret(ctx, client, fmt.Sprintf("repos/%s/%s/actions/secrets/public-key", owner, repo), plaintext)
-			if err != nil {
-				return err
-			}
-			secret := map[string]any{"encrypted_value": encrypted, "key_id": keyID}
-			if err := c.do(ctx, client, http.MethodPut, fmt.Sprintf("repos/%s/%s/actions/secrets/%s", owner, repo, TokenSecret), secret, nil); err != nil {
-				return err
-			}
-		}
-		for _, name := range []string{GatewayVariable, APIVariable} {
-			if existingVariables[name] {
-				continue
-			}
-			variable := map[string]any{"name": name, "value": values[name]}
-			if err := c.putVariable(ctx, client, fmt.Sprintf("repos/%s/%s/actions/variables", owner, repo), name, variable); err != nil {
-				return err
-			}
 		}
 	}
 	return nil

@@ -79,7 +79,9 @@ type Config struct {
 	FigmaClientID     string
 	FigmaClientSecret string
 
-	GitHubAppEnabled          bool
+	// GitHubAppConfigured is derived, not read from the environment: the GitHub
+	// App is enabled exactly when its credentials are all present.
+	GitHubAppConfigured       bool
 	GitHubAppID               int64
 	GitHubAppSlug             string
 	GitHubAppClientID         string
@@ -107,9 +109,6 @@ type Config struct {
 }
 
 func Load() (*Config, error) {
-	if value := os.Getenv("GITHUB_APP_ENABLED"); value != "" && value != "true" && value != "false" {
-		return nil, fmt.Errorf("config: GITHUB_APP_ENABLED must be true or false")
-	}
 	c := &Config{
 		Host:                      env("HOST", ""),
 		Port:                      env("PORT", ""),
@@ -141,7 +140,6 @@ func Load() (*Config, error) {
 		ChromiumPath:              env("UIGRAPH_CHROMIUM_PATH", ""),
 		FigmaClientID:             env("FIGMA_CLIENT_ID", ""),
 		FigmaClientSecret:         env("FIGMA_CLIENT_SECRET", ""),
-		GitHubAppEnabled:          envBool("GITHUB_APP_ENABLED", false),
 		GitHubAppID:               envInt64("GITHUB_APP_ID", 0),
 		GitHubAppSlug:             env("GITHUB_APP_SLUG", ""),
 		GitHubAppClientID:         env("GITHUB_APP_CLIENT_ID", ""),
@@ -187,12 +185,7 @@ func Load() (*Config, error) {
 	if githubConfigured && !githubComplete {
 		return nil, fmt.Errorf("config: partial GitHub App configuration; GITHUB_APP_ID, GITHUB_APP_SLUG, GITHUB_APP_CLIENT_ID, GITHUB_APP_CLIENT_SECRET, and GITHUB_APP_PRIVATE_KEY_BASE64 are all required")
 	}
-	if c.GitHubAppEnabled && !githubComplete {
-		return nil, fmt.Errorf("config: complete GitHub App configuration is required when GITHUB_APP_ENABLED is true")
-	}
-	if !c.GitHubAppEnabled && githubConfigured {
-		return nil, fmt.Errorf("config: GITHUB_APP_ENABLED must be true when GitHub App configuration is provided")
-	}
+	c.GitHubAppConfigured = githubComplete
 
 	return c, nil
 }

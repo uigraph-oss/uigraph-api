@@ -11,10 +11,10 @@ import (
 )
 
 type APIClient interface {
-	StartRun(ctx context.Context, installationID int64, onboarding Onboarding, orgName string) error
+	StartRun(ctx context.Context, installationID int64, value Import, orgName string) error
 	MissingAIConfiguration(ctx context.Context, installationID int64, repository Repository, account string) ([]string, error)
-	OpenPullRequest(ctx context.Context, installationID int64, onboarding Onboarding) (string, error)
-	PutOnboardingCredentials(ctx context.Context, installationID int64, repositories []Repository, plaintext string) error
+	OpenPullRequest(ctx context.Context, installationID int64, value Import) (string, error)
+	PutOnboardingCredentials(ctx context.Context, installationID int64, repository Repository, plaintext string) error
 }
 
 type Worker struct {
@@ -59,7 +59,7 @@ func (w *Worker) runOne(ctx context.Context) error {
 }
 
 func (w *Worker) process(ctx context.Context, job Job) error {
-	onboarding, err := w.store.GetOnboarding(ctx, job.OrgID, job.OnboardingID)
+	value, err := w.store.GetImport(ctx, job.OrgID, job.ImportID)
 	if err != nil {
 		return err
 	}
@@ -72,47 +72,39 @@ func (w *Worker) process(ctx context.Context, job Job) error {
 	}
 	switch job.Kind {
 	case JobStart:
-		if err := w.store.SetOnboardingStatus(ctx, job.OrgID, job.OnboardingID, StateCheckingAI, nil); err != nil {
+		if err := w.store.SetImportStatus(ctx, job.OrgID, job.ImportID, StateCheckingAI, nil); err != nil {
 			return err
 		}
-		batch, err := w.store.GetBatch(ctx, job.OrgID, onboarding.BatchID)
-		if err != nil {
-			return err
-		}
-		repositories := make([]Repository, 0, len(batch.Items))
-		for _, item := range batch.Items {
-			repositories = append(repositories, item.Repository)
-		}
-		missing, err := w.client.MissingAIConfiguration(ctx, installation.GitHubInstallationID, onboarding.Repository, installation.AccountLogin)
+		missing, err := w.client.MissingAIConfiguration(ctx, installation.GitHubInstallationID, value.Repository, installation.AccountLogin)
 		if err != nil {
 			return err
 		}
 		if len(missing) != 0 {
-			return w.store.SetOnboardingStatus(ctx, job.OrgID, job.OnboardingID, StateWaitingAI, missing)
+			return w.store.SetImportStatus(ctx, job.OrgID, job.ImportID, StateWaitingAI, missing)
 		}
 		plaintext, err := w.store.CreateOnboardingToken(ctx, job.OrgID, time.Now().AddDate(10, 0, 0))
 		if err != nil {
 			return err
 		}
-		if err := w.client.PutOnboardingCredentials(ctx, installation.GitHubInstallationID, repositories, plaintext); err != nil {
+		if err := w.client.PutOnboardingCredentials(ctx, installation.GitHubInstallationID, value.Repository, plaintext); err != nil {
 			return err
 		}
 		orgName, err := w.store.GetOrgName(ctx, job.OrgID)
 		if err != nil {
 			return err
 		}
-		if err := w.client.StartRun(ctx, installation.GitHubInstallationID, *onboarding, orgName); err != nil {
+		if err := w.client.StartRun(ctx, installation.GitHubInstallationID, *value, orgName); err != nil {
 			return err
 		}
-		return w.store.SetOnboardingStatus(ctx, job.OrgID, job.OnboardingID, StateRunQueued, nil)
+		return w.store.SetImportStatus(ctx, job.OrgID, job.ImportID, StateRunQueued, nil)
 	case JobOpenPR:
-		url, err := w.client.OpenPullRequest(ctx, installation.GitHubInstallationID, *onboarding)
+		url, err := w.client.OpenPullRequest(ctx, installation.GitHubInstallationID, *value)
 		if err != nil {
-			slog.WarnContext(ctx, "GitHub onboarding pull request could not be opened", "onboarding", onboarding.ID, "err", err)
+			slog.WarnContext(ctx, "GitHub import pull request could not be opened", "import", value.ID, "err", err)
 			return nil
 		}
-		return w.store.SetOnboardingPullRequest(ctx, job.OrgID, job.OnboardingID, url)
+		return w.store.SetImportPullRequest(ctx, job.OrgID, job.ImportID, url)
 	default:
-		return fmt.Errorf("unknown GitHub onboarding job kind %q", job.Kind)
+		return fmt.Errorf("unknown GitHub import job kind %q", job.Kind)
 	}
 }
