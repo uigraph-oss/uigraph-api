@@ -66,6 +66,9 @@ const (
 
 	ScopeAuthProvidersRead  Scope = "authproviders:read"
 	ScopeAuthProvidersWrite Scope = "authproviders:write"
+
+	ScopeIntegrationsRead  Scope = "integrations:read"
+	ScopeIntegrationsWrite Scope = "integrations:write"
 )
 
 // AllScopes is the catalog of concrete grantable scopes, returned by the discovery endpoint.
@@ -86,6 +89,7 @@ var AllScopes = []Scope{
 	ScopeTimelineRead, ScopeTimelineWrite,
 	ScopeOrgUpdate, ScopeOrgDelete,
 	ScopeAuthProvidersRead, ScopeAuthProvidersWrite,
+	ScopeIntegrationsRead, ScopeIntegrationsWrite,
 }
 
 // RoleScopes is the static map from an org role to its explicit scope set.
@@ -96,17 +100,19 @@ var RoleScopes = map[Role][]Scope{
 		ScopeDiagramsRead, ScopeDocsRead, ScopeMapsRead, ScopeServicesRead, ScopeChatRead, ScopeFoldersRead,
 		ScopeMembersRead, ScopeTeamsRead, ScopeServiceAccountsRead, ScopeMLStudioRead, ScopeBillingRead, ScopeAgentsRead,
 		ScopeTimelineRead,
+		ScopeIntegrationsRead,
 	},
 	RoleEditor: {
 		ScopeDiagramsRead, ScopeDocsRead, ScopeMapsRead, ScopeServicesRead, ScopeChatRead, ScopeFoldersRead,
 		ScopeMembersRead, ScopeTeamsRead, ScopeServiceAccountsRead, ScopeMLStudioRead, ScopeBillingRead, ScopeAgentsRead,
 		ScopeTimelineRead,
+		ScopeIntegrationsRead,
 		ScopeDiagramsWrite, ScopeDocsWrite, ScopeMapsWrite, ScopeServicesWrite, ScopeChatWrite, ScopeFoldersWrite,
 		ScopeMLStudioWrite, ScopeBillingWrite, ScopeAgentsWrite, ScopeTimelineWrite,
 	},
 	RoleAdmin: {
 		"diagrams:*", "docs:*", "maps:*", "services:*", "chat:*", "folders:*",
-		"members:*", "teams:*", "serviceaccounts:*", "mlstudio:*", "billing:*", "agents:*", "timeline:*", "org:*", "authproviders:*",
+		"members:*", "teams:*", "serviceaccounts:*", "mlstudio:*", "billing:*", "agents:*", "timeline:*", "org:*", "authproviders:*", "integrations:*",
 	},
 }
 

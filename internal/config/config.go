@@ -57,6 +57,8 @@ type Config struct {
 	// OAuth callback. When empty it falls back to PublicURL (same-origin prod).
 	FrontendURL string
 
+	GatewayURL string
+
 	// CookieDomain sets the session cookie's Domain attribute, e.g.
 	// ".example.com" to share it across every subdomain (the app, a
 	// marketing/billing site on a different subdomain, etc). Empty (the
@@ -77,6 +79,16 @@ type Config struct {
 	FigmaClientID     string
 	FigmaClientSecret string
 
+	GitHubAppConfigured       bool
+	GitHubAppID               int64
+	GitHubAppSlug             string
+	GitHubAppClientID         string
+	GitHubAppClientSecret     string
+	GitHubAppPrivateKeyBase64 string
+	GitHubWebhookSecret       string
+	GitHubAPIURL              string
+	GitHubWebURL              string
+
 	// Enterprise gates the managed-SaaS integration seam: internal endpoints
 	// used by the separate, private uigraph-enterprise service (signup
 	// provisioning, session introspection, seat-limit checks). Self-hosted
@@ -96,35 +108,44 @@ type Config struct {
 
 func Load() (*Config, error) {
 	c := &Config{
-		Host:                  env("HOST", ""),
-		Port:                  env("PORT", ""),
-		PostgresURL:           env("POSTGRES_URL", ""),
-		RedisURL:              env("REDIS_URL", ""),
-		StorageBackend:        env("STORAGE_BACKEND", "minio"),
-		StorageBucket:         env("STORAGE_BUCKET", "uigraph"),
-		StorageAccessKey:      env("STORAGE_ACCESS_KEY", ""),
-		StorageSecretKey:      env("STORAGE_SECRET_KEY", ""),
-		StorageEndpoint:       env("STORAGE_ENDPOINT", ""),
-		StoragePublicEndpoint: env("STORAGE_PUBLIC_ENDPOINT", ""),
-		StorageRegion:         env("STORAGE_REGION", "us-east-1"),
-		StorageForcePathStyle: envBool("STORAGE_FORCE_PATH_STYLE", env("STORAGE_ENDPOINT", "") != ""),
-		VectorBackend:         env("VECTOR_BACKEND", "qdrant"),
-		QdrantURL:             env("QDRANT_URL", "http://qdrant:6333"),
-		EmbeddingBackend:      env("EMBEDDING_BACKEND", "ollama"),
-		EmbeddingModel:        env("EMBEDDING_MODEL", "nomic-embed-text"),
-		EmbeddingURL:          env("EMBEDDING_URL", "http://ollama:11434"),
-		AdminEmail:            env("UIGRAPH_ADMIN_EMAIL", "admin@uigraph.app"),
-		AdminPassword:         env("UIGRAPH_ADMIN_PASSWORD", "admin"),
-		SecretKey:             env("UIGRAPH_SECRET_KEY", ""),
-		Domain:                env("UIGRAPH_DOMAIN", "localhost"),
-		LicenseKey:            env("UIGRAPH_LICENSE_KEY", ""),
-		PublicURL:             env("UIGRAPH_PUBLIC_URL", "http://localhost:8080"),
-		FrontendURL:           env("UIGRAPH_FRONTEND_URL", ""),
-		CookieDomain:          env("UIGRAPH_COOKIE_DOMAIN", ""),
-		InternalFrontendURL:   env("UIGRAPH_INTERNAL_FRONTEND_URL", ""),
-		ChromiumPath:          env("UIGRAPH_CHROMIUM_PATH", ""),
-		FigmaClientID:         env("FIGMA_CLIENT_ID", ""),
-		FigmaClientSecret:     env("FIGMA_CLIENT_SECRET", ""),
+		Host:                      env("HOST", ""),
+		Port:                      env("PORT", ""),
+		PostgresURL:               env("POSTGRES_URL", ""),
+		RedisURL:                  env("REDIS_URL", ""),
+		StorageBackend:            env("STORAGE_BACKEND", "minio"),
+		StorageBucket:             env("STORAGE_BUCKET", "uigraph"),
+		StorageAccessKey:          env("STORAGE_ACCESS_KEY", ""),
+		StorageSecretKey:          env("STORAGE_SECRET_KEY", ""),
+		StorageEndpoint:           env("STORAGE_ENDPOINT", ""),
+		StoragePublicEndpoint:     env("STORAGE_PUBLIC_ENDPOINT", ""),
+		StorageRegion:             env("STORAGE_REGION", "us-east-1"),
+		StorageForcePathStyle:     envBool("STORAGE_FORCE_PATH_STYLE", env("STORAGE_ENDPOINT", "") != ""),
+		VectorBackend:             env("VECTOR_BACKEND", "qdrant"),
+		QdrantURL:                 env("QDRANT_URL", "http://qdrant:6333"),
+		EmbeddingBackend:          env("EMBEDDING_BACKEND", "ollama"),
+		EmbeddingModel:            env("EMBEDDING_MODEL", "nomic-embed-text"),
+		EmbeddingURL:              env("EMBEDDING_URL", "http://ollama:11434"),
+		AdminEmail:                env("UIGRAPH_ADMIN_EMAIL", "admin@uigraph.app"),
+		AdminPassword:             env("UIGRAPH_ADMIN_PASSWORD", "admin"),
+		SecretKey:                 env("UIGRAPH_SECRET_KEY", ""),
+		Domain:                    env("UIGRAPH_DOMAIN", "localhost"),
+		LicenseKey:                env("UIGRAPH_LICENSE_KEY", ""),
+		PublicURL:                 env("UIGRAPH_PUBLIC_URL", "http://localhost:8080"),
+		FrontendURL:               env("UIGRAPH_FRONTEND_URL", ""),
+		GatewayURL:                env("UIGRAPH_GATEWAY_URL", ""),
+		CookieDomain:              env("UIGRAPH_COOKIE_DOMAIN", ""),
+		InternalFrontendURL:       env("UIGRAPH_INTERNAL_FRONTEND_URL", ""),
+		ChromiumPath:              env("UIGRAPH_CHROMIUM_PATH", ""),
+		FigmaClientID:             env("FIGMA_CLIENT_ID", ""),
+		FigmaClientSecret:         env("FIGMA_CLIENT_SECRET", ""),
+		GitHubAppID:               envInt64("GITHUB_APP_ID", 0),
+		GitHubAppSlug:             env("GITHUB_APP_SLUG", ""),
+		GitHubAppClientID:         env("GITHUB_APP_CLIENT_ID", ""),
+		GitHubAppClientSecret:     env("GITHUB_APP_CLIENT_SECRET", ""),
+		GitHubAppPrivateKeyBase64: env("GITHUB_APP_PRIVATE_KEY_BASE64", ""),
+		GitHubWebhookSecret:       env("GITHUB_WEBHOOK_SECRET", ""),
+		GitHubAPIURL:              env("GITHUB_API_URL", "https://api.github.com/"),
+		GitHubWebURL:              env("GITHUB_WEB_URL", "https://github.com"),
 
 		Enterprise:              envBool("UIGRAPH_ENTERPRISE", false),
 		EnterpriseServiceURL:    env("UIGRAPH_ENTERPRISE_SERVICE_URL", ""),
@@ -145,6 +166,13 @@ func Load() (*Config, error) {
 	}
 	if c.Enterprise && c.EnterpriseServiceURL == "" {
 		return nil, fmt.Errorf("config: UIGRAPH_ENTERPRISE_SERVICE_URL is required when UIGRAPH_ENTERPRISE is true")
+	}
+	c.GitHubAppConfigured = c.GitHubAppID != 0 && c.GitHubAppSlug != "" && c.GitHubAppClientID != "" &&
+		c.GitHubAppClientSecret != "" && c.GitHubAppPrivateKeyBase64 != ""
+	githubPartial := c.GitHubAppID != 0 || c.GitHubAppSlug != "" || c.GitHubAppClientID != "" ||
+		c.GitHubAppClientSecret != "" || c.GitHubAppPrivateKeyBase64 != "" || c.GitHubWebhookSecret != ""
+	if !c.GitHubAppConfigured && githubPartial {
+		return nil, fmt.Errorf("config: partial GitHub App configuration; GITHUB_APP_ID, GITHUB_APP_SLUG, GITHUB_APP_CLIENT_ID, GITHUB_APP_CLIENT_SECRET, and GITHUB_APP_PRIVATE_KEY_BASE64 are all required")
 	}
 
 	return c, nil
@@ -169,4 +197,16 @@ func envBool(key string, fallback bool) bool {
 		return false
 	}
 	return fallback
+}
+
+func envInt64(key string, fallback int64) int64 {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	var parsed int64
+	if _, err := fmt.Sscan(v, &parsed); err != nil {
+		return fallback
+	}
+	return parsed
 }

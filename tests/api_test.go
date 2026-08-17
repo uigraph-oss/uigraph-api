@@ -88,7 +88,7 @@ func TestMain(m *testing.M) {
 	}))
 	defer idp.Close()
 
-	srv = httptest.NewServer(api.New(db, authmw.NewSessionVerifier(db, db), &config.Config{PublicURL: "http://localhost:8080", FrontendURL: "", SecretKey: testSecretKey}, testStorage, nil, nil))
+	srv = httptest.NewServer(api.New(db, authmw.NewSessionVerifier(db, db), &config.Config{PublicURL: "http://localhost:8080", FrontendURL: "", SecretKey: testSecretKey}, testStorage, nil, nil, nil))
 	defer srv.Close()
 
 	// obtain admin token once for all tests

@@ -57,6 +57,9 @@ func TestScopesForRole(t *testing.T) {
 	if Has(viewer, ScopeDiagramsWrite) {
 		t.Fatal("viewer must not have diagrams:write")
 	}
+	if !Has(viewer, ScopeIntegrationsRead) || Has(viewer, ScopeIntegrationsWrite) {
+		t.Fatal("viewer should read integrations but must not write them")
+	}
 
 	editor := toStrings(ScopesForRole(RoleEditor))
 	if !Has(editor, ScopeDiagramsWrite) {
@@ -64,6 +67,9 @@ func TestScopesForRole(t *testing.T) {
 	}
 	if Has(editor, ScopeTeamsCreate) {
 		t.Fatal("editor must not have management write scopes")
+	}
+	if !Has(editor, ScopeIntegrationsRead) || Has(editor, ScopeIntegrationsWrite) {
+		t.Fatal("editor should read integrations but must not write them")
 	}
 
 	admin := toStrings(ScopesForRole(RoleAdmin))
