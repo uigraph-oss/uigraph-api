@@ -39,6 +39,7 @@ type Client interface {
 	DeleteInstallation(ctx context.Context, installationID int64) error
 	GetWorkflowRun(ctx context.Context, installationID int64, repository domain.Repository, branch string, runID int64) (domain.WorkflowRun, error)
 	ListWorkflowRunJobs(ctx context.Context, installationID int64, repository domain.Repository, runID int64) ([]domain.Step, error)
+	MissingAIConfiguration(ctx context.Context, installationID int64, repository domain.Repository) ([]string, error)
 }
 
 type Handler struct {
@@ -57,6 +58,7 @@ func Register(mux *http.ServeMux, h *Handler, requireScope func(scope, method, p
 	requireScope("integrations:write", "POST", "/api/v1/orgs/{orgID}/github-app/install", h.Install)
 	requireScope("integrations:write", "DELETE", "/api/v1/orgs/{orgID}/github-app", h.DeleteInstallation)
 	requireScope("integrations:read", "GET", "/api/v1/orgs/{orgID}/github-app/repositories", h.ListRepositories)
+	requireScope("integrations:read", "GET", "/api/v1/orgs/{orgID}/github-app/repositories/{owner}/{repo}/ai-configuration", h.GetRepositoryAIConfiguration)
 	requireScope("integrations:write", "POST", "/api/v1/orgs/{orgID}/repository-imports", h.CreateImport)
 	requireScope("integrations:read", "GET", "/api/v1/orgs/{orgID}/repository-imports/latest", h.GetLatestImport)
 	requireScope("integrations:read", "GET", "/api/v1/orgs/{orgID}/repository-imports/{importID}", h.GetImport)
@@ -268,6 +270,47 @@ func (h *Handler) ListRepositories(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httputil.JSON(w, http.StatusOK, map[string]any{"repositories": repositories})
+}
+
+// GetRepositoryAIConfiguration reports which AI provider secrets and variables
+// the repository is still missing, before any import is created.
+// @Summary Check repository AI configuration
+// @Tags integrations
+// @Security BearerAuth
+// @Param orgID path string true "Organization ID"
+// @Param owner path string true "Repository owner"
+// @Param repo path string true "Repository name"
+// @Success 200 {object} map[string]interface{}
+// @Router /orgs/{orgID}/github-app/repositories/{owner}/{repo}/ai-configuration [get]
+func (h *Handler) GetRepositoryAIConfiguration(w http.ResponseWriter, r *http.Request) {
+	if h.client == nil {
+		http.Error(w, `{"error":"GitHub App is not configured","code":503}`, http.StatusServiceUnavailable)
+		return
+	}
+	installation, err := h.store.GetInstallation(r.Context(), r.PathValue("orgID"))
+	if err != nil {
+		httpError(w, r, err)
+		return
+	}
+	if installation == nil {
+		httpError(w, r, store.ErrNotFound)
+		return
+	}
+	repository, err := h.client.GetRepository(r.Context(), installation.GitHubInstallationID, r.PathValue("owner"), r.PathValue("repo"))
+	if notFound(err) {
+		httputil.BadRequest(w, "the GitHub App cannot access this repository")
+		return
+	}
+	if err != nil {
+		httpError(w, r, err)
+		return
+	}
+	missing, err := h.client.MissingAIConfiguration(r.Context(), installation.GitHubInstallationID, repository)
+	if err != nil {
+		httpError(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusOK, map[string]any{"missing": missing, "ready": len(missing) == 0})
 }
 
 // @Summary Start a repository import
