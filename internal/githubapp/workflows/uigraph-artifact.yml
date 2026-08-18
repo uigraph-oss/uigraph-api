@@ -33,6 +33,8 @@ jobs:
           AI_PROVIDER_MODEL: ${{ secrets.AI_PROVIDER_MODEL || vars.AI_PROVIDER_MODEL }}
           AI_PROVIDER_API_URL: ${{ secrets.AI_PROVIDER_API_URL || vars.AI_PROVIDER_API_URL }}
           AI_PROVIDER_NPM: ${{ secrets.AI_PROVIDER_NPM || vars.AI_PROVIDER_NPM }}
+          UIGRAPH_API_URL: ${{ vars.UIGRAPH_API_URL || secrets.UIGRAPH_API_URL }}
+          UIGRAPH_TOKEN: ${{ secrets.UIGRAPH_TOKEN }}
           BASE_SHA: ${{ github.event.before }}
         run: |
           if ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
