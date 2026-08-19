@@ -17,17 +17,6 @@ import (
 	"github.com/uigraph/app/internal/store"
 )
 
-func (d *DB) GetOrgName(ctx context.Context, orgID string) (string, error) {
-	var name string
-	if err := d.db.QueryRowContext(ctx, `SELECT name FROM orgs WHERE id=$1 AND disabled=FALSE`, orgID).Scan(&name); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return "", store.ErrNotFound
-		}
-		return "", fmt.Errorf("postgres: GetOrgName: %w", err)
-	}
-	return name, nil
-}
-
 func (d *DB) CreateInstallState(ctx context.Context, orgID, userID, stateHash string, expiresAt time.Time) error {
 	_, err := d.db.ExecContext(ctx, `
 		INSERT INTO github_installation_states(state_hash, org_id, user_id, expires_at)

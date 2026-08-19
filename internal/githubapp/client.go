@@ -259,12 +259,12 @@ func (c *Client) DeleteInstallation(ctx context.Context, installationID int64) e
 	return c.do(ctx, client, http.MethodDelete, fmt.Sprintf("app/installations/%d", installationID), nil, nil)
 }
 
-func (c *Client) StartRun(ctx context.Context, installationID int64, value Import, repository Repository, orgName string) error {
+func (c *Client) StartRun(ctx context.Context, installationID int64, value Import, repository Repository) error {
 	client, err := c.installationClient(ctx, installationID)
 	if err != nil {
 		return err
 	}
-	seed, err := Seed(orgName, repository.Name, repository.URL, value.TeamName)
+	seed, err := Seed(repository.Name, repository.URL, value.TeamName)
 	if err != nil {
 		return err
 	}

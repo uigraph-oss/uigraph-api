@@ -10,7 +10,7 @@ import (
 )
 
 type APIClient interface {
-	StartRun(ctx context.Context, installationID int64, value Import, repository Repository, orgName string) error
+	StartRun(ctx context.Context, installationID int64, value Import, repository Repository) error
 	MissingAIConfiguration(ctx context.Context, installationID int64, repository Repository) ([]string, error)
 	OpenPullRequest(ctx context.Context, installationID int64, value Import, repository Repository) (string, error)
 	CheckInstanceConfiguration() error
@@ -120,11 +120,7 @@ func (w *Worker) process(ctx context.Context, job Job) error {
 				return err
 			}
 		}
-		orgName, err := w.store.GetOrgName(ctx, job.OrgID)
-		if err != nil {
-			return err
-		}
-		if err := w.client.StartRun(ctx, installation.GitHubInstallationID, *value, repository, orgName); err != nil {
+		if err := w.client.StartRun(ctx, installation.GitHubInstallationID, *value, repository); err != nil {
 			return err
 		}
 		return w.store.SetImportRunQueued(ctx, job.OrgID, job.ImportID)

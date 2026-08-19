@@ -6,7 +6,6 @@ import (
 )
 
 type Store interface {
-	GetOrgName(ctx context.Context, orgID string) (string, error)
 	CreateInstallState(ctx context.Context, orgID, userID, stateHash string, expiresAt time.Time) error
 	AuthorizeInstallState(ctx context.Context, stateHash string, githubUserID int64) (string, error)
 	ConsumeInstallState(ctx context.Context, stateHash string, githubUserID int64) (orgID string, err error)
