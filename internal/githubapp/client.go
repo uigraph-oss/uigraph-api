@@ -289,11 +289,10 @@ func (c *Client) OpenPullRequest(ctx context.Context, installationID int64, valu
 	if existing.HTMLURL != "" {
 		return existing.HTMLURL, nil
 	}
-	payload := map[string]any{
+	payload := map[string]string{
 		"title": "UiGraph: adopt generated repository artifacts", "head": value.Branch,
-		"base":  repository.DefaultBranch,
-		"body":  "This repository is already onboarded to UiGraph. Merging keeps the generated artifacts and enables UiGraph checks on future pull requests.",
-		"draft": true,
+		"base": repository.DefaultBranch,
+		"body": "This repository is already onboarded to UiGraph. Merging keeps the generated artifacts and enables UiGraph checks on future pull requests.",
 	}
 	var created struct {
 		HTMLURL string `json:"html_url"`
@@ -302,39 +301,6 @@ func (c *Client) OpenPullRequest(ctx context.Context, installationID int64, valu
 		return "", fmt.Errorf("open import pull request: %w", err)
 	}
 	return created.HTMLURL, nil
-}
-
-func (c *Client) MarkPullRequestReady(ctx context.Context, installationID int64, value Import, repository Repository) error {
-	client, err := c.installationClient(ctx, installationID)
-	if err != nil {
-		return err
-	}
-	existing, err := c.findPullRequest(ctx, client, repository.Owner, repository.Name, value.Branch, repository.DefaultBranch)
-	if err != nil {
-		return err
-	}
-	if existing.NodeID == "" {
-		return nil
-	}
-	if !existing.Draft {
-		return nil
-	}
-	payload := map[string]any{
-		"query":     "mutation($id:ID!){markPullRequestReadyForReview(input:{pullRequestId:$id}){clientMutationId}}",
-		"variables": map[string]any{"id": existing.NodeID},
-	}
-	var response struct {
-		Errors []struct {
-			Message string `json:"message"`
-		} `json:"errors"`
-	}
-	if err := c.do(ctx, client, http.MethodPost, "graphql", payload, &response); err != nil {
-		return fmt.Errorf("mark import pull request ready: %w", err)
-	}
-	if len(response.Errors) != 0 {
-		return fmt.Errorf("mark import pull request ready: %s", response.Errors[0].Message)
-	}
-	return nil
 }
 
 func (c *Client) MissingAIConfiguration(ctx context.Context, installationID int64, repository Repository) ([]string, error) {
@@ -624,8 +590,6 @@ func (c *Client) createAtomicCommit(ctx context.Context, client *gh.Client, owne
 
 type pullRequest struct {
 	HTMLURL string `json:"html_url"`
-	NodeID  string `json:"node_id"`
-	Draft   bool   `json:"draft"`
 	Head    struct {
 		Ref string `json:"ref"`
 	} `json:"head"`

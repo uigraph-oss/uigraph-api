@@ -363,7 +363,9 @@ func (d *DB) ApplyWorkflowRunEvent(ctx context.Context, run githubapp.WorkflowRu
 	if _, err = tx.ExecContext(ctx, `UPDATE repository_imports SET status=$3,service_id=$4,run_id=$5,run_url=$6,run_completed_at=NOW(),completed_at=NOW(),updated_at=NOW() WHERE org_id=$1 AND id=$2`, orgID, importID, githubapp.StateCompleted, serviceID, run.ID, run.HTMLURL); err != nil {
 		return err
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO repository_import_jobs(org_id,import_id,kind) VALUES($1,$2,$3) ON CONFLICT(import_id,kind) WHERE completed_at IS NULL DO NOTHING`, orgID, importID, githubapp.JobOpenPR); err != nil {
+	if _, err = tx.ExecContext(ctx, `
+		INSERT INTO repository_import_jobs(org_id,import_id,kind) VALUES($1,$2,$3)
+		ON CONFLICT(import_id,kind) WHERE completed_at IS NULL DO NOTHING`, orgID, importID, githubapp.JobOpenPR); err != nil {
 		return err
 	}
 	return tx.Commit()

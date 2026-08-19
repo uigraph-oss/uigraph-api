@@ -13,7 +13,6 @@ type APIClient interface {
 	StartRun(ctx context.Context, installationID int64, value Import, repository Repository, orgName string) error
 	MissingAIConfiguration(ctx context.Context, installationID int64, repository Repository) ([]string, error)
 	OpenPullRequest(ctx context.Context, installationID int64, value Import, repository Repository) (string, error)
-	MarkPullRequestReady(ctx context.Context, installationID int64, value Import, repository Repository) error
 	CheckInstanceConfiguration() error
 	PutImportVariables(ctx context.Context, installationID int64, repository Repository) error
 	NeedsImportToken(ctx context.Context, installationID int64, repository Repository) (bool, error)
@@ -128,20 +127,13 @@ func (w *Worker) process(ctx context.Context, job Job) error {
 		if err := w.client.StartRun(ctx, installation.GitHubInstallationID, *value, repository, orgName); err != nil {
 			return err
 		}
+		return w.store.SetImportRunQueued(ctx, job.OrgID, job.ImportID)
+	case JobOpenPR:
 		url, err := w.client.OpenPullRequest(ctx, installation.GitHubInstallationID, *value, repository)
 		if err != nil {
 			return err
 		}
-		if err := w.store.SetImportPullRequest(ctx, job.OrgID, job.ImportID, url); err != nil {
-			return err
-		}
-		return w.store.SetImportRunQueued(ctx, job.OrgID, job.ImportID)
-	case JobOpenPR:
-		if err := w.client.MarkPullRequestReady(ctx, installation.GitHubInstallationID, *value, repository); err != nil {
-			slog.WarnContext(ctx, "GitHub import pull request could not be marked ready for review", "import", value.ID, "err", err)
-			return nil
-		}
-		return nil
+		return w.store.SetImportPullRequest(ctx, job.OrgID, job.ImportID, url)
 	default:
 		return fmt.Errorf("unknown GitHub import job kind %q", job.Kind)
 	}
