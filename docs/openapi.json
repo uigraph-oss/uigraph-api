@@ -2147,6 +2147,12 @@
                         "name": "diagramID",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "inline the ReactFlow JSON content in the response",
+                        "name": "includeContent",
+                        "in": "query"
                     }
                 ],
                 "responses": {
