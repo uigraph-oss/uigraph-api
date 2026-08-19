@@ -89,6 +89,8 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 		enterpriseClient = enterprise.New(cfg.EnterpriseServiceURL, cfg.EnterpriseInternalToken)
 		signupH := auth.NewSignupHandler(s, cfg.EnterpriseInternalToken)
 		mux.HandleFunc("POST /internal/v1/accounts", signupH.ProvisionAccount)
+		mux.HandleFunc("GET /internal/v1/accounts/lookup", signupH.LookupAccountByEmail)
+		mux.HandleFunc("POST /internal/v1/accounts/{userID}/password", signupH.SetAccountPassword)
 	}
 
 	sessionH := auth.NewSessionHandler(s, assetResolver, authCipher, cfg.PublicURL, cfg.FrontendURL, cfg.CookieDomain, enterpriseClient)
@@ -162,6 +164,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 	serverAdmin("GET", "/api/v1/users/{userID}", userH.Get)
 	serverAdmin("PUT", "/api/v1/users/{userID}", userH.Update)
 	serverAdmin("DELETE", "/api/v1/users/{userID}", userH.Disable)
+	serverAdmin("POST", "/api/v1/users/{userID}/password", userH.ResetPassword)
 
 	orgH := auth.NewOrgHandler(s, s, s, assetResolver)
 	protected("GET", "/api/v1/orgs", orgH.ListMine)

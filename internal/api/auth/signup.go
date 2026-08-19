@@ -137,3 +137,92 @@ func (h *SignupHandler) ProvisionAccount(w http.ResponseWriter, r *http.Request)
 		OrgID:        o.ID,
 	})
 }
+
+type accountLookupResponse struct {
+	UserID string `json:"userId"`
+	Name   string `json:"name"`
+	Email  string `json:"email"`
+}
+
+// LookupAccountByEmail backs uigraph-enterprise's self-service
+// forgot-password flow: it needs to know whether an email has an account
+// (and that account's id/name) before creating a reset token and sending
+// mail, without exposing that lookup publicly itself. 404 (not an error
+// body worth distinguishing further) when there's no match — the caller
+// treats "not found" and "lookup succeeded, nothing to do" the same way.
+// GET /internal/v1/accounts/lookup
+func (h *SignupHandler) LookupAccountByEmail(w http.ResponseWriter, r *http.Request) {
+	if h.internalToken == "" || r.Header.Get("X-Internal-Token") != h.internalToken {
+		httputil.Unauthorized(w)
+		return
+	}
+
+	email := r.URL.Query().Get("email")
+	if email == "" {
+		httputil.BadRequest(w, "email is required")
+		return
+	}
+
+	u, err := h.store.GetUserByEmail(r.Context(), email)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if u == nil {
+		httputil.Error(w, r, store.ErrNotFound)
+		return
+	}
+
+	httputil.JSON(w, http.StatusOK, accountLookupResponse{UserID: u.ID, Name: u.Name, Email: u.Email})
+}
+
+type setAccountPasswordRequest struct {
+	Password string `json:"password"`
+}
+
+// SetAccountPassword sets a user's password directly, by id. Called by
+// uigraph-enterprise only after it has already validated and consumed its
+// own password-reset token — by the time this runs, the request is already
+// established as legitimate, so there's no token here, just the new value.
+// POST /internal/v1/accounts/{userID}/password
+func (h *SignupHandler) SetAccountPassword(w http.ResponseWriter, r *http.Request) {
+	if h.internalToken == "" || r.Header.Get("X-Internal-Token") != h.internalToken {
+		httputil.Unauthorized(w)
+		return
+	}
+
+	var req setAccountPasswordRequest
+	if err := httputil.Decode(r, &req); err != nil {
+		httputil.BadRequest(w, "invalid JSON")
+		return
+	}
+	if len(req.Password) < 8 {
+		httputil.BadRequest(w, "password must be at least 8 characters")
+		return
+	}
+
+	userID := r.PathValue("userID")
+	u, err := h.store.GetUser(r.Context(), userID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if u == nil {
+		httputil.Error(w, r, store.ErrNotFound)
+		return
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	u.PasswordHash = string(hash)
+	u.MustChangePassword = false // the user just chose this password themselves
+	if err := h.store.UpdateUser(r.Context(), *u); err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
