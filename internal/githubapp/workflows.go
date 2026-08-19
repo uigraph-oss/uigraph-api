@@ -24,17 +24,13 @@ func Branch(importID string) string {
 	return "uigraph/onboarding/" + importID
 }
 
-func Seed(orgName, repoName, repoURL, teamName string) ([]byte, error) {
-	type named struct {
-		Name string `yaml:"name"`
-	}
+func Seed(repoName, repoURL, teamName string) ([]byte, error) {
 	type repository struct {
 		Provider string `yaml:"provider"`
 		URL      string `yaml:"url"`
 	}
 	value := struct {
-		Version int   `yaml:"version"`
-		Project named `yaml:"project"`
+		Version int `yaml:"version"`
 		Service struct {
 			Name        string     `yaml:"name"`
 			Category    string     `yaml:"category"`
@@ -46,7 +42,6 @@ func Seed(orgName, repoName, repoURL, teamName string) ([]byte, error) {
 		} `yaml:"service"`
 	}{}
 	value.Version = 1
-	value.Project.Name = orgName
 	value.Service.Name = HumanizeRepositoryName(repoName)
 	value.Service.Category = "service"
 	value.Service.Description = fmt.Sprintf("%s service", value.Service.Name)

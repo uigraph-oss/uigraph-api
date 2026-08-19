@@ -1,15 +1,7 @@
 CREATE TABLE github_installations (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    org_id UUID NOT NULL UNIQUE REFERENCES orgs(id) ON DELETE CASCADE,
+    org_id UUID PRIMARY KEY REFERENCES orgs(id) ON DELETE CASCADE,
     github_installation_id BIGINT NOT NULL UNIQUE,
-    account_id BIGINT NOT NULL,
-    account_login TEXT NOT NULL,
-    account_type TEXT NOT NULL,
-    target_type TEXT NOT NULL,
-    status TEXT NOT NULL,
-    suspended_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE github_installation_states (
@@ -25,73 +17,36 @@ CREATE TABLE github_installation_states (
 
 CREATE INDEX github_installation_states_expiry_idx ON github_installation_states(expires_at) WHERE consumed_at IS NULL;
 
-CREATE TABLE github_repositories (
+CREATE TABLE repository_imports (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
-    installation_id UUID NOT NULL REFERENCES github_installations(id) ON DELETE CASCADE,
-    github_id BIGINT NOT NULL,
-    name TEXT NOT NULL,
-    full_name TEXT NOT NULL,
-    html_url TEXT NOT NULL,
-    default_branch TEXT NOT NULL,
-    private BOOLEAN NOT NULL DEFAULT FALSE,
-    archived BOOLEAN NOT NULL DEFAULT FALSE,
-    selected BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE(org_id, github_id),
-    UNIQUE(org_id, id)
-);
-
-CREATE TABLE repository_onboarding_batches (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+    github_owner_id BIGINT NOT NULL,
+    github_repo TEXT NOT NULL,
     team_id UUID NOT NULL REFERENCES teams(id),
-    team_name TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'running',
-    created_by UUID NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE(org_id, id)
-);
-
-CREATE TABLE repository_onboardings (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
-    batch_id UUID NOT NULL,
-    repository_id UUID NOT NULL,
-    team_id UUID NOT NULL REFERENCES teams(id),
-    team_name TEXT NOT NULL,
     status TEXT NOT NULL,
-    failed_phase TEXT,
-    setup_branch TEXT NOT NULL,
-    setup_pr_number INTEGER,
-    setup_pr_url TEXT,
-    generation_run_id BIGINT,
-    generation_run_url TEXT,
-    artifacts_branch TEXT NOT NULL,
-    artifacts_pr_number INTEGER,
-    artifacts_pr_url TEXT,
-    sync_run_id BIGINT,
-    sync_run_url TEXT,
+    steps JSONB NOT NULL DEFAULT '[]',
+    branch TEXT NOT NULL,
+    run_id BIGINT,
+    run_url TEXT,
+    pr_url TEXT,
     missing_ai_configuration TEXT[] NOT NULL DEFAULT '{}',
     error TEXT,
     service_id UUID REFERENCES services(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    run_started_at TIMESTAMPTZ,
+    run_completed_at TIMESTAMPTZ,
     completed_at TIMESTAMPTZ,
-    FOREIGN KEY(org_id, batch_id) REFERENCES repository_onboarding_batches(org_id, id) ON DELETE CASCADE,
-    FOREIGN KEY(org_id, repository_id) REFERENCES github_repositories(org_id, id),
-    UNIQUE(batch_id, repository_id),
     UNIQUE(org_id, id)
 );
 
-CREATE INDEX repository_onboardings_repo_idx ON repository_onboardings(org_id, repository_id, created_at DESC);
+CREATE INDEX repository_imports_repo_idx ON repository_imports(org_id, github_owner_id, github_repo, created_at DESC);
+CREATE UNIQUE INDEX repository_imports_branch_idx ON repository_imports(org_id, branch);
 
-CREATE TABLE repository_onboarding_jobs (
+CREATE TABLE repository_import_jobs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     org_id UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
-    onboarding_id UUID NOT NULL,
+    import_id UUID NOT NULL,
     kind TEXT NOT NULL,
     available_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     lease_owner TEXT,
@@ -102,11 +57,11 @@ CREATE TABLE repository_onboarding_jobs (
     completed_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    FOREIGN KEY(org_id, onboarding_id) REFERENCES repository_onboardings(org_id, id) ON DELETE CASCADE
+    FOREIGN KEY(org_id, import_id) REFERENCES repository_imports(org_id, id) ON DELETE CASCADE
 );
 
-CREATE UNIQUE INDEX repository_onboarding_jobs_active_idx ON repository_onboarding_jobs(onboarding_id, kind) WHERE completed_at IS NULL;
-CREATE INDEX repository_onboarding_jobs_claim_idx ON repository_onboarding_jobs(available_at, created_at) WHERE completed_at IS NULL;
+CREATE UNIQUE INDEX repository_import_jobs_active_idx ON repository_import_jobs(import_id, kind) WHERE completed_at IS NULL;
+CREATE INDEX repository_import_jobs_claim_idx ON repository_import_jobs(available_at, created_at) WHERE completed_at IS NULL;
 
 CREATE TABLE github_webhook_deliveries (
     delivery_id TEXT PRIMARY KEY,
