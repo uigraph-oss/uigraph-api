@@ -2,6 +2,8 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"net/http"
 	"time"
 
@@ -243,6 +245,70 @@ func (h *UserHandler) Update(w http.ResponseWriter, r *http.Request) {
 		_ = h.cache.Del(r.Context(), cache.ActorKey(userID))
 	}
 	httputil.JSON(w, http.StatusOK, h.userToResponse(r.Context(), *u))
+}
+
+type resetUserPasswordResponse struct {
+	TemporaryPassword string `json:"temporaryPassword"`
+}
+
+// ResetPassword generates a new random temporary password for userID and
+// requires them to change it on next login. Server-admin only — this is the
+// self-hosted answer to "I forgot my password": there's no self-service
+// email flow here (that's uigraph-enterprise's managed-deployment-only
+// forgot-password flow), so an admin resets it out-of-band and hands the
+// returned temporary password to the user directly.
+// POST /api/v1/users/{userID}/password
+// @Summary  ResetPassword
+// @Tags     users
+// @Security BearerAuth
+// @Param    userID  path  string  true  "userID"
+// @Success  200  {object}  map[string]interface{}
+// @Failure  401  {object}  httputil.errorBody
+// @Failure  403  {object}  httputil.errorBody
+// @Failure  404  {object}  httputil.errorBody
+// @Failure  500  {object}  httputil.errorBody
+// @Router   /users/{userID}/password [post]
+func (h *UserHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
+	userID := r.PathValue("userID")
+	u, err := h.store.GetUser(r.Context(), userID)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if u == nil {
+		httputil.Error(w, r, store.ErrNotFound)
+		return
+	}
+
+	temp, err := generateTemporaryPassword()
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(temp), bcrypt.DefaultCost)
+	if err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	u.PasswordHash = string(hash)
+	u.MustChangePassword = true
+	if err := h.store.UpdateUser(r.Context(), *u); err != nil {
+		httputil.Error(w, r, err)
+		return
+	}
+	if h.cache != nil {
+		_ = h.cache.Del(r.Context(), cache.ActorKey(userID))
+	}
+
+	httputil.JSON(w, http.StatusOK, resetUserPasswordResponse{TemporaryPassword: temp})
+}
+
+func generateTemporaryPassword() (string, error) {
+	b := make([]byte, 18)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
 // Disable marks a user as disabled.
