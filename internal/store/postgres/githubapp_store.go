@@ -111,7 +111,7 @@ func (d *DB) CreateImport(ctx context.Context, orgID, teamID string, ownerID int
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	var teamName string
 	if err = tx.QueryRowContext(ctx, `SELECT name FROM teams WHERE id=$1 AND org_id=$2`, teamID, orgID).Scan(&teamName); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -213,7 +213,7 @@ func (d *DB) RetryImport(ctx context.Context, orgID, importID string, recheck bo
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	var status string
 	err = tx.QueryRowContext(ctx, `SELECT status FROM repository_imports WHERE org_id=$1 AND id=$2 FOR UPDATE`, orgID, importID).Scan(&status)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -275,7 +275,7 @@ func (d *DB) RetryJob(ctx context.Context, job githubapp.Job, owner string, next
 		if err != nil {
 			return err
 		}
-		defer tx.Rollback()
+		defer func() { _ = tx.Rollback() }()
 		if _, err = tx.ExecContext(ctx, `UPDATE repository_import_jobs SET completed_at=NOW(), last_error=$3, lease_owner=NULL, lease_expires_at=NULL, updated_at=NOW() WHERE id=$1 AND lease_owner=$2`, job.ID, owner, message); err != nil {
 			return err
 		}
@@ -306,7 +306,7 @@ func (d *DB) ApplyWorkflowRunEvent(ctx context.Context, run githubapp.WorkflowRu
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	var orgID, importID string
 	var currentRunID int64
 	err = tx.QueryRowContext(ctx, activeImportSelect+` FOR UPDATE`, run.HeadBranch).Scan(
@@ -373,7 +373,7 @@ func (d *DB) ApplyWorkflowJobEvent(ctx context.Context, branch string, runID int
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	var orgID, importID string
 	var currentRunID int64
 	err = tx.QueryRowContext(ctx, activeImportSelect+` FOR UPDATE`, branch).Scan(
@@ -431,7 +431,7 @@ func (d *DB) CreateImportToken(ctx context.Context, orgID string, expiresAt time
 	if err != nil {
 		return "", err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	var serviceAccountID string
 	err = tx.QueryRowContext(ctx, `SELECT id FROM service_accounts WHERE org_id=$1 AND name='GitHub Onboarding' AND is_internal=TRUE AND deleted_at IS NULL FOR UPDATE`, orgID).Scan(&serviceAccountID)
 	if errors.Is(err, sql.ErrNoRows) {
