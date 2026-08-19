@@ -286,13 +286,14 @@ func (c *Client) OpenPullRequest(ctx context.Context, installationID int64, valu
 	if err != nil {
 		return "", err
 	}
-	if existing != "" {
-		return existing, nil
+	if existing.HTMLURL != "" {
+		return existing.HTMLURL, nil
 	}
-	payload := map[string]string{
+	payload := map[string]any{
 		"title": "UiGraph: adopt generated repository artifacts", "head": value.Branch,
-		"base": repository.DefaultBranch,
-		"body": "This repository is already onboarded to UiGraph. Merging keeps the generated artifacts and enables UiGraph checks on future pull requests.",
+		"base":  repository.DefaultBranch,
+		"body":  "This repository is already onboarded to UiGraph. Merging keeps the generated artifacts and enables UiGraph checks on future pull requests.",
+		"draft": true,
 	}
 	var created struct {
 		HTMLURL string `json:"html_url"`
@@ -301,6 +302,39 @@ func (c *Client) OpenPullRequest(ctx context.Context, installationID int64, valu
 		return "", fmt.Errorf("open import pull request: %w", err)
 	}
 	return created.HTMLURL, nil
+}
+
+func (c *Client) MarkPullRequestReady(ctx context.Context, installationID int64, value Import, repository Repository) error {
+	client, err := c.installationClient(ctx, installationID)
+	if err != nil {
+		return err
+	}
+	existing, err := c.findPullRequest(ctx, client, repository.Owner, repository.Name, value.Branch, repository.DefaultBranch)
+	if err != nil {
+		return err
+	}
+	if existing.NodeID == "" {
+		return nil
+	}
+	if !existing.Draft {
+		return nil
+	}
+	payload := map[string]any{
+		"query":     "mutation($id:ID!){markPullRequestReadyForReview(input:{pullRequestId:$id}){clientMutationId}}",
+		"variables": map[string]any{"id": existing.NodeID},
+	}
+	var response struct {
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+	if err := c.do(ctx, client, http.MethodPost, "graphql", payload, &response); err != nil {
+		return fmt.Errorf("mark import pull request ready: %w", err)
+	}
+	if len(response.Errors) != 0 {
+		return fmt.Errorf("mark import pull request ready: %s", response.Errors[0].Message)
+	}
+	return nil
 }
 
 func (c *Client) MissingAIConfiguration(ctx context.Context, installationID int64, repository Repository) ([]string, error) {
@@ -449,39 +483,34 @@ const (
 	APIVariable     = "UIGRAPH_API_URL"
 )
 
-func (c *Client) PutImportCredentials(ctx context.Context, installationID int64, repository Repository, plaintext string) error {
+func (c *Client) CheckInstanceConfiguration() error {
 	if c.config.GatewayURL == "" {
 		return fmt.Errorf("githubapp: UIGRAPH_GATEWAY_URL is not configured on this UiGraph instance")
 	}
 	if c.config.PublicURL == "" {
 		return fmt.Errorf("githubapp: UIGRAPH_PUBLIC_URL is not configured on this UiGraph instance")
 	}
+	return nil
+}
+
+func (c *Client) PutImportVariables(ctx context.Context, installationID int64, repository Repository) error {
 	values := map[string]string{GatewayVariable: c.config.GatewayURL, APIVariable: c.config.PublicURL}
 	client, err := c.installationClient(ctx, installationID)
 	if err != nil {
 		return err
 	}
 	owner, repo := repository.Owner, repository.Name
-	existingSecrets, err := c.actionsNames(ctx, client, fmt.Sprintf("repos/%s/%s/actions/secrets?per_page=100", owner, repo), "secrets")
+	existing, err := c.actionsNames(ctx, client, fmt.Sprintf("repos/%s/%s/actions/variables?per_page=100", owner, repo), "variables")
 	if err != nil {
 		return err
 	}
-	existingVariables, err := c.actionsNames(ctx, client, fmt.Sprintf("repos/%s/%s/actions/variables?per_page=100", owner, repo), "variables")
+	orgExisting, err := c.actionsNames(ctx, client, fmt.Sprintf("orgs/%s/actions/variables?per_page=100", owner), "variables")
 	if err != nil {
 		return err
 	}
-	if !existingSecrets[TokenSecret] {
-		keyID, encrypted, err := c.encryptSecret(ctx, client, fmt.Sprintf("repos/%s/%s/actions/secrets/public-key", owner, repo), plaintext)
-		if err != nil {
-			return err
-		}
-		secret := map[string]any{"encrypted_value": encrypted, "key_id": keyID}
-		if err := c.do(ctx, client, http.MethodPut, fmt.Sprintf("repos/%s/%s/actions/secrets/%s", owner, repo, TokenSecret), secret, nil); err != nil {
-			return err
-		}
-	}
+	maps.Copy(existing, orgExisting)
 	for _, name := range []string{GatewayVariable, APIVariable} {
-		if existingVariables[name] {
+		if existing[name] {
 			continue
 		}
 		variable := map[string]any{"name": name, "value": values[name]}
@@ -490,6 +519,40 @@ func (c *Client) PutImportCredentials(ctx context.Context, installationID int64,
 		}
 	}
 	return nil
+}
+
+func (c *Client) NeedsImportToken(ctx context.Context, installationID int64, repository Repository) (bool, error) {
+	client, err := c.installationClient(ctx, installationID)
+	if err != nil {
+		return false, err
+	}
+	owner, repo := repository.Owner, repository.Name
+	secrets, err := c.actionsNames(ctx, client, fmt.Sprintf("repos/%s/%s/actions/secrets?per_page=100", owner, repo), "secrets")
+	if err != nil {
+		return false, err
+	}
+	if secrets[TokenSecret] {
+		return false, nil
+	}
+	orgSecrets, err := c.actionsNames(ctx, client, fmt.Sprintf("orgs/%s/actions/secrets?per_page=100", owner), "secrets")
+	if err != nil {
+		return false, err
+	}
+	return !orgSecrets[TokenSecret], nil
+}
+
+func (c *Client) PutImportToken(ctx context.Context, installationID int64, repository Repository, plaintext string) error {
+	client, err := c.installationClient(ctx, installationID)
+	if err != nil {
+		return err
+	}
+	owner, repo := repository.Owner, repository.Name
+	keyID, encrypted, err := c.encryptSecret(ctx, client, fmt.Sprintf("repos/%s/%s/actions/secrets/public-key", owner, repo), plaintext)
+	if err != nil {
+		return err
+	}
+	secret := map[string]any{"encrypted_value": encrypted, "key_id": keyID}
+	return c.do(ctx, client, http.MethodPut, fmt.Sprintf("repos/%s/%s/actions/secrets/%s", owner, repo, TokenSecret), secret, nil)
 }
 
 func (c *Client) putVariable(ctx context.Context, client *gh.Client, collection, name string, payload map[string]any) error {
@@ -559,26 +622,30 @@ func (c *Client) createAtomicCommit(ctx context.Context, client *gh.Client, owne
 	return err
 }
 
-func (c *Client) findPullRequest(ctx context.Context, client *gh.Client, owner, repo, branch, base string) (string, error) {
+type pullRequest struct {
+	HTMLURL string `json:"html_url"`
+	NodeID  string `json:"node_id"`
+	Draft   bool   `json:"draft"`
+	Head    struct {
+		Ref string `json:"ref"`
+	} `json:"head"`
+	Base struct {
+		Ref string `json:"ref"`
+	} `json:"base"`
+}
+
+func (c *Client) findPullRequest(ctx context.Context, client *gh.Client, owner, repo, branch, base string) (pullRequest, error) {
 	query := url.Values{"state": {"all"}, "head": {owner + ":" + branch}, "base": {base}, "per_page": {"10"}}
-	var pulls []struct {
-		HTMLURL string `json:"html_url"`
-		Head    struct {
-			Ref string `json:"ref"`
-		} `json:"head"`
-		Base struct {
-			Ref string `json:"ref"`
-		} `json:"base"`
-	}
+	var pulls []pullRequest
 	if err := c.do(ctx, client, http.MethodGet, fmt.Sprintf("repos/%s/%s/pulls?%s", owner, repo, query.Encode()), nil, &pulls); err != nil {
-		return "", err
+		return pullRequest{}, err
 	}
 	for _, pull := range pulls {
 		if pull.Head.Ref == branch && pull.Base.Ref == base {
-			return pull.HTMLURL, nil
+			return pull, nil
 		}
 	}
-	return "", nil
+	return pullRequest{}, nil
 }
 
 func (c *Client) encryptSecret(ctx context.Context, client *gh.Client, path, plaintext string) (string, string, error) {

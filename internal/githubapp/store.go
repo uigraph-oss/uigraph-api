@@ -17,6 +17,7 @@ type Store interface {
 	GetImport(ctx context.Context, orgID, importID string) (*Import, error)
 	GetLatestImport(ctx context.Context, orgID string) (*Import, error)
 	SetImportStatus(ctx context.Context, orgID, importID string, status State, missingAIConfiguration []string) error
+	SetImportRunQueued(ctx context.Context, orgID, importID string) error
 	SetImportPullRequest(ctx context.Context, orgID, importID, url string) error
 	RetryImport(ctx context.Context, orgID, importID string, recheck bool) error
 	ClaimJob(ctx context.Context, owner string, lease time.Duration) (*Job, error)
@@ -25,5 +26,5 @@ type Store interface {
 	RecordWebhook(ctx context.Context, deliveryID, event, action string, installationID int64) (bool, error)
 	ApplyWorkflowRunEvent(ctx context.Context, run WorkflowRun, repositoryURL string) error
 	ApplyWorkflowJobEvent(ctx context.Context, branch string, runID int64, steps []Step) error
-	CreateImportToken(ctx context.Context, orgID string, expiresAt time.Time) (plaintext string, err error)
+	CreateImportToken(ctx context.Context, orgID, repository string, expiresAt time.Time) (plaintext string, err error)
 }

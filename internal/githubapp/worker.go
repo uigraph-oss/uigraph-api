@@ -13,7 +13,11 @@ type APIClient interface {
 	StartRun(ctx context.Context, installationID int64, value Import, repository Repository, orgName string) error
 	MissingAIConfiguration(ctx context.Context, installationID int64, repository Repository) ([]string, error)
 	OpenPullRequest(ctx context.Context, installationID int64, value Import, repository Repository) (string, error)
-	PutImportCredentials(ctx context.Context, installationID int64, repository Repository, plaintext string) error
+	MarkPullRequestReady(ctx context.Context, installationID int64, value Import, repository Repository) error
+	CheckInstanceConfiguration() error
+	PutImportVariables(ctx context.Context, installationID int64, repository Repository) error
+	NeedsImportToken(ctx context.Context, installationID int64, repository Repository) (bool, error)
+	PutImportToken(ctx context.Context, installationID int64, repository Repository, plaintext string) error
 	GetInstallationAccount(ctx context.Context, installationID int64) (Installation, error)
 	GetRepository(ctx context.Context, installationID int64, owner, repo string) (Repository, error)
 }
@@ -88,6 +92,9 @@ func (w *Worker) process(ctx context.Context, job Job) error {
 	}
 	switch job.Kind {
 	case JobStart:
+		if err := w.client.CheckInstanceConfiguration(); err != nil {
+			return err
+		}
 		if err := w.store.SetImportStatus(ctx, job.OrgID, job.ImportID, StateCheckingAI, nil); err != nil {
 			return err
 		}
@@ -98,12 +105,21 @@ func (w *Worker) process(ctx context.Context, job Job) error {
 		if len(missing) != 0 {
 			return w.store.SetImportStatus(ctx, job.OrgID, job.ImportID, StateWaitingAI, missing)
 		}
-		plaintext, err := w.store.CreateImportToken(ctx, job.OrgID, time.Now().AddDate(10, 0, 0))
+		if err := w.client.PutImportVariables(ctx, installation.GitHubInstallationID, repository); err != nil {
+			return err
+		}
+		needsToken, err := w.client.NeedsImportToken(ctx, installation.GitHubInstallationID, repository)
 		if err != nil {
 			return err
 		}
-		if err := w.client.PutImportCredentials(ctx, installation.GitHubInstallationID, repository, plaintext); err != nil {
-			return err
+		if needsToken {
+			plaintext, err := w.store.CreateImportToken(ctx, job.OrgID, repository.FullName, time.Now().AddDate(1, 0, 0))
+			if err != nil {
+				return err
+			}
+			if err := w.client.PutImportToken(ctx, installation.GitHubInstallationID, repository, plaintext); err != nil {
+				return err
+			}
 		}
 		orgName, err := w.store.GetOrgName(ctx, job.OrgID)
 		if err != nil {
@@ -112,14 +128,20 @@ func (w *Worker) process(ctx context.Context, job Job) error {
 		if err := w.client.StartRun(ctx, installation.GitHubInstallationID, *value, repository, orgName); err != nil {
 			return err
 		}
-		return w.store.SetImportStatus(ctx, job.OrgID, job.ImportID, StateRunQueued, nil)
-	case JobOpenPR:
 		url, err := w.client.OpenPullRequest(ctx, installation.GitHubInstallationID, *value, repository)
 		if err != nil {
-			slog.WarnContext(ctx, "GitHub import pull request could not be opened", "import", value.ID, "err", err)
+			return err
+		}
+		if err := w.store.SetImportPullRequest(ctx, job.OrgID, job.ImportID, url); err != nil {
+			return err
+		}
+		return w.store.SetImportRunQueued(ctx, job.OrgID, job.ImportID)
+	case JobOpenPR:
+		if err := w.client.MarkPullRequestReady(ctx, installation.GitHubInstallationID, *value, repository); err != nil {
+			slog.WarnContext(ctx, "GitHub import pull request could not be marked ready for review", "import", value.ID, "err", err)
 			return nil
 		}
-		return w.store.SetImportPullRequest(ctx, job.OrgID, job.ImportID, url)
+		return nil
 	default:
 		return fmt.Errorf("unknown GitHub import job kind %q", job.Kind)
 	}

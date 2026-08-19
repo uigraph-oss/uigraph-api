@@ -198,6 +198,16 @@ func (d *DB) SetImportStatus(ctx context.Context, orgID, importID string, status
 	return nil
 }
 
+func (d *DB) SetImportRunQueued(ctx context.Context, orgID, importID string) error {
+	_, err := d.db.ExecContext(ctx, `
+		UPDATE repository_imports SET status=$3, missing_ai_configuration='{}', updated_at=NOW()
+		WHERE org_id=$1 AND id=$2 AND status=$4`, orgID, importID, githubapp.StateRunQueued, githubapp.StateCheckingAI)
+	if err != nil {
+		return fmt.Errorf("postgres: SetImportRunQueued: %w", err)
+	}
+	return nil
+}
+
 func (d *DB) SetImportPullRequest(ctx context.Context, orgID, importID, url string) error {
 	_, err := d.db.ExecContext(ctx, `
 		UPDATE repository_imports SET pr_url=NULLIF($3,''), updated_at=NOW()
@@ -278,6 +288,9 @@ func (d *DB) RetryJob(ctx context.Context, job githubapp.Job, owner string, next
 		defer func() { _ = tx.Rollback() }()
 		if _, err = tx.ExecContext(ctx, `UPDATE repository_import_jobs SET completed_at=NOW(), last_error=$3, lease_owner=NULL, lease_expires_at=NULL, updated_at=NOW() WHERE id=$1 AND lease_owner=$2`, job.ID, owner, message); err != nil {
 			return err
+		}
+		if job.Kind != githubapp.JobStart {
+			return tx.Commit()
 		}
 		_, err = tx.ExecContext(ctx, `UPDATE repository_imports SET status=$3, error=$4, updated_at=NOW() WHERE org_id=$1 AND id=$2`, job.OrgID, job.ImportID, githubapp.StateFailed, message)
 		if err != nil {
@@ -426,33 +439,57 @@ func (d *DB) ApplyWorkflowJobEvent(ctx context.Context, branch string, runID int
 	return tx.Commit()
 }
 
-func (d *DB) CreateImportToken(ctx context.Context, orgID string, expiresAt time.Time) (string, error) {
-	tx, err := d.db.BeginTx(ctx, nil)
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = tx.Rollback() }()
+const importServiceAccountName = "GitHub Import"
+
+func (d *DB) CreateImportToken(ctx context.Context, orgID, repository string, expiresAt time.Time) (string, error) {
 	var serviceAccountID string
-	err = tx.QueryRowContext(ctx, `SELECT id FROM service_accounts WHERE org_id=$1 AND name='GitHub Onboarding' AND is_internal=TRUE AND deleted_at IS NULL FOR UPDATE`, orgID).Scan(&serviceAccountID)
+	err := d.db.QueryRowContext(ctx, `SELECT id FROM service_accounts WHERE org_id=$1 AND name=$2 AND is_internal=FALSE AND deleted_at IS NULL ORDER BY created_at LIMIT 1`, orgID, importServiceAccountName).Scan(&serviceAccountID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return "", fmt.Errorf("postgres: CreateImportToken: %w", err)
+	}
 	if errors.Is(err, sql.ErrNoRows) {
-		serviceAccountID = uuid.NewString()
-		scopes := make([]string, len(authz.AllScopes))
-		for index, scope := range authz.AllScopes {
+		roleScopes := authz.ScopesForRole(authz.RoleEditor)
+		scopes := make([]string, len(roleScopes))
+		for index, scope := range roleScopes {
 			scopes[index] = string(scope)
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO service_accounts(id,org_id,name,description,scopes,is_internal) VALUES($1,$2,'GitHub Onboarding','Token used by repository onboarding artifact and sync workflows',$3,TRUE)`, serviceAccountID, orgID, pq.Array(scopes))
+		serviceAccountID = uuid.NewString()
+		account := identity.ServiceAccount{
+			ID:          serviceAccountID,
+			OrgID:       orgID,
+			Name:        importServiceAccountName,
+			Description: "Token used by repository import artifact and sync workflows",
+			Scopes:      scopes,
+		}
+		if err := d.CreateServiceAccount(ctx, account); err != nil {
+			return "", err
+		}
 	}
+	tokens, err := d.ListTokens(ctx, serviceAccountID)
 	if err != nil {
 		return "", err
+	}
+	for _, token := range tokens {
+		if token.Name != repository || token.Revoked {
+			continue
+		}
+		if err := d.RevokeToken(ctx, token.ID); err != nil {
+			return "", err
+		}
 	}
 	id, plaintext, hash, err := identity.Generate()
 	if err != nil {
 		return "", err
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO service_account_tokens(id,service_account_id,name,prefix,hash,expires_at) VALUES($1,$2,$3,$4,$5,$6)`, id, serviceAccountID, "GitHub onboarding sync "+id, identity.Prefix(plaintext), hash, expiresAt); err != nil {
-		return "", err
+	token := identity.Token{
+		ID:               id,
+		ServiceAccountID: serviceAccountID,
+		Name:             repository,
+		Prefix:           identity.Prefix(plaintext),
+		Hash:             hash,
+		ExpiresAt:        &expiresAt,
 	}
-	if err = tx.Commit(); err != nil {
+	if err := d.CreateToken(ctx, token); err != nil {
 		return "", err
 	}
 	return plaintext, nil
