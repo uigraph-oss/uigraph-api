@@ -466,7 +466,7 @@ func (h *Handler) reconcileImport(ctx context.Context, value *domain.Import) (bo
 		return false, err
 	}
 	if len(steps) != 0 {
-		if err := h.store.ApplyWorkflowJobEvent(ctx, run.HeadBranch, run.ID, steps); err != nil {
+		if err := h.store.ApplyWorkflowJobEvent(ctx, run.HeadBranch, run.ID, run.RunAttempt, steps); err != nil {
 			return false, err
 		}
 	}
@@ -605,7 +605,7 @@ func (h *Handler) Webhook(w http.ResponseWriter, r *http.Request) {
 		}
 		job := payload.WorkflowJob
 		steps := domain.JobSteps(job.GetID(), job.GetName(), job.Steps)
-		err = h.store.ApplyWorkflowJobEvent(r.Context(), job.GetHeadBranch(), job.GetRunID(), steps)
+		err = h.store.ApplyWorkflowJobEvent(r.Context(), job.GetHeadBranch(), job.GetRunID(), int(job.GetRunAttempt()), steps)
 		if err != nil {
 			httpError(w, r, err)
 			return

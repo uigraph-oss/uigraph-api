@@ -42,6 +42,7 @@ type Client struct {
 
 type WorkflowRun struct {
 	ID         int64  `json:"id"`
+	RunAttempt int    `json:"run_attempt"`
 	Event      string `json:"event"`
 	Status     string `json:"status"`
 	Conclusion string `json:"conclusion"`

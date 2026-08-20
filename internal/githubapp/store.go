@@ -24,6 +24,6 @@ type Store interface {
 	RetryJob(ctx context.Context, job Job, owner string, next time.Time, message string) error
 	RecordWebhook(ctx context.Context, deliveryID, event, action string, installationID int64) (bool, error)
 	ApplyWorkflowRunEvent(ctx context.Context, run WorkflowRun, repositoryURL string) error
-	ApplyWorkflowJobEvent(ctx context.Context, branch string, runID int64, steps []Step) error
+	ApplyWorkflowJobEvent(ctx context.Context, branch string, runID int64, runAttempt int, steps []Step) error
 	CreateImportToken(ctx context.Context, orgID, repository string, expiresAt time.Time) (plaintext string, err error)
 }

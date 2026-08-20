@@ -194,7 +194,8 @@ func (d *DB) SetImportPullRequest(ctx context.Context, orgID, importID, url stri
 
 func (d *DB) ResumeImportRun(ctx context.Context, orgID, importID string) error {
 	result, err := d.db.ExecContext(ctx, `
-		UPDATE repository_imports SET status=$3, error=NULL, run_completed_at=NULL, completed_at=NULL, updated_at=NOW()
+		UPDATE repository_imports SET status=$3, error=NULL, steps='[]', run_attempt=run_attempt+1,
+		run_started_at=NOW(), run_completed_at=NULL, completed_at=NULL, updated_at=NOW()
 		WHERE org_id=$1 AND id=$2 AND status=$4 AND run_id IS NOT NULL`,
 		orgID, importID, githubapp.StateRunRunning, githubapp.StateFailed)
 	if err != nil {
@@ -228,7 +229,7 @@ func (d *DB) RetryImport(ctx context.Context, orgID, importID string) error {
 		return store.ErrConflict
 	}
 	if _, err = tx.ExecContext(ctx, `
-		UPDATE repository_imports SET status=$3, error=NULL, run_id=NULL, run_url=NULL, steps='[]',
+		UPDATE repository_imports SET status=$3, error=NULL, run_id=NULL, run_url=NULL, steps='[]', run_attempt=1,
 		run_started_at=NULL, run_completed_at=NULL, completed_at=NULL, updated_at=NOW()
 		WHERE org_id=$1 AND id=$2`, orgID, importID, githubapp.StateSelected); err != nil {
 		return err
@@ -311,8 +312,9 @@ func (d *DB) ApplyWorkflowRunEvent(ctx context.Context, run githubapp.WorkflowRu
 	defer func() { _ = tx.Rollback() }()
 	var orgID, importID string
 	var currentRunID int64
+	var currentAttempt int
 	err = tx.QueryRowContext(ctx, activeImportSelect+` FOR UPDATE`, run.HeadBranch).Scan(
-		&orgID, &importID, &currentRunID)
+		&orgID, &importID, &currentRunID, &currentAttempt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
@@ -320,6 +322,9 @@ func (d *DB) ApplyWorkflowRunEvent(ctx context.Context, run githubapp.WorkflowRu
 		return err
 	}
 	if run.ID < currentRunID {
+		return nil
+	}
+	if run.ID == currentRunID && run.RunAttempt != 0 && run.RunAttempt < currentAttempt {
 		return nil
 	}
 	if run.Status != "completed" {
@@ -366,10 +371,10 @@ func (d *DB) ApplyWorkflowRunEvent(ctx context.Context, run githubapp.WorkflowRu
 // repository triggers afterwards — including every later uigraph-sync run — are
 // ignored outright.
 const activeImportSelect = `
-	SELECT org_id,id,COALESCE(run_id,0) FROM repository_imports
+	SELECT org_id,id,COALESCE(run_id,0),run_attempt FROM repository_imports
 	WHERE branch=$1 AND status NOT IN ('completed','failed')`
 
-func (d *DB) ApplyWorkflowJobEvent(ctx context.Context, branch string, runID int64, steps []githubapp.Step) error {
+func (d *DB) ApplyWorkflowJobEvent(ctx context.Context, branch string, runID int64, runAttempt int, steps []githubapp.Step) error {
 	if len(steps) == 0 {
 		return nil
 	}
@@ -380,8 +385,9 @@ func (d *DB) ApplyWorkflowJobEvent(ctx context.Context, branch string, runID int
 	defer func() { _ = tx.Rollback() }()
 	var orgID, importID string
 	var currentRunID int64
+	var currentAttempt int
 	err = tx.QueryRowContext(ctx, activeImportSelect+` FOR UPDATE`, branch).Scan(
-		&orgID, &importID, &currentRunID)
+		&orgID, &importID, &currentRunID, &currentAttempt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
@@ -389,6 +395,9 @@ func (d *DB) ApplyWorkflowJobEvent(ctx context.Context, branch string, runID int
 		return err
 	}
 	if runID < currentRunID {
+		return nil
+	}
+	if runID == currentRunID && runAttempt != 0 && runAttempt < currentAttempt {
 		return nil
 	}
 	var existing []byte
