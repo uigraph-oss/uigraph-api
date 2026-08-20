@@ -1,4 +1,4 @@
-name: UiGraph Onboarding
+name: UiGraph GitHub Repo Import
 
 on:
   push:
@@ -14,6 +14,7 @@ concurrency:
 
 jobs:
   onboard:
+    name: Import repository
     if: github.event.head_commit.author.name == 'uigraph-onboarding[bot]'
     runs-on: ubuntu-latest
     outputs:
