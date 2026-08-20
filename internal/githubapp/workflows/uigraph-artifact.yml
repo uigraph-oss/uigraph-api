@@ -19,6 +19,7 @@ concurrency:
 
 jobs:
   update:
+    name: Update repository artifacts
     runs-on: ubuntu-latest
     steps:
       - name: Validating configuration
