@@ -9,8 +9,6 @@ type State string
 
 const (
 	StateSelected   State = "selected"
-	StateCheckingAI State = "checking_ai_configuration"
-	StateWaitingAI  State = "waiting_ai_configuration"
 	StateRunQueued  State = "run_queued"
 	StateRunRunning State = "run_running"
 	StateCompleted  State = "completed"
@@ -19,7 +17,7 @@ const (
 
 func (s State) Validate() error {
 	switch s {
-	case StateSelected, StateCheckingAI, StateWaitingAI, StateRunQueued, StateRunRunning, StateCompleted, StateFailed:
+	case StateSelected, StateRunQueued, StateRunRunning, StateCompleted, StateFailed:
 		return nil
 	default:
 		return fmt.Errorf("invalid repository import state %q", s)
@@ -60,26 +58,25 @@ type Step struct {
 }
 
 type Import struct {
-	ID                     string     `json:"id"`
-	OrgID                  string     `json:"-"`
-	GitHubOwnerID          int64      `json:"githubOwnerId"`
-	GitHubRepo             string     `json:"githubRepo"`
-	TeamID                 string     `json:"teamId"`
-	TeamName               string     `json:"team"`
-	Status                 State      `json:"status"`
-	Steps                  []Step     `json:"steps"`
-	Branch                 string     `json:"branch"`
-	RunID                  int64      `json:"-"`
-	RunURL                 string     `json:"runUrl,omitempty"`
-	PRURL                  string     `json:"prUrl,omitempty"`
-	MissingAIConfiguration []string   `json:"missingAIConfiguration"`
-	Error                  string     `json:"error,omitempty"`
-	ServiceID              string     `json:"serviceId,omitempty"`
-	CreatedAt              time.Time  `json:"createdAt"`
-	UpdatedAt              time.Time  `json:"updatedAt"`
-	RunStartedAt           *time.Time `json:"runStartedAt,omitempty"`
-	RunCompletedAt         *time.Time `json:"runCompletedAt,omitempty"`
-	CompletedAt            *time.Time `json:"completedAt,omitempty"`
+	ID             string     `json:"id"`
+	OrgID          string     `json:"-"`
+	GitHubOwnerID  int64      `json:"githubOwnerId"`
+	GitHubRepo     string     `json:"githubRepo"`
+	TeamID         string     `json:"teamId"`
+	TeamName       string     `json:"team"`
+	Status         State      `json:"status"`
+	Steps          []Step     `json:"steps"`
+	Branch         string     `json:"branch"`
+	RunID          int64      `json:"-"`
+	RunURL         string     `json:"runUrl,omitempty"`
+	PRURL          string     `json:"prUrl,omitempty"`
+	Error          string     `json:"error,omitempty"`
+	ServiceID      string     `json:"serviceId,omitempty"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	UpdatedAt      time.Time  `json:"updatedAt"`
+	RunStartedAt   *time.Time `json:"runStartedAt,omitempty"`
+	RunCompletedAt *time.Time `json:"runCompletedAt,omitempty"`
+	CompletedAt    *time.Time `json:"completedAt,omitempty"`
 }
 
 type Job struct {

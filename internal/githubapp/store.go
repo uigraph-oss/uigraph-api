@@ -15,10 +15,9 @@ type Store interface {
 	CreateImport(ctx context.Context, orgID, teamID string, ownerID int64, repo string) (*Import, error)
 	GetImport(ctx context.Context, orgID, importID string) (*Import, error)
 	GetLatestImport(ctx context.Context, orgID string) (*Import, error)
-	SetImportStatus(ctx context.Context, orgID, importID string, status State, missingAIConfiguration []string) error
 	SetImportRunQueued(ctx context.Context, orgID, importID string) error
 	SetImportPullRequest(ctx context.Context, orgID, importID, url string) error
-	RetryImport(ctx context.Context, orgID, importID string, recheck bool) error
+	RetryImport(ctx context.Context, orgID, importID string) error
 	ClaimJob(ctx context.Context, owner string, lease time.Duration) (*Job, error)
 	CompleteJob(ctx context.Context, jobID, owner string) error
 	RetryJob(ctx context.Context, job Job, owner string, next time.Time, message string) error

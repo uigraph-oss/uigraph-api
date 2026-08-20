@@ -71,13 +71,14 @@ func Workflows(defaultBranch string) (map[string][]byte, error) {
 	if defaultBranch == "" {
 		return nil, fmt.Errorf("workflows: repository default branch is empty")
 	}
+	replacer := strings.NewReplacer("${DEFAULT_BRANCH}", defaultBranch)
 	files := make(map[string][]byte, 3)
 	for _, path := range []string{ArtifactWorkflowPath, SyncWorkflowPath, OnboardingWorkflowPath} {
 		content, err := workflowFiles.ReadFile("workflows/" + strings.TrimPrefix(path, ".github/workflows/"))
 		if err != nil {
 			return nil, err
 		}
-		files[path] = []byte(strings.ReplaceAll(string(content), "${DEFAULT_BRANCH}", defaultBranch))
+		files[path] = []byte(replacer.Replace(string(content)))
 	}
 	return files, nil
 }
