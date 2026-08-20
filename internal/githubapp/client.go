@@ -354,6 +354,18 @@ func (c *Client) ListWorkflowRunJobs(ctx context.Context, installationID int64, 
 	return steps, nil
 }
 
+func (c *Client) RerunFailedJobs(ctx context.Context, installationID int64, repository Repository, runID int64) error {
+	client, err := c.installationClient(ctx, installationID)
+	if err != nil {
+		return err
+	}
+	path := fmt.Sprintf("repos/%s/%s/actions/runs/%d/rerun-failed-jobs", repository.Owner, repository.Name, runID)
+	if err := c.do(ctx, client, http.MethodPost, path, nil, nil); err != nil {
+		return fmt.Errorf("rerun failed jobs: %w", err)
+	}
+	return nil
+}
+
 func JobSteps(jobID int64, jobName string, steps []*gh.TaskStep) []Step {
 	out := make([]Step, 0, len(steps))
 	for _, step := range steps {

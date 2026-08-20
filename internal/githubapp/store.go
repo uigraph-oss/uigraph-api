@@ -18,6 +18,7 @@ type Store interface {
 	SetImportRunQueued(ctx context.Context, orgID, importID string) error
 	SetImportPullRequest(ctx context.Context, orgID, importID, url string) error
 	RetryImport(ctx context.Context, orgID, importID string) error
+	ResumeImportRun(ctx context.Context, orgID, importID string) error
 	ClaimJob(ctx context.Context, owner string, lease time.Duration) (*Job, error)
 	CompleteJob(ctx context.Context, jobID, owner string) error
 	RetryJob(ctx context.Context, job Job, owner string, next time.Time, message string) error

@@ -39,6 +39,7 @@ type Client interface {
 	DeleteInstallation(ctx context.Context, installationID int64) error
 	GetWorkflowRun(ctx context.Context, installationID int64, repository domain.Repository, branch string, runID int64) (domain.WorkflowRun, error)
 	ListWorkflowRunJobs(ctx context.Context, installationID int64, repository domain.Repository, runID int64) ([]domain.Step, error)
+	RerunFailedJobs(ctx context.Context, installationID int64, repository domain.Repository, runID int64) error
 }
 
 type Handler struct {
@@ -72,6 +73,7 @@ func Register(mux *http.ServeMux, h *Handler, requireScope func(scope, method, p
 	requireScope("integrations:read", "GET", "/api/v1/orgs/{orgID}/repository-imports/latest", h.GetLatestImport)
 	requireScope("integrations:read", "GET", "/api/v1/orgs/{orgID}/repository-imports/{importID}", h.GetImport)
 	requireScope("integrations:write", "POST", "/api/v1/orgs/{orgID}/repository-imports/{importID}/retry", h.Retry)
+	requireScope("integrations:write", "POST", "/api/v1/orgs/{orgID}/repository-imports/{importID}/rerun-failed-jobs", h.RerunFailedJobs)
 	mux.HandleFunc("GET /api/v1/github-app/callback", h.Callback)
 	if len(h.webhookSecret) != 0 {
 		mux.HandleFunc("POST /api/v1/github-app/webhooks", h.Webhook)
@@ -489,6 +491,59 @@ func (h *Handler) Retry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httputil.JSON(w, http.StatusAccepted, value)
+}
+
+// @Summary Re-run the failed jobs of a repository import run
+// @Tags integrations
+// @Security BearerAuth
+// @Param orgID path string true "Organization ID"
+// @Param importID path string true "Import ID"
+// @Success 202
+// @Router /orgs/{orgID}/repository-imports/{importID}/rerun-failed-jobs [post]
+func (h *Handler) RerunFailedJobs(w http.ResponseWriter, r *http.Request) {
+	orgID, importID := r.PathValue("orgID"), r.PathValue("importID")
+	value, err := h.store.GetImport(r.Context(), orgID, importID)
+	if err != nil {
+		httpError(w, r, err)
+		return
+	}
+	if h.client == nil || value.RunID == 0 {
+		httputil.BadRequest(w, "this import has no GitHub Actions run to re-run")
+		return
+	}
+	installation, err := h.store.GetInstallation(r.Context(), orgID)
+	if err != nil {
+		httpError(w, r, err)
+		return
+	}
+	if installation == nil {
+		httputil.BadRequest(w, "this organization has no GitHub App installation")
+		return
+	}
+	account, err := h.client.GetInstallationAccount(r.Context(), installation.GitHubInstallationID)
+	if err != nil {
+		httpError(w, r, err)
+		return
+	}
+	repository, err := h.client.GetRepository(r.Context(), installation.GitHubInstallationID, account.AccountLogin, value.GitHubRepo)
+	if err != nil {
+		httpError(w, r, err)
+		return
+	}
+	if err := h.client.RerunFailedJobs(r.Context(), installation.GitHubInstallationID, repository, value.RunID); err != nil {
+		httpError(w, r, err)
+		return
+	}
+	if err := h.store.ResumeImportRun(r.Context(), orgID, importID); err != nil {
+		httpError(w, r, err)
+		return
+	}
+	refreshed, err := h.store.GetImport(r.Context(), orgID, importID)
+	if err != nil {
+		httpError(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusAccepted, refreshed)
 }
 
 // @Summary Receive signed GitHub App webhooks

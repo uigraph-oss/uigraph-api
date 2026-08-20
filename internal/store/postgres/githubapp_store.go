@@ -192,6 +192,24 @@ func (d *DB) SetImportPullRequest(ctx context.Context, orgID, importID, url stri
 	return nil
 }
 
+func (d *DB) ResumeImportRun(ctx context.Context, orgID, importID string) error {
+	result, err := d.db.ExecContext(ctx, `
+		UPDATE repository_imports SET status=$3, error=NULL, run_completed_at=NULL, completed_at=NULL, updated_at=NOW()
+		WHERE org_id=$1 AND id=$2 AND status=$4 AND run_id IS NOT NULL`,
+		orgID, importID, githubapp.StateRunRunning, githubapp.StateFailed)
+	if err != nil {
+		return fmt.Errorf("postgres: ResumeImportRun: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("postgres: ResumeImportRun: %w", err)
+	}
+	if affected == 0 {
+		return store.ErrConflict
+	}
+	return nil
+}
+
 func (d *DB) RetryImport(ctx context.Context, orgID, importID string) error {
 	tx, err := d.db.BeginTx(ctx, nil)
 	if err != nil {
