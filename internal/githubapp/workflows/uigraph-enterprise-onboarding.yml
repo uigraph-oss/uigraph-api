@@ -26,16 +26,12 @@ jobs:
           AI_PROVIDER_MODEL: ${{ secrets.AI_PROVIDER_MODEL || vars.AI_PROVIDER_MODEL }}
           AI_PROVIDER_API_URL: ${{ secrets.AI_PROVIDER_API_URL || vars.AI_PROVIDER_API_URL }}
           AI_PROVIDER_NPM: ${{ secrets.AI_PROVIDER_NPM || vars.AI_PROVIDER_NPM }}
-          UIGRAPH_API_URL: ${{ vars.UIGRAPH_API_URL || secrets.UIGRAPH_API_URL }}
-          UIGRAPH_GATEWAY_URL: ${{ vars.UIGRAPH_GATEWAY_URL || secrets.UIGRAPH_GATEWAY_URL }}
           UIGRAPH_TOKEN: ${{ secrets.UIGRAPH_TOKEN }}
         run: |
           missing=""
           test -n "$AI_PROVIDER_API_KEY" || missing="$missing AI_PROVIDER_API_KEY"
           test -n "$AI_PROVIDER_MODEL" || missing="$missing AI_PROVIDER_MODEL"
           test -n "$AI_PROVIDER_API_URL" || test -n "$AI_PROVIDER_NPM" || missing="$missing AI_PROVIDER_API_URL|AI_PROVIDER_NPM"
-          test -n "$UIGRAPH_API_URL" || missing="$missing UIGRAPH_API_URL"
-          test -n "$UIGRAPH_GATEWAY_URL" || missing="$missing UIGRAPH_GATEWAY_URL"
           test -n "$UIGRAPH_TOKEN" || missing="$missing UIGRAPH_TOKEN"
           test -z "$missing" || { printf 'Missing required configuration:%s\n' "$missing"; exit 1; }
       - uses: actions/checkout@v4
@@ -48,9 +44,8 @@ jobs:
           AI_PROVIDER_MODEL: ${{ secrets.AI_PROVIDER_MODEL || vars.AI_PROVIDER_MODEL }}
           AI_PROVIDER_API_URL: ${{ secrets.AI_PROVIDER_API_URL || vars.AI_PROVIDER_API_URL }}
           AI_PROVIDER_NPM: ${{ secrets.AI_PROVIDER_NPM || vars.AI_PROVIDER_NPM }}
-          UIGRAPH_API_URL: ${{ vars.UIGRAPH_API_URL || secrets.UIGRAPH_API_URL }}
           UIGRAPH_TOKEN: ${{ secrets.UIGRAPH_TOKEN }}
-        run: npx --yes @uigraph/agents artifacts init --seeded
+        run: npx --yes @uigraph/agents artifacts init --seeded --enterprise
       - name: Restrict generated changes
         run: |
           unexpected=$(git status --porcelain | awk '{print $2}' | grep -Ev '^(.uigraph.yaml|.uigraph/)' || true)
@@ -75,7 +70,7 @@ jobs:
     name: Sync to UiGraph
     needs: onboard
     if: needs.onboard.outputs.sha != ''
-    uses: ./.github/workflows/uigraph-sync.yml
+    uses: ./.github/workflows/uigraph-enterprise-sync.yml
     with:
       ref: ${{ needs.onboard.outputs.sha }}
     secrets: inherit

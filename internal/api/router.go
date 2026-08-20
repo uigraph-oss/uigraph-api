@@ -298,7 +298,7 @@ func New(s store.Store, bearer authmw.BearerVerifier, cfg *config.Config, st sto
 		if githubClient != nil {
 			client = githubClient
 		}
-		githubHandler := githubappapi.New(githubStore, client, callbackURL, cfg.GitHubWebhookSecret)
+		githubHandler := githubappapi.New(githubStore, client, callbackURL, cfg.GitHubWebhookSecret, cfg.PublicURL, cfg.GatewayURL)
 		githubappapi.Register(mux, githubHandler, scopeFn)
 	}
 

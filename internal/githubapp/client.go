@@ -22,7 +22,6 @@ import (
 	"time"
 
 	gh "github.com/google/go-github/v74/github"
-	"golang.org/x/crypto/nacl/box"
 )
 
 type ClientConfig struct {
@@ -33,8 +32,7 @@ type ClientConfig struct {
 	PrivateKeyBase64 string
 	APIURL           string
 	WebURL           string
-	GatewayURL       string
-	PublicURL        string
+	Enterprise       bool
 }
 
 type Client struct {
@@ -45,6 +43,7 @@ type Client struct {
 
 type WorkflowRun struct {
 	ID         int64  `json:"id"`
+	RunAttempt int    `json:"run_attempt"`
 	Event      string `json:"event"`
 	Status     string `json:"status"`
 	Conclusion string `json:"conclusion"`
@@ -268,7 +267,7 @@ func (c *Client) StartRun(ctx context.Context, installationID int64, value Impor
 	if err != nil {
 		return err
 	}
-	files, err := Workflows(repository.DefaultBranch)
+	files, err := Workflows(repository.DefaultBranch, c.config.Enterprise)
 	if err != nil {
 		return err
 	}
@@ -303,72 +302,6 @@ func (c *Client) OpenPullRequest(ctx context.Context, installationID int64, valu
 	return created.HTMLURL, nil
 }
 
-func (c *Client) MissingAIConfiguration(ctx context.Context, installationID int64, repository Repository) ([]string, error) {
-	client, err := c.installationClient(ctx, installationID)
-	if err != nil {
-		return nil, err
-	}
-	owner, repo, account := repository.Owner, repository.Name, repository.Owner
-	secrets, err := c.actionsNames(ctx, client, fmt.Sprintf("repos/%s/%s/actions/secrets?per_page=100", owner, repo), "secrets")
-	if err != nil {
-		return nil, err
-	}
-	orgSecrets, err := c.actionsNames(ctx, client, fmt.Sprintf("orgs/%s/actions/secrets?per_page=100", account), "secrets")
-	if err != nil {
-		return nil, err
-	}
-	variables, err := c.actionsNames(ctx, client, fmt.Sprintf("repos/%s/%s/actions/variables?per_page=100", owner, repo), "variables")
-	if err != nil {
-		return nil, err
-	}
-	orgVariables, err := c.actionsNames(ctx, client, fmt.Sprintf("orgs/%s/actions/variables?per_page=100", account), "variables")
-	if err != nil {
-		return nil, err
-	}
-	secret := maps.Clone(secrets)
-	maps.Copy(secret, orgSecrets)
-	configured := maps.Clone(secret)
-	maps.Copy(configured, variables)
-	maps.Copy(configured, orgVariables)
-	missing := make([]string, 0, 4)
-	if !secret["AI_PROVIDER_API_KEY"] {
-		missing = append(missing, "AI_PROVIDER_API_KEY")
-	}
-	if !configured["AI_PROVIDER_MODEL"] {
-		missing = append(missing, "AI_PROVIDER_MODEL")
-	}
-	if !configured["AI_PROVIDER_API_URL"] && !configured["AI_PROVIDER_NPM"] {
-		missing = append(missing, "AI_PROVIDER_API_URL", "AI_PROVIDER_NPM")
-	}
-	return missing, nil
-}
-
-func (c *Client) actionsNames(ctx context.Context, client *gh.Client, path, key string) (map[string]bool, error) {
-	names := map[string]bool{}
-	var response map[string]json.RawMessage
-	if err := c.do(ctx, client, http.MethodGet, path, nil, &response); err != nil {
-		var apiError *gh.ErrorResponse
-		if errors.As(err, &apiError) && apiError.Response != nil && apiError.Response.StatusCode == http.StatusNotFound {
-			return names, nil
-		}
-		return nil, err
-	}
-	raw, ok := response[key]
-	if !ok {
-		return names, nil
-	}
-	var values []struct {
-		Name string `json:"name"`
-	}
-	if err := json.Unmarshal(raw, &values); err != nil {
-		return nil, err
-	}
-	for _, value := range values {
-		names[value.Name] = true
-	}
-	return names, nil
-}
-
 func (c *Client) GetWorkflowRun(ctx context.Context, installationID int64, repository Repository, branch string, runID int64) (WorkflowRun, error) {
 	client, err := c.installationClient(ctx, installationID)
 	if err != nil {
@@ -391,7 +324,7 @@ func (c *Client) GetWorkflowRun(ctx context.Context, installationID int64, repos
 	}
 	latest := WorkflowRun{}
 	for _, run := range response.WorkflowRuns {
-		if run.Path != OnboardingWorkflowPath {
+		if !IsOnboardingWorkflowPath(run.Path) {
 			continue
 		}
 		if run.ID > latest.ID {
@@ -423,6 +356,18 @@ func (c *Client) ListWorkflowRunJobs(ctx context.Context, installationID int64, 
 	return steps, nil
 }
 
+func (c *Client) RerunFailedJobs(ctx context.Context, installationID int64, repository Repository, runID int64) error {
+	client, err := c.installationClient(ctx, installationID)
+	if err != nil {
+		return err
+	}
+	path := fmt.Sprintf("repos/%s/%s/actions/runs/%d/rerun-failed-jobs", repository.Owner, repository.Name, runID)
+	if err := c.do(ctx, client, http.MethodPost, path, nil, nil); err != nil {
+		return fmt.Errorf("rerun failed jobs: %w", err)
+	}
+	return nil
+}
+
 func JobSteps(jobID int64, jobName string, steps []*gh.TaskStep) []Step {
 	out := make([]Step, 0, len(steps))
 	for _, step := range steps {
@@ -443,95 +388,7 @@ func JobSteps(jobID int64, jobName string, steps []*gh.TaskStep) []Step {
 	return out
 }
 
-const (
-	TokenSecret     = "UIGRAPH_TOKEN"
-	GatewayVariable = "UIGRAPH_GATEWAY_URL"
-	APIVariable     = "UIGRAPH_API_URL"
-)
-
-func (c *Client) CheckInstanceConfiguration() error {
-	if c.config.GatewayURL == "" {
-		return fmt.Errorf("githubapp: UIGRAPH_GATEWAY_URL is not configured on this UiGraph instance")
-	}
-	if c.config.PublicURL == "" {
-		return fmt.Errorf("githubapp: UIGRAPH_PUBLIC_URL is not configured on this UiGraph instance")
-	}
-	return nil
-}
-
-func (c *Client) PutImportVariables(ctx context.Context, installationID int64, repository Repository) error {
-	values := map[string]string{GatewayVariable: c.config.GatewayURL, APIVariable: c.config.PublicURL}
-	client, err := c.installationClient(ctx, installationID)
-	if err != nil {
-		return err
-	}
-	owner, repo := repository.Owner, repository.Name
-	existing, err := c.actionsNames(ctx, client, fmt.Sprintf("repos/%s/%s/actions/variables?per_page=100", owner, repo), "variables")
-	if err != nil {
-		return err
-	}
-	orgExisting, err := c.actionsNames(ctx, client, fmt.Sprintf("orgs/%s/actions/variables?per_page=100", owner), "variables")
-	if err != nil {
-		return err
-	}
-	maps.Copy(existing, orgExisting)
-	for _, name := range []string{GatewayVariable, APIVariable} {
-		if existing[name] {
-			continue
-		}
-		variable := map[string]any{"name": name, "value": values[name]}
-		if err := c.putVariable(ctx, client, fmt.Sprintf("repos/%s/%s/actions/variables", owner, repo), name, variable); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (c *Client) NeedsImportToken(ctx context.Context, installationID int64, repository Repository) (bool, error) {
-	client, err := c.installationClient(ctx, installationID)
-	if err != nil {
-		return false, err
-	}
-	owner, repo := repository.Owner, repository.Name
-	secrets, err := c.actionsNames(ctx, client, fmt.Sprintf("repos/%s/%s/actions/secrets?per_page=100", owner, repo), "secrets")
-	if err != nil {
-		return false, err
-	}
-	if secrets[TokenSecret] {
-		return false, nil
-	}
-	orgSecrets, err := c.actionsNames(ctx, client, fmt.Sprintf("orgs/%s/actions/secrets?per_page=100", owner), "secrets")
-	if err != nil {
-		return false, err
-	}
-	return !orgSecrets[TokenSecret], nil
-}
-
-func (c *Client) PutImportToken(ctx context.Context, installationID int64, repository Repository, plaintext string) error {
-	client, err := c.installationClient(ctx, installationID)
-	if err != nil {
-		return err
-	}
-	owner, repo := repository.Owner, repository.Name
-	keyID, encrypted, err := c.encryptSecret(ctx, client, fmt.Sprintf("repos/%s/%s/actions/secrets/public-key", owner, repo), plaintext)
-	if err != nil {
-		return err
-	}
-	secret := map[string]any{"encrypted_value": encrypted, "key_id": keyID}
-	return c.do(ctx, client, http.MethodPut, fmt.Sprintf("repos/%s/%s/actions/secrets/%s", owner, repo, TokenSecret), secret, nil)
-}
-
-func (c *Client) putVariable(ctx context.Context, client *gh.Client, collection, name string, payload map[string]any) error {
-	err := c.do(ctx, client, http.MethodPatch, collection+"/"+name, payload, nil)
-	if err == nil {
-		return nil
-	}
-	var apiError *gh.ErrorResponse
-	if errors.As(err, &apiError) && apiError.Response != nil && apiError.Response.StatusCode == http.StatusNotFound {
-		return c.do(ctx, client, http.MethodPost, collection, payload, nil)
-	}
-	return err
-}
+const TokenSecret = "UIGRAPH_TOKEN"
 
 func (c *Client) createAtomicCommit(ctx context.Context, client *gh.Client, owner, repo, base, branch string, files map[string][]byte) error {
 	var ref struct {
@@ -610,27 +467,6 @@ func (c *Client) findPullRequest(ctx context.Context, client *gh.Client, owner, 
 		}
 	}
 	return pullRequest{}, nil
-}
-
-func (c *Client) encryptSecret(ctx context.Context, client *gh.Client, path, plaintext string) (string, string, error) {
-	var publicKey struct {
-		KeyID string `json:"key_id"`
-		Key   string `json:"key"`
-	}
-	if err := c.do(ctx, client, http.MethodGet, path, nil, &publicKey); err != nil {
-		return "", "", err
-	}
-	decoded, err := base64.StdEncoding.DecodeString(publicKey.Key)
-	if err != nil || len(decoded) != 32 {
-		return "", "", errors.New("invalid GitHub Actions public key")
-	}
-	var key [32]byte
-	copy(key[:], decoded)
-	encrypted, err := box.SealAnonymous(nil, []byte(plaintext), &key, rand.Reader)
-	if err != nil {
-		return "", "", err
-	}
-	return publicKey.KeyID, base64.StdEncoding.EncodeToString(encrypted), nil
 }
 
 func (c *Client) installationClient(ctx context.Context, installationID int64) (*gh.Client, error) {

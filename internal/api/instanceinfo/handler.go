@@ -12,12 +12,13 @@ import (
 )
 
 type Handler struct {
+	enterprise bool
 	billingURL string
 	githubApp  bool
 }
 
 func New(cfg *config.Config) *Handler {
-	return &Handler{billingURL: cfg.EnterpriseBillingURL, githubApp: cfg.GitHubAppConfigured}
+	return &Handler{enterprise: cfg.Enterprise, billingURL: cfg.EnterpriseBillingURL, githubApp: cfg.GitHubAppConfigured}
 }
 
 type response struct {
@@ -32,7 +33,7 @@ type response struct {
 // GET /api/v1/instance-info
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, response{
-		EnterpriseEnabled: h.billingURL != "",
+		EnterpriseEnabled: h.enterprise,
 		BillingURL:        h.billingURL,
 		GitHubEnabled:     h.githubApp,
 	})

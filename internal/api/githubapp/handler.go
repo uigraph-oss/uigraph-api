@@ -39,7 +39,7 @@ type Client interface {
 	DeleteInstallation(ctx context.Context, installationID int64) error
 	GetWorkflowRun(ctx context.Context, installationID int64, repository domain.Repository, branch string, runID int64) (domain.WorkflowRun, error)
 	ListWorkflowRunJobs(ctx context.Context, installationID int64, repository domain.Repository, runID int64) ([]domain.Step, error)
-	MissingAIConfiguration(ctx context.Context, installationID int64, repository domain.Repository) ([]string, error)
+	RerunFailedJobs(ctx context.Context, installationID int64, repository domain.Repository, runID int64) error
 }
 
 type Handler struct {
@@ -47,23 +47,33 @@ type Handler struct {
 	client        Client
 	callbackURL   string
 	webhookSecret []byte
+	apiURL        string
+	gatewayURL    string
 }
 
-func New(store domain.Store, client Client, callbackURL, webhookSecret string) *Handler {
-	return &Handler{store: store, client: client, callbackURL: callbackURL, webhookSecret: []byte(webhookSecret)}
+func New(store domain.Store, client Client, callbackURL, webhookSecret, apiURL, gatewayURL string) *Handler {
+	return &Handler{
+		store:         store,
+		client:        client,
+		callbackURL:   callbackURL,
+		webhookSecret: []byte(webhookSecret),
+		apiURL:        apiURL,
+		gatewayURL:    gatewayURL,
+	}
 }
 
 func Register(mux *http.ServeMux, h *Handler, requireScope func(scope, method, pattern string, handler http.HandlerFunc)) {
 	requireScope("integrations:read", "GET", "/api/v1/orgs/{orgID}/github-app", h.GetInstallation)
+	requireScope("integrations:read", "GET", "/api/v1/orgs/{orgID}/github-app/environment", h.GetImportEnvironment)
 	requireScope("integrations:write", "POST", "/api/v1/orgs/{orgID}/github-app/install", h.Install)
 	requireScope("integrations:write", "DELETE", "/api/v1/orgs/{orgID}/github-app", h.DeleteInstallation)
 	requireScope("integrations:read", "GET", "/api/v1/orgs/{orgID}/github-app/repositories", h.ListRepositories)
-	requireScope("integrations:read", "GET", "/api/v1/orgs/{orgID}/github-app/repositories/{owner}/{repo}/ai-configuration", h.GetRepositoryAIConfiguration)
+	requireScope("integrations:write", "POST", "/api/v1/orgs/{orgID}/github-app/repositories/{owner}/{repo}/import-token", h.CreateImportToken)
 	requireScope("integrations:write", "POST", "/api/v1/orgs/{orgID}/repository-imports", h.CreateImport)
 	requireScope("integrations:read", "GET", "/api/v1/orgs/{orgID}/repository-imports/latest", h.GetLatestImport)
 	requireScope("integrations:read", "GET", "/api/v1/orgs/{orgID}/repository-imports/{importID}", h.GetImport)
-	requireScope("integrations:write", "POST", "/api/v1/orgs/{orgID}/repository-imports/{importID}/recheck", h.Recheck)
 	requireScope("integrations:write", "POST", "/api/v1/orgs/{orgID}/repository-imports/{importID}/retry", h.Retry)
+	requireScope("integrations:write", "POST", "/api/v1/orgs/{orgID}/repository-imports/{importID}/rerun-failed-jobs", h.RerunFailedJobs)
 	mux.HandleFunc("GET /api/v1/github-app/callback", h.Callback)
 	if len(h.webhookSecret) != 0 {
 		mux.HandleFunc("POST /api/v1/github-app/webhooks", h.Webhook)
@@ -272,17 +282,31 @@ func (h *Handler) ListRepositories(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, map[string]any{"repositories": repositories})
 }
 
-// GetRepositoryAIConfiguration reports which AI provider secrets and variables
-// the repository is still missing, before any import is created.
-// @Summary Check repository AI configuration
+// GetImportEnvironment reports the instance URLs the workflows need on the
+// repository. UiGraph no longer writes them itself, so the onboarding UI shows
+// them for the user to copy.
+// @Summary Get the repository import environment
+// @Tags integrations
+// @Security BearerAuth
+// @Param orgID path string true "Organization ID"
+// @Success 200 {object} map[string]string
+// @Router /orgs/{orgID}/github-app/environment [get]
+func (h *Handler) GetImportEnvironment(w http.ResponseWriter, r *http.Request) {
+	httputil.JSON(w, http.StatusOK, map[string]string{"apiUrl": h.apiURL, "gatewayUrl": h.gatewayURL})
+}
+
+// CreateImportToken mints the UiGraph token the workflows authenticate with. The
+// GitHub App cannot write repository secrets, so the plaintext is returned once
+// and the user stores it on the repository themselves.
+// @Summary Create a repository import token
 // @Tags integrations
 // @Security BearerAuth
 // @Param orgID path string true "Organization ID"
 // @Param owner path string true "Repository owner"
 // @Param repo path string true "Repository name"
-// @Success 200 {object} map[string]interface{}
-// @Router /orgs/{orgID}/github-app/repositories/{owner}/{repo}/ai-configuration [get]
-func (h *Handler) GetRepositoryAIConfiguration(w http.ResponseWriter, r *http.Request) {
+// @Success 201 {object} map[string]string
+// @Router /orgs/{orgID}/github-app/repositories/{owner}/{repo}/import-token [post]
+func (h *Handler) CreateImportToken(w http.ResponseWriter, r *http.Request) {
 	if h.client == nil {
 		http.Error(w, `{"error":"GitHub App is not configured","code":503}`, http.StatusServiceUnavailable)
 		return
@@ -305,12 +329,12 @@ func (h *Handler) GetRepositoryAIConfiguration(w http.ResponseWriter, r *http.Re
 		httpError(w, r, err)
 		return
 	}
-	missing, err := h.client.MissingAIConfiguration(r.Context(), installation.GitHubInstallationID, repository)
+	plaintext, err := h.store.CreateImportToken(r.Context(), r.PathValue("orgID"), repository.FullName, time.Now().AddDate(1, 0, 0))
 	if err != nil {
 		httpError(w, r, err)
 		return
 	}
-	httputil.JSON(w, http.StatusOK, map[string]any{"missing": missing, "ready": len(missing) == 0})
+	httputil.JSON(w, http.StatusCreated, map[string]string{"name": domain.TokenSecret, "token": plaintext})
 }
 
 // @Summary Start a repository import
@@ -442,22 +466,11 @@ func (h *Handler) reconcileImport(ctx context.Context, value *domain.Import) (bo
 		return false, err
 	}
 	if len(steps) != 0 {
-		if err := h.store.ApplyWorkflowJobEvent(ctx, run.HeadBranch, run.ID, steps); err != nil {
+		if err := h.store.ApplyWorkflowJobEvent(ctx, run.HeadBranch, run.ID, run.RunAttempt, steps); err != nil {
 			return false, err
 		}
 	}
 	return true, h.store.ApplyWorkflowRunEvent(ctx, run, repository.URL)
-}
-
-// @Summary Recheck repository AI configuration
-// @Tags integrations
-// @Security BearerAuth
-// @Param orgID path string true "Organization ID"
-// @Param importID path string true "Import ID"
-// @Success 202
-// @Router /orgs/{orgID}/repository-imports/{importID}/recheck [post]
-func (h *Handler) Recheck(w http.ResponseWriter, r *http.Request) {
-	h.retry(w, r, true)
 }
 
 // @Summary Retry a failed repository import
@@ -468,11 +481,7 @@ func (h *Handler) Recheck(w http.ResponseWriter, r *http.Request) {
 // @Success 202
 // @Router /orgs/{orgID}/repository-imports/{importID}/retry [post]
 func (h *Handler) Retry(w http.ResponseWriter, r *http.Request) {
-	h.retry(w, r, false)
-}
-
-func (h *Handler) retry(w http.ResponseWriter, r *http.Request, recheck bool) {
-	if err := h.store.RetryImport(r.Context(), r.PathValue("orgID"), r.PathValue("importID"), recheck); err != nil {
+	if err := h.store.RetryImport(r.Context(), r.PathValue("orgID"), r.PathValue("importID")); err != nil {
 		httpError(w, r, err)
 		return
 	}
@@ -482,6 +491,59 @@ func (h *Handler) retry(w http.ResponseWriter, r *http.Request, recheck bool) {
 		return
 	}
 	httputil.JSON(w, http.StatusAccepted, value)
+}
+
+// @Summary Re-run the failed jobs of a repository import run
+// @Tags integrations
+// @Security BearerAuth
+// @Param orgID path string true "Organization ID"
+// @Param importID path string true "Import ID"
+// @Success 202
+// @Router /orgs/{orgID}/repository-imports/{importID}/rerun-failed-jobs [post]
+func (h *Handler) RerunFailedJobs(w http.ResponseWriter, r *http.Request) {
+	orgID, importID := r.PathValue("orgID"), r.PathValue("importID")
+	value, err := h.store.GetImport(r.Context(), orgID, importID)
+	if err != nil {
+		httpError(w, r, err)
+		return
+	}
+	if h.client == nil || value.RunID == 0 {
+		httputil.BadRequest(w, "this import has no GitHub Actions run to re-run")
+		return
+	}
+	installation, err := h.store.GetInstallation(r.Context(), orgID)
+	if err != nil {
+		httpError(w, r, err)
+		return
+	}
+	if installation == nil {
+		httputil.BadRequest(w, "this organization has no GitHub App installation")
+		return
+	}
+	account, err := h.client.GetInstallationAccount(r.Context(), installation.GitHubInstallationID)
+	if err != nil {
+		httpError(w, r, err)
+		return
+	}
+	repository, err := h.client.GetRepository(r.Context(), installation.GitHubInstallationID, account.AccountLogin, value.GitHubRepo)
+	if err != nil {
+		httpError(w, r, err)
+		return
+	}
+	if err := h.client.RerunFailedJobs(r.Context(), installation.GitHubInstallationID, repository, value.RunID); err != nil {
+		httpError(w, r, err)
+		return
+	}
+	if err := h.store.ResumeImportRun(r.Context(), orgID, importID); err != nil {
+		httpError(w, r, err)
+		return
+	}
+	refreshed, err := h.store.GetImport(r.Context(), orgID, importID)
+	if err != nil {
+		httpError(w, r, err)
+		return
+	}
+	httputil.JSON(w, http.StatusAccepted, refreshed)
 }
 
 // @Summary Receive signed GitHub App webhooks
@@ -543,7 +605,7 @@ func (h *Handler) Webhook(w http.ResponseWriter, r *http.Request) {
 		}
 		job := payload.WorkflowJob
 		steps := domain.JobSteps(job.GetID(), job.GetName(), job.Steps)
-		err = h.store.ApplyWorkflowJobEvent(r.Context(), job.GetHeadBranch(), job.GetRunID(), steps)
+		err = h.store.ApplyWorkflowJobEvent(r.Context(), job.GetHeadBranch(), job.GetRunID(), int(job.GetRunAttempt()), steps)
 		if err != nil {
 			httpError(w, r, err)
 			return

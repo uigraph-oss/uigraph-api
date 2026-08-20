@@ -11,12 +11,7 @@ import (
 
 type APIClient interface {
 	StartRun(ctx context.Context, installationID int64, value Import, repository Repository) error
-	MissingAIConfiguration(ctx context.Context, installationID int64, repository Repository) ([]string, error)
 	OpenPullRequest(ctx context.Context, installationID int64, value Import, repository Repository) (string, error)
-	CheckInstanceConfiguration() error
-	PutImportVariables(ctx context.Context, installationID int64, repository Repository) error
-	NeedsImportToken(ctx context.Context, installationID int64, repository Repository) (bool, error)
-	PutImportToken(ctx context.Context, installationID int64, repository Repository, plaintext string) error
 	GetInstallationAccount(ctx context.Context, installationID int64) (Installation, error)
 	GetRepository(ctx context.Context, installationID int64, owner, repo string) (Repository, error)
 }
@@ -91,35 +86,6 @@ func (w *Worker) process(ctx context.Context, job Job) error {
 	}
 	switch job.Kind {
 	case JobStart:
-		if err := w.client.CheckInstanceConfiguration(); err != nil {
-			return err
-		}
-		if err := w.store.SetImportStatus(ctx, job.OrgID, job.ImportID, StateCheckingAI, nil); err != nil {
-			return err
-		}
-		missing, err := w.client.MissingAIConfiguration(ctx, installation.GitHubInstallationID, repository)
-		if err != nil {
-			return err
-		}
-		if len(missing) != 0 {
-			return w.store.SetImportStatus(ctx, job.OrgID, job.ImportID, StateWaitingAI, missing)
-		}
-		if err := w.client.PutImportVariables(ctx, installation.GitHubInstallationID, repository); err != nil {
-			return err
-		}
-		needsToken, err := w.client.NeedsImportToken(ctx, installation.GitHubInstallationID, repository)
-		if err != nil {
-			return err
-		}
-		if needsToken {
-			plaintext, err := w.store.CreateImportToken(ctx, job.OrgID, repository.FullName, time.Now().AddDate(1, 0, 0))
-			if err != nil {
-				return err
-			}
-			if err := w.client.PutImportToken(ctx, installation.GitHubInstallationID, repository, plaintext); err != nil {
-				return err
-			}
-		}
 		if err := w.client.StartRun(ctx, installation.GitHubInstallationID, *value, repository); err != nil {
 			return err
 		}

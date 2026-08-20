@@ -16,9 +16,17 @@ const (
 	SyncWorkflowPath       = ".github/workflows/uigraph-sync.yml"
 	OnboardingWorkflowPath = ".github/workflows/uigraph-onboarding.yml"
 
+	EnterpriseArtifactWorkflowPath   = ".github/workflows/uigraph-enterprise-artifact.yml"
+	EnterpriseSyncWorkflowPath       = ".github/workflows/uigraph-enterprise-sync.yml"
+	EnterpriseOnboardingWorkflowPath = ".github/workflows/uigraph-enterprise-onboarding.yml"
+
 	OnboardingAuthorName  = "uigraph-onboarding[bot]"
 	OnboardingAuthorEmail = "uigraph-onboarding[bot]@users.noreply.github.com"
 )
+
+func IsOnboardingWorkflowPath(path string) bool {
+	return path == OnboardingWorkflowPath || path == EnterpriseOnboardingWorkflowPath
+}
 
 func Branch(importID string) string {
 	return "uigraph/onboarding/" + importID
@@ -67,17 +75,22 @@ func HumanizeRepositoryName(name string) string {
 	return strings.Join(parts, " ")
 }
 
-func Workflows(defaultBranch string) (map[string][]byte, error) {
+func Workflows(defaultBranch string, enterprise bool) (map[string][]byte, error) {
 	if defaultBranch == "" {
 		return nil, fmt.Errorf("workflows: repository default branch is empty")
 	}
+	paths := []string{ArtifactWorkflowPath, SyncWorkflowPath, OnboardingWorkflowPath}
+	if enterprise {
+		paths = []string{EnterpriseArtifactWorkflowPath, EnterpriseSyncWorkflowPath, EnterpriseOnboardingWorkflowPath}
+	}
+	replacer := strings.NewReplacer("${DEFAULT_BRANCH}", defaultBranch)
 	files := make(map[string][]byte, 3)
-	for _, path := range []string{ArtifactWorkflowPath, SyncWorkflowPath, OnboardingWorkflowPath} {
+	for _, path := range paths {
 		content, err := workflowFiles.ReadFile("workflows/" + strings.TrimPrefix(path, ".github/workflows/"))
 		if err != nil {
 			return nil, err
 		}
-		files[path] = []byte(strings.ReplaceAll(string(content), "${DEFAULT_BRANCH}", defaultBranch))
+		files[path] = []byte(replacer.Replace(string(content)))
 	}
 	return files, nil
 }

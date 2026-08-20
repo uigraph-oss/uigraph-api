@@ -27,11 +27,9 @@ jobs:
     steps:
       - name: Validating configuration
         env:
-          UIGRAPH_GATEWAY_URL: ${{ vars.UIGRAPH_GATEWAY_URL || secrets.UIGRAPH_GATEWAY_URL }}
           UIGRAPH_TOKEN: ${{ secrets.UIGRAPH_TOKEN }}
         run: |
           missing=""
-          test -n "$UIGRAPH_GATEWAY_URL" || missing="$missing UIGRAPH_GATEWAY_URL"
           test -n "$UIGRAPH_TOKEN" || missing="$missing UIGRAPH_TOKEN"
           test -z "$missing" || { printf 'Missing required configuration:%s\n' "$missing"; exit 1; }
       - uses: actions/checkout@v4
@@ -44,5 +42,4 @@ jobs:
       - name: Sync
         env:
           UIGRAPH_TOKEN: ${{ secrets.UIGRAPH_TOKEN }}
-          UIGRAPH_GATEWAY_URL: ${{ vars.UIGRAPH_GATEWAY_URL || secrets.UIGRAPH_GATEWAY_URL }}
-        run: uigraph-cli sync
+        run: uigraph-cli sync --enterprise

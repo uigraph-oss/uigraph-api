@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lib/pq"
 	"github.com/uigraph/app/internal/authz"
 	"github.com/uigraph/app/internal/githubapp"
 	"github.com/uigraph/app/internal/identity"
@@ -126,7 +125,7 @@ func (d *DB) CreateImport(ctx context.Context, orgID, teamID string, ownerID int
 
 const importSelect = `SELECT imp.id, imp.org_id, imp.github_owner_id, imp.github_repo, imp.team_id, t.name, imp.status,
 	imp.steps, imp.branch, COALESCE(imp.run_id,0), COALESCE(imp.run_url,''), COALESCE(imp.pr_url,''),
-	imp.missing_ai_configuration, COALESCE(imp.error,''), COALESCE(imp.service_id::text,''),
+	COALESCE(imp.error,''), COALESCE(imp.service_id::text,''),
 	imp.created_at, imp.updated_at, imp.run_started_at, imp.run_completed_at, imp.completed_at
 	FROM repository_imports imp JOIN teams t ON t.id=imp.team_id`
 
@@ -136,8 +135,7 @@ func scanImport(row interface{ Scan(...any) error }) (*githubapp.Import, error) 
 	var steps []byte
 	err := row.Scan(&value.ID, &value.OrgID, &value.GitHubOwnerID, &value.GitHubRepo,
 		&value.TeamID, &value.TeamName, &status, &steps, &value.Branch,
-		&value.RunID, &value.RunURL, &value.PRURL,
-		pq.Array(&value.MissingAIConfiguration), &value.Error, &value.ServiceID,
+		&value.RunID, &value.RunURL, &value.PRURL, &value.Error, &value.ServiceID,
 		&value.CreatedAt, &value.UpdatedAt, &value.RunStartedAt, &value.RunCompletedAt, &value.CompletedAt)
 	if err != nil {
 		return nil, err
@@ -174,23 +172,10 @@ func (d *DB) GetLatestImport(ctx context.Context, orgID string) (*githubapp.Impo
 	return value, nil
 }
 
-func (d *DB) SetImportStatus(ctx context.Context, orgID, importID string, status githubapp.State, missingAIConfiguration []string) error {
-	if err := status.Validate(); err != nil {
-		return err
-	}
-	_, err := d.db.ExecContext(ctx, `
-		UPDATE repository_imports SET status=$3, missing_ai_configuration=COALESCE($4::text[],'{}'), updated_at=NOW()
-		WHERE org_id=$1 AND id=$2`, orgID, importID, status, pq.Array(missingAIConfiguration))
-	if err != nil {
-		return fmt.Errorf("postgres: SetImportStatus: %w", err)
-	}
-	return nil
-}
-
 func (d *DB) SetImportRunQueued(ctx context.Context, orgID, importID string) error {
 	_, err := d.db.ExecContext(ctx, `
-		UPDATE repository_imports SET status=$3, missing_ai_configuration='{}', updated_at=NOW()
-		WHERE org_id=$1 AND id=$2 AND status=$4`, orgID, importID, githubapp.StateRunQueued, githubapp.StateCheckingAI)
+		UPDATE repository_imports SET status=$3, updated_at=NOW()
+		WHERE org_id=$1 AND id=$2 AND status=$4`, orgID, importID, githubapp.StateRunQueued, githubapp.StateSelected)
 	if err != nil {
 		return fmt.Errorf("postgres: SetImportRunQueued: %w", err)
 	}
@@ -207,7 +192,26 @@ func (d *DB) SetImportPullRequest(ctx context.Context, orgID, importID, url stri
 	return nil
 }
 
-func (d *DB) RetryImport(ctx context.Context, orgID, importID string, recheck bool) error {
+func (d *DB) ResumeImportRun(ctx context.Context, orgID, importID string) error {
+	result, err := d.db.ExecContext(ctx, `
+		UPDATE repository_imports SET status=$3, error=NULL, steps='[]', run_attempt=run_attempt+1,
+		run_started_at=NOW(), run_completed_at=NULL, completed_at=NULL, updated_at=NOW()
+		WHERE org_id=$1 AND id=$2 AND status=$4 AND run_id IS NOT NULL`,
+		orgID, importID, githubapp.StateRunRunning, githubapp.StateFailed)
+	if err != nil {
+		return fmt.Errorf("postgres: ResumeImportRun: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("postgres: ResumeImportRun: %w", err)
+	}
+	if affected == 0 {
+		return store.ErrConflict
+	}
+	return nil
+}
+
+func (d *DB) RetryImport(ctx context.Context, orgID, importID string) error {
 	tx, err := d.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -221,16 +225,13 @@ func (d *DB) RetryImport(ctx context.Context, orgID, importID string, recheck bo
 	if err != nil {
 		return err
 	}
-	if recheck && status != string(githubapp.StateWaitingAI) {
-		return store.ErrConflict
-	}
-	if !recheck && status != string(githubapp.StateWaitingAI) && status != string(githubapp.StateFailed) {
+	if status != string(githubapp.StateFailed) {
 		return store.ErrConflict
 	}
 	if _, err = tx.ExecContext(ctx, `
-		UPDATE repository_imports SET status=$3, error=NULL, run_id=NULL, run_url=NULL, steps='[]',
+		UPDATE repository_imports SET status=$3, error=NULL, run_id=NULL, run_url=NULL, steps='[]', run_attempt=1,
 		run_started_at=NULL, run_completed_at=NULL, completed_at=NULL, updated_at=NOW()
-		WHERE org_id=$1 AND id=$2`, orgID, importID, githubapp.StateCheckingAI); err != nil {
+		WHERE org_id=$1 AND id=$2`, orgID, importID, githubapp.StateSelected); err != nil {
 		return err
 	}
 	_, err = tx.ExecContext(ctx, `
@@ -301,7 +302,7 @@ func (d *DB) RecordWebhook(ctx context.Context, deliveryID, event, action string
 }
 
 func (d *DB) ApplyWorkflowRunEvent(ctx context.Context, run githubapp.WorkflowRun, repositoryURL string) error {
-	if run.Event != "push" || run.Path != githubapp.OnboardingWorkflowPath {
+	if run.Event != "push" || !githubapp.IsOnboardingWorkflowPath(run.Path) {
 		return nil
 	}
 	tx, err := d.db.BeginTx(ctx, nil)
@@ -311,8 +312,9 @@ func (d *DB) ApplyWorkflowRunEvent(ctx context.Context, run githubapp.WorkflowRu
 	defer func() { _ = tx.Rollback() }()
 	var orgID, importID string
 	var currentRunID int64
+	var currentAttempt int
 	err = tx.QueryRowContext(ctx, activeImportSelect+` FOR UPDATE`, run.HeadBranch).Scan(
-		&orgID, &importID, &currentRunID)
+		&orgID, &importID, &currentRunID, &currentAttempt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
@@ -320,6 +322,9 @@ func (d *DB) ApplyWorkflowRunEvent(ctx context.Context, run githubapp.WorkflowRu
 		return err
 	}
 	if run.ID < currentRunID {
+		return nil
+	}
+	if run.ID == currentRunID && run.RunAttempt != 0 && run.RunAttempt < currentAttempt {
 		return nil
 	}
 	if run.Status != "completed" {
@@ -366,10 +371,10 @@ func (d *DB) ApplyWorkflowRunEvent(ctx context.Context, run githubapp.WorkflowRu
 // repository triggers afterwards — including every later uigraph-sync run — are
 // ignored outright.
 const activeImportSelect = `
-	SELECT org_id,id,COALESCE(run_id,0) FROM repository_imports
+	SELECT org_id,id,COALESCE(run_id,0),run_attempt FROM repository_imports
 	WHERE branch=$1 AND status NOT IN ('completed','failed')`
 
-func (d *DB) ApplyWorkflowJobEvent(ctx context.Context, branch string, runID int64, steps []githubapp.Step) error {
+func (d *DB) ApplyWorkflowJobEvent(ctx context.Context, branch string, runID int64, runAttempt int, steps []githubapp.Step) error {
 	if len(steps) == 0 {
 		return nil
 	}
@@ -380,8 +385,9 @@ func (d *DB) ApplyWorkflowJobEvent(ctx context.Context, branch string, runID int
 	defer func() { _ = tx.Rollback() }()
 	var orgID, importID string
 	var currentRunID int64
+	var currentAttempt int
 	err = tx.QueryRowContext(ctx, activeImportSelect+` FOR UPDATE`, branch).Scan(
-		&orgID, &importID, &currentRunID)
+		&orgID, &importID, &currentRunID, &currentAttempt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
@@ -389,6 +395,9 @@ func (d *DB) ApplyWorkflowJobEvent(ctx context.Context, branch string, runID int
 		return err
 	}
 	if runID < currentRunID {
+		return nil
+	}
+	if runID == currentRunID && runAttempt != 0 && runAttempt < currentAttempt {
 		return nil
 	}
 	var existing []byte
