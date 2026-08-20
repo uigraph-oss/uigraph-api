@@ -302,7 +302,7 @@ func (d *DB) RecordWebhook(ctx context.Context, deliveryID, event, action string
 }
 
 func (d *DB) ApplyWorkflowRunEvent(ctx context.Context, run githubapp.WorkflowRun, repositoryURL string) error {
-	if run.Event != "push" || run.Path != githubapp.OnboardingWorkflowPath {
+	if run.Event != "push" || !githubapp.IsOnboardingWorkflowPath(run.Path) {
 		return nil
 	}
 	tx, err := d.db.BeginTx(ctx, nil)

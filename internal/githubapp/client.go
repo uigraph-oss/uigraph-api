@@ -32,6 +32,7 @@ type ClientConfig struct {
 	PrivateKeyBase64 string
 	APIURL           string
 	WebURL           string
+	Enterprise       bool
 }
 
 type Client struct {
@@ -266,7 +267,7 @@ func (c *Client) StartRun(ctx context.Context, installationID int64, value Impor
 	if err != nil {
 		return err
 	}
-	files, err := Workflows(repository.DefaultBranch)
+	files, err := Workflows(repository.DefaultBranch, c.config.Enterprise)
 	if err != nil {
 		return err
 	}
@@ -323,7 +324,7 @@ func (c *Client) GetWorkflowRun(ctx context.Context, installationID int64, repos
 	}
 	latest := WorkflowRun{}
 	for _, run := range response.WorkflowRuns {
-		if run.Path != OnboardingWorkflowPath {
+		if !IsOnboardingWorkflowPath(run.Path) {
 			continue
 		}
 		if run.ID > latest.ID {
